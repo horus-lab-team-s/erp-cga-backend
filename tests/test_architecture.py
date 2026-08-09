@@ -32,23 +32,51 @@ CONTEXTES: dict[str, str] = {
     "transverse": "K",
 }
 
-#: Dépendances autorisées entre contextes, en plus de `core` et `shared` qui sont
-#: transverses et accessibles à tous.
+#: Contextes de socle, lisibles par tous sans arête explicite.
 #:
-#: A · Référentiel est le PIVOT : il alimente tout le monde et ne dépend de personne.
-#: Toute arête ajoutée ici doit être justifiée dans 01-contextes-bornes.md.
+#: A · Référentiel est le PIVOT normatif : il alimente tout le monde et ne connaît
+#: personne. K · Transverse fournit des services techniques — identité, journal d'audit,
+#: GED, notifications — que tout contexte métier consomme ; exiger une arête depuis
+#: chacun des dix autres n'apprendrait rien et alourdirait le graphe pour rien.
+SOCLE: frozenset[str] = frozenset({"referentiel", "transverse"})
+
+#: Dépendances métier autorisées, en plus du socle et de `core` / `shared`.
+#:
+#: Chaque arête correspond à un flux identifié dans les maquettes. Toute arête ajoutée
+#: ici doit être justifiée dans Docs/architecture/10-flux-fonctionnels.md.
 ARETES_AUTORISEES: dict[str, set[str]] = {
+    # Le pivot normatif ne dépend de rien, pas même du socle technique.
     "referentiel": set(),
-    "portefeuille": {"referentiel"},
-    "collecte": {"referentiel", "portefeuille"},
-    "conformite": {"referentiel"},
-    "comptabilite": {"referentiel", "portefeuille", "conformite"},
-    "obligations": {"referentiel", "portefeuille", "comptabilite"},
-    "social": {"referentiel", "portefeuille"},
-    "cloture": {"referentiel", "portefeuille", "comptabilite", "conformite"},
-    "creation_entreprise": {"referentiel", "portefeuille"},
-    "pilotage": {"referentiel", "portefeuille", "conformite", "obligations", "comptabilite"},
+    # Services techniques : ils lisent le référentiel, jamais le métier.
     "transverse": {"referentiel"},
+    "portefeuille": set(),
+    # Le contrôle d'une facture est une fonction pure de la facture et du droit.
+    "conformite": set(),
+    # Collecte possède le cycle de vie de la pièce et déclenche son contrôle.
+    "collecte": {"portefeuille", "conformite"},
+    # L'écriture hérite de l'attribut fiscal du rapport et porte l'id de la pièce.
+    # Le rapprochement bancaire confronte les relevés importés par Collecte.
+    "comptabilite": {"portefeuille", "conformite", "collecte"},
+    # La déclaration de TVA rejette la TVA constatée non déductible (ligne L24 de la
+    # maquette) et affiche la complétude du dossier.
+    "obligations": {"portefeuille", "comptabilite", "conformite", "collecte"},
+    "social": {"portefeuille"},
+    # Le tableau de passage reçoit les réintégrations issues des constats ; la DSF est
+    # elle-même une obligation.
+    "cloture": {"portefeuille", "comptabilite", "conformite", "collecte", "obligations"},
+    # Checklist de pièces par forme juridique : même moteur de règles, autre jeu.
+    "creation_entreprise": {"portefeuille", "conformite"},
+    # Pilotage lit tout le monde et n'est lu par personne : c'est un puits.
+    "pilotage": {
+        "portefeuille",
+        "conformite",
+        "collecte",
+        "comptabilite",
+        "obligations",
+        "cloture",
+        "creation_entreprise",
+        "social",
+    },
 }
 
 
@@ -80,6 +108,17 @@ def _imports(fichier: Path) -> set[str]:
                 cible = ".".join([*base, noeud.module]) if noeud.module else ".".join(base)
                 trouves.add(cible)
     return trouves
+
+
+def autorises_pour(contexte: str) -> set[str]:
+    """Cibles permises depuis un contexte : ses arêtes déclarées, plus le socle.
+
+    L'expansion du socle ne vaut QUE pour les contextes métier. Appliquée aux membres du
+    socle eux-mêmes, elle créerait un cycle referentiel ↔ transverse.
+    """
+    if contexte in SOCLE:
+        return set(ARETES_AUTORISEES[contexte])
+    return ARETES_AUTORISEES[contexte] | (SOCLE - {contexte})
 
 
 def _contexte_cible(module: str) -> str | None:
@@ -121,7 +160,7 @@ class TestStructure:
 class TestDependances:
     @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
     def test_aucune_dependance_interdite(self, contexte: str):
-        autorises = ARETES_AUTORISEES[contexte]
+        autorises = autorises_pour(contexte)
         for fichier in _modules(contexte):
             for module in _imports(fichier):
                 cible = _contexte_cible(module)
@@ -132,8 +171,43 @@ class TestDependances:
                     f"non autorisé depuis « {contexte} ». "
                     f"Arêtes permises : {sorted(autorises) or 'aucune'}. "
                     "Si la dépendance est légitime, la justifier dans "
-                    "Docs/architecture/01-contextes-bornes.md avant de l'ajouter ici."
+                    "Docs/architecture/10-flux-fonctionnels.md avant de l'ajouter ici."
                 )
+
+    @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
+    def test_les_contextes_ne_dialoguent_que_par_leur_surface_publique(self, contexte: str):
+        """Un contexte n'importe que `<autre>.api`, jamais ses entrailles.
+
+        C'est cette règle qui permet de réorganiser l'intérieur d'un contexte — renommer
+        un service, découper un module, changer de persistance — sans casser les dix
+        autres. Sans elle, « monolithe modulaire » n'est qu'une intention.
+        """
+        for fichier in _modules(contexte):
+            for module in _imports(fichier):
+                cible = _contexte_cible(module)
+                if cible is None or cible == contexte:
+                    continue
+                chemin = module.removeprefix(f"app.contexts.{cible}")
+                assert chemin in ("", ".api"), (
+                    f"{fichier.relative_to(RACINE)} importe « {module} », un module interne "
+                    f"de « {cible} ». Passer par app.contexts.{cible}.api, et l'y exporter "
+                    "si le symbole doit devenir public."
+                )
+
+    @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
+    def test_tout_contexte_implemente_expose_une_surface_publique(self, contexte: str):
+        """Un contexte qui porte du code sans `api.py` n'a pas de frontière : les
+        suivants iront chercher ses modules internes, et la frontière n'existera plus."""
+        dossier = CONTEXTES_DIR / contexte
+        modules_metier = [
+            f for f in dossier.glob("*.py") if f.name not in ("__init__.py", "api.py", "routes.py")
+        ]
+        if not modules_metier:
+            return  # squelette : rien à exposer encore
+        assert (dossier / "api.py").exists(), (
+            f"« {contexte} » porte du code ({len(modules_metier)} modules) mais n'expose pas "
+            "de api.py. Déclarer sa surface publique avant qu'un autre contexte n'en dépende."
+        )
 
     def test_le_referentiel_ne_depend_d_aucun_contexte(self):
         """A est le pivot : il alimente tout le monde et ne connaît personne.
@@ -159,7 +233,12 @@ class TestDependances:
                     )
 
     def test_le_graphe_est_acyclique(self):
-        """Un cycle entre contextes signifie que la frontière est mal placée."""
+        """Un cycle entre contextes signifie que la frontière est mal placée.
+
+        Deux contextes qui s'appellent mutuellement n'en font qu'un, mal découpé : le
+        remède est un événement ou un déplacement de responsabilité, jamais une arête
+        de plus.
+        """
         vus: dict[str, int] = {}
 
         def visiter(contexte: str, chemin: list[str]) -> None:
@@ -169,9 +248,32 @@ class TestDependances:
             if vus.get(contexte) == 2:
                 return
             vus[contexte] = 1
-            for suivant in sorted(ARETES_AUTORISEES[contexte]):
+            for suivant in sorted(autorises_pour(contexte)):
                 visiter(suivant, [*chemin, contexte])
             vus[contexte] = 2
 
         for contexte in sorted(CONTEXTES):
             visiter(contexte, [])
+
+    def test_le_socle_ne_depend_d_aucun_contexte_metier(self):
+        """Le socle est lisible par tous : il ne doit donc dépendre d'aucun métier.
+
+        Sinon toute évolution métier remonterait jusqu'à lui, et comme tout le monde le
+        lit, le graphe deviendrait un cycle géant.
+        """
+        for contexte in sorted(SOCLE):
+            interdites = ARETES_AUTORISEES[contexte] - SOCLE
+            assert not interdites, (
+                f"« {contexte} » appartient au socle et ne peut dépendre d'aucun contexte "
+                f"métier, or il déclare : {sorted(interdites)}"
+            )
+
+    def test_le_pilotage_n_est_lu_par_personne(self):
+        """J · Pilotage est un puits : il agrège, il ne sert personne en amont.
+
+        Si un contexte métier venait à lire le pilotage, c'est qu'un indicateur y aurait
+        pris une valeur métier — il faudrait alors le redescendre dans le contexte qui
+        en est responsable.
+        """
+        lecteurs = [c for c, cibles in ARETES_AUTORISEES.items() if "pilotage" in cibles]
+        assert not lecteurs, f"le pilotage est lu par : {sorted(lecteurs)}"

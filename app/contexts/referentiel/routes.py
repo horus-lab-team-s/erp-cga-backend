@@ -9,8 +9,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ...core.config import configuration
-from .modeles import ParametreResolu
-from .service import AucuneVersionApplicable, ParametreInconnu, ServiceParametres
+from .api import (
+    AucuneVersionApplicable,
+    ParametreInconnu,
+    ParametreResolu,
+    ServiceParametres,
+)
 
 routeur = APIRouter(prefix="/referentiel", tags=["Référentiel normatif"])
 

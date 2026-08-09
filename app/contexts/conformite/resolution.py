@@ -18,8 +18,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from ..referentiel.modeles import ParametreResolu, Unite
-from ..referentiel.service import ServiceParametres
+from ..referentiel.api import ParametreResolu, ServiceParametres, Unite
 
 __all__ = ["resoudre_parametres"]
 

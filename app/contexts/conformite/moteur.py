@@ -14,8 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from ..referentiel.modeles import ParametreResolu, StatutValidation
-from ..referentiel.service import ServiceParametres
+from ..referentiel.api import ParametreResolu, ServiceParametres, StatutValidation
 from .jsonlogic import ErreurPredicat, evaluer
 from .modeles import (
     ConsequenceFiscale,

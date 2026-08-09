@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..referentiel.modeles import Fondement, ParametreResolu, StatutValidation
+from ..referentiel.api import Fondement, ParametreResolu, StatutValidation
 
 
 class Severite(StrEnum):
