@@ -23,6 +23,15 @@ def moteur() -> MoteurConformite:
 
 
 class ReponseControle(BaseModel):
+    """Ce dont l'écran E02 a besoin, en un appel.
+
+    La facture est renvoyée avec le rapport : la fiche § 8.2 impose d'afficher les
+    données extraites — fournisseur, NIU, date, montants, mode de règlement — à côté
+    des constats, et de pouvoir les corriger. Les séparer en deux appels obligerait
+    l'écran à recoller deux états qui doivent rester cohérents.
+    """
+
+    facture: FactureAControler
     verdict: Verdict
     rapport: RapportConformite
 
@@ -51,7 +60,9 @@ def controler(
     ),
 ) -> ReponseControle:
     rapport = moteur().controler(facture, a_la_date)
-    return ReponseControle(verdict=composer_verdict(rapport), rapport=rapport)
+    return ReponseControle(
+        facture=facture, verdict=composer_verdict(rapport), rapport=rapport
+    )
 
 
 @routeur.get("/demonstration", summary="Références du jeu de démonstration")
@@ -71,4 +82,6 @@ def controler_demonstration(reference: str) -> ReponseControle:
             ),
         )
     rapport = moteur().controler(facture)
-    return ReponseControle(verdict=composer_verdict(rapport), rapport=rapport)
+    return ReponseControle(
+        facture=facture, verdict=composer_verdict(rapport), rapport=rapport
+    )

@@ -87,6 +87,16 @@ class TestConformite:
         assert verdict["avertissement_validation"] is not None
         assert "opposable" in verdict["avertissement_validation"]
 
+    def test_la_reponse_porte_la_facture_pour_les_donnees_extraites(self, client: TestClient):
+        # § 8.2 : l'écran affiche les données extraites à côté des constats. Les
+        # séparer en deux appels obligerait le front à recoller deux états.
+        corps = client.get("/conformite/demonstration/F-2026-0412").json()
+        facture = corps["facture"]
+        assert facture["emetteur"]["denomination"] == "QUINCAILLERIE DU WOURI"
+        assert facture["montants"]["total_ttc"] == "2350000"
+        assert facture["reglement"]["mode"] == "ESPECES"
+        assert len(facture["lignes"]) == 2
+
     def test_facture_de_demonstration_inconnue(self, client: TestClient):
         assert client.get("/conformite/demonstration/F-0000-0000").status_code == 404
 
