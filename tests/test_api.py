@@ -97,6 +97,21 @@ class TestConformite:
         assert facture["reglement"]["mode"] == "ESPECES"
         assert len(facture["lignes"]) == 2
 
+    def test_controle_groupe_de_tout_le_flux(self, client: TestClient):
+        rapports = client.get("/conformite/demonstration/rapports").json()
+        assert len(rapports) >= 25, "E03 exige 25 lignes visibles : le jeu doit les fournir"
+        # La route ne doit pas être capturée par /demonstration/{reference}.
+        assert all("facture" in r and "verdict" in r for r in rapports)
+        # Distribution réaliste : l'écran ne doit pas être uniformément vert ni rouge.
+        gravites = {
+            r["verdict"]["comptabilisation_interdite"] for r in rapports
+        }
+        assert gravites == {True, False}
+
+    def test_aucune_regle_en_echec_sur_tout_le_flux(self, client: TestClient):
+        for r in client.get("/conformite/demonstration/rapports").json():
+            assert not r["rapport"]["regles_en_echec"], r["rapport"]["reference_document"]
+
     def test_facture_de_demonstration_inconnue(self, client: TestClient):
         assert client.get("/conformite/demonstration/F-0000-0000").status_code == 404
 

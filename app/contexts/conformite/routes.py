@@ -70,6 +70,31 @@ def lister_demonstration() -> list[str]:
     return sorted(FACTURES_DEMO)
 
 
+@routeur.get(
+    "/demonstration/rapports",
+    summary="Contrôler tout le flux entrant de démonstration",
+    description=(
+        "Rend le contrôle de chaque facture du jeu de démonstration. La boîte de réception "
+        "affiche la pastille de conformité sur chaque ligne : la peupler par appels unitaires "
+        "coûterait un aller-retour par ligne, sur des connexions où chacun se paie."
+    ),
+)
+def controler_tout() -> list[ReponseControle]:
+    moteur_ = moteur()
+    rapports = []
+    for reference in sorted(FACTURES_DEMO):
+        facture = FACTURES_DEMO[reference]
+        rapport = moteur_.controler(facture)
+        rapports.append(
+            ReponseControle(
+                facture=facture, verdict=composer_verdict(rapport), rapport=rapport
+            )
+        )
+    return rapports
+
+
+# Déclaré APRÈS /demonstration/rapports : sinon « rapports » serait capturé comme
+# une référence de facture.
 @routeur.get("/demonstration/{reference}", summary="Contrôler une facture de démonstration")
 def controler_demonstration(reference: str) -> ReponseControle:
     facture = FACTURES_DEMO.get(reference)
