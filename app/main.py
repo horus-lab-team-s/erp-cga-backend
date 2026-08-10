@@ -9,9 +9,13 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .contexts.conformite.routes import routeur as routeur_conformite
-from .contexts.referentiel.routes import routeur as routeur_referentiel
-from .core.config import configuration
+from app.contextes.conformite.adaptateurs.entrant.routes_http import (
+    routeur as routeur_conformite,
+)
+from app.contextes.referentiel.adaptateurs.entrant.routes_http import (
+    routeur as routeur_referentiel,
+)
+from app.infrastructure.config import configuration
 
 DESCRIPTION = """
 Plateforme de suivi fiscal et comptable du Centre de Gestion Agréé

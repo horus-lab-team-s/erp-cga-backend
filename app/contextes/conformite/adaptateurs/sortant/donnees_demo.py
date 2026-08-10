@@ -19,7 +19,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import NamedTuple
 
-from .modeles import (
+from app.contextes.conformite.domaine.entites import (
     ContexteControle,
     Document,
     FactureAControler,

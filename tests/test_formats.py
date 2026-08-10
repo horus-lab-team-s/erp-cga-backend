@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.shared.formats import (
+from app.partage.formats import (
     ESPACE_FINE,
     date_courte,
     date_longue,

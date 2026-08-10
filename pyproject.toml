@@ -39,4 +39,4 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.lint.per-file-ignores]
 # `Query(...)` en valeur par défaut est l'idiome FastAPI pour déclarer un paramètre de
 # requête : B008 est un faux positif ici.
-"app/contexts/*/routes.py" = ["B008"]
+"app/contextes/*/adaptateurs/entrant/routes_http.py" = ["B008"]

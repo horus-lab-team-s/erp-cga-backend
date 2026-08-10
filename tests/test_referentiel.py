@@ -7,17 +7,17 @@ from decimal import Decimal
 
 import pytest
 
-from app.contexts.referentiel.modeles import (
+from app.contextes.referentiel.application.service_parametres import (
+    AucuneVersionApplicable,
+    ParametreInconnu,
+    ServiceParametres,
+)
+from app.contextes.referentiel.domaine.entites import (
     Fondement,
     Parametre,
     StatutValidation,
     Unite,
     VersionParametre,
-)
-from app.contexts.referentiel.service import (
-    AucuneVersionApplicable,
-    ParametreInconnu,
-    ServiceParametres,
 )
 
 FONDEMENT = Fondement(texte="CGI art. test", source="test")

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from ...shared.formats import montant_fcfa
-from .modeles import GLYPHE, RapportConformite, Severite
+from app.contextes.conformite.domaine.entites import GLYPHE, RapportConformite, Severite
+from app.partage.formats import montant_fcfa
 
 __all__ = ["Verdict", "composer_verdict"]
 

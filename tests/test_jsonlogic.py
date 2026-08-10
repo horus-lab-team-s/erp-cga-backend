@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.contexts.conformite.jsonlogic import ErreurPredicat, evaluer
+from app.contextes.conformite.domaine.jsonlogic import ErreurPredicat, evaluer
 
 
 class TestAccesAuxDonnees:

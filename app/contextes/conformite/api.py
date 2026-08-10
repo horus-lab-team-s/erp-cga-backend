@@ -21,7 +21,16 @@ autre jeu de règles pour les checklists de pièces), `pilotage` (score de risqu
 
 from __future__ import annotations
 
-from .modeles import (
+from app.contextes.conformite.adaptateurs.entrant.presentateur_verdict import (
+    Verdict,
+    composer_verdict,
+)
+from app.contextes.conformite.adaptateurs.sortant.depot_regles_yaml import (
+    DepotReglesYaml,
+    charger_regles,
+)
+from app.contextes.conformite.application.moteur_conformite import MoteurConformite
+from app.contextes.conformite.domaine.entites import (
     ConsequenceFiscale,
     Constat,
     ContexteControle,
@@ -39,12 +48,11 @@ from .modeles import (
     Severite,
     TypeDocument,
 )
-from .moteur import MoteurConformite, charger_regles
-from .presentation import Verdict, composer_verdict
 
 __all__ = [
     # Contrôle
     "MoteurConformite",
+    "DepotReglesYaml",
     "charger_regles",
     # Entrée
     "ContexteControle",

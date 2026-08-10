@@ -12,8 +12,9 @@ from decimal import Decimal as D
 
 import pytest
 
-from app.contexts.conformite.donnees_demo import FACTURES_DEMO
-from app.contexts.conformite.modeles import (
+from app.contextes.conformite.adaptateurs.sortant.donnees_demo import FACTURES_DEMO
+from app.contextes.conformite.application.moteur_conformite import MoteurConformite
+from app.contextes.conformite.domaine.entites import (
     Document,
     FactureAControler,
     LigneFacture,
@@ -24,7 +25,6 @@ from app.contexts.conformite.modeles import (
     Reglement,
     Severite,
 )
-from app.contexts.conformite.moteur import MoteurConformite
 
 JUILLET = date(2026, 7, 15)
 
@@ -199,7 +199,7 @@ class TestFAC_VRA_005:
         assert "FAC-VRA-005" not in _codes(moteur, _facture())
 
     def test_echoue_avec_un_doublon_repere(self, moteur: MoteurConformite):
-        from app.contexts.conformite.modeles import ContexteControle
+        from app.contextes.conformite.domaine.entites import ContexteControle
 
         facture = _facture(contexte=ContexteControle(doublons_potentiels=1))
         assert "FAC-VRA-005" in _codes(moteur, facture)

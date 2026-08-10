@@ -8,20 +8,22 @@ from functools import lru_cache
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ...core.config import configuration
-from .api import (
+from app.contextes.referentiel.api import (
     AucuneVersionApplicable,
+    DepotParametresYaml,
     ParametreInconnu,
     ParametreResolu,
     ServiceParametres,
 )
+from app.infrastructure.config import configuration
 
 routeur = APIRouter(prefix="/referentiel", tags=["Référentiel normatif"])
 
 
 @lru_cache
 def service() -> ServiceParametres:
-    return ServiceParametres.depuis_yaml(configuration().dossier_referentiel / "parametres.yaml")
+    depot = DepotParametresYaml(configuration().dossier_referentiel / "parametres.yaml")
+    return ServiceParametres.depuis_depot(depot)
 
 
 class EtatValidation(BaseModel):

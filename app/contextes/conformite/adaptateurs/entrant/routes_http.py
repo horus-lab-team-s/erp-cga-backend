@@ -8,18 +8,35 @@ from functools import lru_cache
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ...core.config import configuration
-from .donnees_demo import FACTURES_DEMO
-from .modeles import FactureAControler, RapportConformite, Regle
-from .moteur import MoteurConformite
-from .presentation import Verdict, composer_verdict
+from app.contextes.conformite.adaptateurs.entrant.presentateur_verdict import (
+    Verdict,
+    composer_verdict,
+)
+from app.contextes.conformite.adaptateurs.sortant.depot_regles_yaml import DepotReglesYaml
+from app.contextes.conformite.adaptateurs.sortant.donnees_demo import FACTURES_DEMO
+from app.contextes.conformite.application.moteur_conformite import MoteurConformite
+from app.contextes.conformite.domaine.entites import FactureAControler, RapportConformite, Regle
+from app.contextes.referentiel.api import DepotParametresYaml, ServiceParametres
+from app.infrastructure.config import configuration
 
 routeur = APIRouter(prefix="/conformite", tags=["Conformité"])
 
 
 @lru_cache
 def moteur() -> MoteurConformite:
-    return MoteurConformite.depuis_dossier(configuration().dossier_referentiel)
+    """Assemble le moteur à partir des dépôts YAML.
+
+    C'est ici, dans l'adaptateur entrant, que se fait le câblage : le cas d'usage
+    reçoit ses dépendances et ignore d'où elles viennent. Basculer vers PostgreSQL
+    ne changera que ces trois lignes.
+    """
+    referentiel = configuration().dossier_referentiel
+    return MoteurConformite(
+        regles=DepotReglesYaml(referentiel / "regles").charger(),
+        parametres=ServiceParametres.depuis_depot(
+            DepotParametresYaml(referentiel / "parametres.yaml")
+        ),
+    )
 
 
 class ReponseControle(BaseModel):

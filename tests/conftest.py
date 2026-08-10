@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from app.contexts.conformite.modeles import Regle
-from app.contexts.conformite.moteur import MoteurConformite, charger_regles
-from app.contexts.referentiel.service import ServiceParametres
-from app.core.config import RACINE_DEPOT
+from app.contextes.conformite.api import DepotReglesYaml, MoteurConformite
+from app.contextes.conformite.domaine.entites import Regle
+from app.contextes.referentiel.api import DepotParametresYaml, ServiceParametres
+from app.infrastructure.config import RACINE_DEPOT
 
 REFERENTIEL = RACINE_DEPOT / "Docs" / "referentiel"
 
@@ -20,12 +20,14 @@ def dossier_referentiel() -> Path:
 
 @pytest.fixture(scope="session")
 def parametres(dossier_referentiel: Path) -> ServiceParametres:
-    return ServiceParametres.depuis_yaml(dossier_referentiel / "parametres.yaml")
+    return ServiceParametres.depuis_depot(
+        DepotParametresYaml(dossier_referentiel / "parametres.yaml")
+    )
 
 
 @pytest.fixture(scope="session")
 def regles(dossier_referentiel: Path) -> list[Regle]:
-    return charger_regles(dossier_referentiel / "regles")
+    return DepotReglesYaml(dossier_referentiel / "regles").charger()
 
 
 @pytest.fixture(scope="session")

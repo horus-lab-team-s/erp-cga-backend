@@ -16,7 +16,16 @@ Ce que le référentiel promet aux autres contextes :
 
 from __future__ import annotations
 
-from .modeles import (
+from app.contextes.referentiel.adaptateurs.sortant.depot_yaml import (
+    DepotParametresYaml,
+    charger_parametres,
+)
+from app.contextes.referentiel.application.service_parametres import (
+    AucuneVersionApplicable,
+    ParametreInconnu,
+    ServiceParametres,
+)
+from app.contextes.referentiel.contrats import (
     Fondement,
     Parametre,
     ParametreResolu,
@@ -24,16 +33,14 @@ from .modeles import (
     Unite,
     VersionParametre,
 )
-from .service import (
-    AucuneVersionApplicable,
-    ParametreInconnu,
-    ServiceParametres,
-    charger_parametres,
-)
+from app.contextes.referentiel.domaine.ports import DepotParametres
 
 __all__ = [
     # Lecture
     "ServiceParametres",
+    # Sources
+    "DepotParametres",
+    "DepotParametresYaml",
     "charger_parametres",
     # Types échangés
     "Fondement",

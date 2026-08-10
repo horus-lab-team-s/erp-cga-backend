@@ -1,10 +1,32 @@
 """Garde-fous d'architecture.
 
-Un monolithe modulaire ne tient pas par la bonne volonté : il tient parce qu'une
-dépendance interdite fait échouer la CI. Ces tests sont la seule chose qui empêche les
-onze contextes de redevenir un plat de spaghettis en dix-huit mois.
+Deux disciplines cohabitent, et l'une comme l'autre est vérifiée à chaque exécution
+des tests.
 
-Référence : Docs/architecture/01-contextes-bornes.md.
+**Clean Architecture — le sens des dépendances.** Quatre cercles, du plus interne au
+plus externe. Une flèche ne va jamais de l'intérieur vers l'extérieur.
+
+    ┌───────────────────────────────────────────────────────────┐
+    │ 4 · app/infrastructure/   Frameworks & Drivers            │
+    │   ┌───────────────────────────────────────────────────┐   │
+    │   │ 3 · <contexte>/adaptateurs/   Interface Adapters  │   │
+    │   │   ┌───────────────────────────────────────────┐   │   │
+    │   │   │ 2 · <contexte>/application/   Use Cases   │   │   │
+    │   │   │   ┌───────────────────────────────────┐   │   │   │
+    │   │   │   │ 1 · <contexte>/domaine/  Entities │   │   │   │
+    │   │   │   └───────────────────────────────────┘   │   │   │
+    │   │   └───────────────────────────────────────────┘   │   │
+    │   └───────────────────────────────────────────────────┘   │
+    └───────────────────────────────────────────────────────────┘
+
+**Contextes bornés — les frontières métier.** Onze contextes autonomes. On n'entre
+chez un autre que par une surface publique déclarée, jamais par ses entrailles.
+
+Les couches vivent *à l'intérieur* de chaque contexte : cela donne onze modules
+métier complets, plutôt que quatre grands sacs techniques où le référentiel fiscal
+et la comptabilité se mélangeraient.
+
+Références : Docs/architecture/01-contextes-bornes.md et 10-flux-fonctionnels.md.
 """
 
 from __future__ import annotations
@@ -15,9 +37,9 @@ from pathlib import Path
 import pytest
 
 RACINE = Path(__file__).resolve().parents[1]
-CONTEXTES_DIR = RACINE / "app" / "contexts"
+CONTEXTES_DIR = RACINE / "app" / "contextes"
 
-#: Les onze contextes bornés. La clé est le nom du paquet, la valeur sa lettre au schéma.
+# ── Les onze contextes bornés ─────────────────────────────────────────────────
 CONTEXTES: dict[str, str] = {
     "referentiel": "A",
     "portefeuille": "B",
@@ -32,41 +54,41 @@ CONTEXTES: dict[str, str] = {
     "transverse": "K",
 }
 
-#: Contextes de socle, lisibles par tous sans arête explicite.
-#:
-#: A · Référentiel est le PIVOT normatif : il alimente tout le monde et ne connaît
-#: personne. K · Transverse fournit des services techniques — identité, journal d'audit,
-#: GED, notifications — que tout contexte métier consomme ; exiger une arête depuis
-#: chacun des dix autres n'apprendrait rien et alourdirait le graphe pour rien.
+# ── Les couches, du plus interne au plus externe ──────────────────────────────
+#: Une couche n'importe que son propre rang ou un rang inférieur.
+RANG_COUCHE: dict[str, int] = {"domaine": 1, "application": 2, "adaptateurs": 3}
+
+#: Surfaces publiques d'un contexte, à sa racine.
+#: `contrats` n'expose que des entités — rang 1, importable depuis un domaine.
+#: `api` expose aussi les cas d'usage — rang 2, interdit à un domaine.
+RANG_SURFACE: dict[str, int] = {"contrats": 1, "api": 2}
+
+
+def autorises_pour(contexte: str) -> set[str]:
+    """Cibles métier permises depuis un contexte : ses arêtes, plus le socle.
+
+    L'expansion du socle ne vaut que pour les contextes métier : appliquée au socle
+    lui-même, elle créerait un cycle referentiel ↔ transverse.
+    """
+    if contexte in SOCLE:
+        return set(ARETES_AUTORISEES[contexte])
+    return ARETES_AUTORISEES[contexte] | (SOCLE - {contexte})
+
+
+# ── Le graphe métier, établi flux par flux dans 10-flux-fonctionnels.md ───────
 SOCLE: frozenset[str] = frozenset({"referentiel", "transverse"})
 
-#: Dépendances métier autorisées, en plus du socle et de `core` / `shared`.
-#:
-#: Chaque arête correspond à un flux identifié dans les maquettes. Toute arête ajoutée
-#: ici doit être justifiée dans Docs/architecture/10-flux-fonctionnels.md.
 ARETES_AUTORISEES: dict[str, set[str]] = {
-    # Le pivot normatif ne dépend de rien, pas même du socle technique.
     "referentiel": set(),
-    # Services techniques : ils lisent le référentiel, jamais le métier.
     "transverse": {"referentiel"},
     "portefeuille": set(),
-    # Le contrôle d'une facture est une fonction pure de la facture et du droit.
     "conformite": set(),
-    # Collecte possède le cycle de vie de la pièce et déclenche son contrôle.
     "collecte": {"portefeuille", "conformite"},
-    # L'écriture hérite de l'attribut fiscal du rapport et porte l'id de la pièce.
-    # Le rapprochement bancaire confronte les relevés importés par Collecte.
     "comptabilite": {"portefeuille", "conformite", "collecte"},
-    # La déclaration de TVA rejette la TVA constatée non déductible (ligne L24 de la
-    # maquette) et affiche la complétude du dossier.
     "obligations": {"portefeuille", "comptabilite", "conformite", "collecte"},
     "social": {"portefeuille"},
-    # Le tableau de passage reçoit les réintégrations issues des constats ; la DSF est
-    # elle-même une obligation.
     "cloture": {"portefeuille", "comptabilite", "conformite", "collecte", "obligations"},
-    # Checklist de pièces par forme juridique : même moteur de règles, autre jeu.
     "creation_entreprise": {"portefeuille", "conformite"},
-    # Pilotage lit tout le monde et n'est lu par personne : c'est un puits.
     "pilotage": {
         "portefeuille",
         "conformite",
@@ -80,15 +102,18 @@ ARETES_AUTORISEES: dict[str, set[str]] = {
 }
 
 
-def _modules(contexte: str) -> list[Path]:
+# ── Lecture des imports ───────────────────────────────────────────────────────
+
+
+def _fichiers(contexte: str) -> list[Path]:
     return sorted((CONTEXTES_DIR / contexte).rglob("*.py"))
 
 
 def _imports(fichier: Path) -> set[str]:
-    """Modules importés par un fichier, en chemin absolu `app.…`.
+    """Modules importés, en chemin absolu `app.…`.
 
     Les imports relatifs sont résolus par rapport au paquet du fichier, sans quoi
-    `from ..referentiel.service import …` passerait inaperçu.
+    `from ..domaine.entites import …` passerait inaperçu.
     """
     arbre = ast.parse(fichier.read_text(encoding="utf-8"), filename=str(fichier))
     paquet = fichier.relative_to(RACINE).with_suffix("").parts
@@ -105,27 +130,26 @@ def _imports(fichier: Path) -> set[str]:
                     trouves.add(noeud.module)
             else:
                 base = paquet[: len(paquet) - noeud.level] if noeud.level <= len(paquet) else ()
-                cible = ".".join([*base, noeud.module]) if noeud.module else ".".join(base)
-                trouves.add(cible)
+                trouves.add(".".join([*base, noeud.module]) if noeud.module else ".".join(base))
     return trouves
 
 
-def autorises_pour(contexte: str) -> set[str]:
-    """Cibles permises depuis un contexte : ses arêtes déclarées, plus le socle.
-
-    L'expansion du socle ne vaut QUE pour les contextes métier. Appliquée aux membres du
-    socle eux-mêmes, elle créerait un cycle referentiel ↔ transverse.
-    """
-    if contexte in SOCLE:
-        return set(ARETES_AUTORISEES[contexte])
-    return ARETES_AUTORISEES[contexte] | (SOCLE - {contexte})
-
-
-def _contexte_cible(module: str) -> str | None:
-    prefixe = "app.contexts."
+def _decomposer(module: str) -> tuple[str, str] | None:
+    """`app.contextes.<ctx>.<partie>…` → (ctx, partie). None si hors contextes."""
+    prefixe = "app.contextes."
     if not module.startswith(prefixe):
         return None
-    return module[len(prefixe) :].split(".")[0]
+    morceaux = module[len(prefixe) :].split(".")
+    return (morceaux[0], morceaux[1] if len(morceaux) > 1 else "")
+
+
+def _couche(fichier: Path) -> str | None:
+    """Couche du fichier, ou None s'il s'agit d'une surface publique."""
+    parties = fichier.relative_to(CONTEXTES_DIR).parts
+    return parties[1] if len(parties) > 1 and parties[1] in RANG_COUCHE else None
+
+
+# ── Structure ─────────────────────────────────────────────────────────────────
 
 
 class TestStructure:
@@ -137,8 +161,8 @@ class TestStructure:
         assert not manquants, f"contextes absents de l'arborescence : {sorted(manquants)}"
 
     def test_aucun_paquet_hors_nomenclature(self):
-        """Un dossier non prévu au schéma est soit un contexte oublié dans la
-        documentation, soit un fourre-tout qui va tout absorber."""
+        """Un dossier non prévu est soit un contexte oublié dans la documentation, soit
+        un fourre-tout qui finira par tout absorber."""
         presents = {
             d.name for d in CONTEXTES_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")
         }
@@ -156,95 +180,163 @@ class TestStructure:
             f"{contexte}/__init__.py doit ouvrir sur « Contexte {CONTEXTES[contexte]} · … »"
         )
 
-
-class TestDependances:
     @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
-    def test_aucune_dependance_interdite(self, contexte: str):
-        autorises = autorises_pour(contexte)
-        for fichier in _modules(contexte):
+    def test_aucun_module_hors_des_couches(self, contexte: str):
+        """À la racine d'un contexte, seules les surfaces publiques sont admises.
+
+        Un module métier posé là échapperait au contrôle de couche. C'est par là que la
+        Clean Architecture se défait : un fichier « utils.py » à la fois.
+        """
+        admis = set(RANG_SURFACE) | {"__init__"}
+        for fichier in (CONTEXTES_DIR / contexte).glob("*.py"):
+            assert fichier.stem in admis, (
+                f"{fichier.relative_to(RACINE)} est à la racine du contexte. Le placer "
+                f"dans domaine/, application/ ou adaptateurs/ — seuls {sorted(admis)} "
+                "sont admis à ce niveau."
+            )
+
+    @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
+    def test_les_dossiers_presents_sont_des_couches(self, contexte: str):
+        for dossier in (CONTEXTES_DIR / contexte).iterdir():
+            if not dossier.is_dir() or dossier.name.startswith("_"):
+                continue
+            assert dossier.name in RANG_COUCHE, (
+                f"{dossier.relative_to(RACINE)} n'est pas une couche. "
+                f"Couches admises : {sorted(RANG_COUCHE)}."
+            )
+
+
+# ── Clean Architecture : le sens des dépendances ──────────────────────────────
+
+
+class TestCouches:
+    @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
+    def test_aucune_dependance_vers_un_cercle_plus_externe(self, contexte: str):
+        """Le cœur ne connaît pas la périphérie.
+
+        Une entité important un cas d'usage, ou un cas d'usage important un routeur
+        HTTP, rendraient la règle métier inséparable du framework — précisément ce que
+        la Clean Architecture évite.
+        """
+        for fichier in _fichiers(contexte):
+            couche = _couche(fichier)
+            if couche is None:
+                continue
+            rang_source = RANG_COUCHE[couche]
             for module in _imports(fichier):
-                cible = _contexte_cible(module)
-                if cible is None or cible == contexte:
+                decompose = _decomposer(module)
+                if decompose is None:
                     continue
-                assert cible in autorises, (
-                    f"{fichier.relative_to(RACINE)} importe le contexte « {cible} », "
-                    f"non autorisé depuis « {contexte} ». "
-                    f"Arêtes permises : {sorted(autorises) or 'aucune'}. "
-                    "Si la dépendance est légitime, la justifier dans "
+                rang_cible = RANG_COUCHE.get(decompose[1]) or RANG_SURFACE.get(decompose[1])
+                if rang_cible is None:
+                    continue
+                assert rang_cible <= rang_source, (
+                    f"{fichier.relative_to(RACINE)} — couche « {couche} » (cercle "
+                    f"{rang_source}) importe « {module} » (cercle {rang_cible}). "
+                    "Une dépendance ne va jamais de l'intérieur vers l'extérieur : "
+                    "inverser par une interface, ou déplacer le code."
+                )
+
+    @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
+    def test_le_domaine_ne_connait_pas_l_infrastructure(self, contexte: str):
+        """Le cercle 1 ignore jusqu'à l'existence du cercle 4.
+
+        `app.partage` reste admis : fonctions pures de formatage, sans entrée-sortie ni
+        configuration.
+        """
+        for fichier in _fichiers(contexte):
+            if _couche(fichier) != "domaine":
+                continue
+            for module in _imports(fichier):
+                assert not module.startswith("app.infrastructure"), (
+                    f"{fichier.relative_to(RACINE)} est une entité et importe "
+                    f"« {module} ». La configuration se passe en argument, elle ne se "
+                    "lit pas depuis le domaine."
+                )
+
+    def test_les_paquets_techniques_ignorent_le_metier(self):
+        """`partage` et `infrastructure` sont sous les contextes, pas au-dessus."""
+        for paquet in ("app/partage", "app/infrastructure"):
+            for fichier in sorted((RACINE / paquet).rglob("*.py")):
+                for module in _imports(fichier):
+                    assert not module.startswith("app.contextes"), (
+                        f"{fichier.relative_to(RACINE)} importe « {module} ». Le cercle "
+                        "externe est appelé par le métier, il ne l'appelle pas."
+                    )
+
+
+# ── Contextes bornés : les frontières métier ──────────────────────────────────
+
+
+class TestDependancesEntreContextes:
+    @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
+    def test_aucune_dependance_metier_interdite(self, contexte: str):
+        autorises = autorises_pour(contexte)
+        for fichier in _fichiers(contexte):
+            for module in _imports(fichier):
+                decompose = _decomposer(module)
+                if decompose is None or decompose[0] == contexte:
+                    continue
+                assert decompose[0] in autorises, (
+                    f"{fichier.relative_to(RACINE)} importe le contexte "
+                    f"« {decompose[0]} », non autorisé depuis « {contexte} ». "
+                    f"Arêtes permises : {sorted(autorises) or 'aucune'}. Justifier dans "
                     "Docs/architecture/10-flux-fonctionnels.md avant de l'ajouter ici."
                 )
 
     @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
-    def test_les_contextes_ne_dialoguent_que_par_leur_surface_publique(self, contexte: str):
-        """Un contexte n'importe que `<autre>.api`, jamais ses entrailles.
+    def test_on_n_entre_chez_l_autre_que_par_sa_surface_publique(self, contexte: str):
+        """`contrats` ou `api`, jamais un module interne.
 
-        C'est cette règle qui permet de réorganiser l'intérieur d'un contexte — renommer
-        un service, découper un module, changer de persistance — sans casser les dix
-        autres. Sans elle, « monolithe modulaire » n'est qu'une intention.
+        C'est cette règle qui permet de réorganiser l'intérieur d'un contexte — changer
+        de persistance, découper une couche — sans casser les dix autres.
         """
-        for fichier in _modules(contexte):
+        for fichier in _fichiers(contexte):
             for module in _imports(fichier):
-                cible = _contexte_cible(module)
-                if cible is None or cible == contexte:
+                decompose = _decomposer(module)
+                if decompose is None or decompose[0] == contexte:
                     continue
-                chemin = module.removeprefix(f"app.contexts.{cible}")
-                assert chemin in ("", ".api"), (
-                    f"{fichier.relative_to(RACINE)} importe « {module} », un module interne "
-                    f"de « {cible} ». Passer par app.contexts.{cible}.api, et l'y exporter "
-                    "si le symbole doit devenir public."
+                cible, partie = decompose
+                assert partie in RANG_SURFACE, (
+                    f"{fichier.relative_to(RACINE)} importe « {module} », un module "
+                    f"interne de « {cible} ». Passer par app.contextes.{cible}.contrats "
+                    "pour une entité, ou .api pour un cas d'usage."
                 )
 
     @pytest.mark.parametrize("contexte", sorted(CONTEXTES))
-    def test_tout_contexte_implemente_expose_une_surface_publique(self, contexte: str):
-        """Un contexte qui porte du code sans `api.py` n'a pas de frontière : les
-        suivants iront chercher ses modules internes, et la frontière n'existera plus."""
-        dossier = CONTEXTES_DIR / contexte
-        modules_metier = [
-            f for f in dossier.glob("*.py") if f.name not in ("__init__.py", "api.py", "routes.py")
-        ]
-        if not modules_metier:
-            return  # squelette : rien à exposer encore
-        assert (dossier / "api.py").exists(), (
-            f"« {contexte} » porte du code ({len(modules_metier)} modules) mais n'expose pas "
-            "de api.py. Déclarer sa surface publique avant qu'un autre contexte n'en dépende."
-        )
-
-    def test_le_referentiel_ne_depend_d_aucun_contexte(self):
-        """A est le pivot : il alimente tout le monde et ne connaît personne.
-
-        Cette propriété est ce qui rend le noyau normatif réutilisable et testable
-        isolément. Si elle se casse, la mise à jour annuelle de la loi de finances
-        devient un chantier transverse.
-        """
-        for fichier in _modules("referentiel"):
+    def test_un_domaine_n_emprunte_que_des_contrats(self, contexte: str):
+        """Importer l'`api` d'un autre contexte depuis une entité tirerait sa couche
+        application : le cercle 1 dépendrait du cercle 2, par la bande."""
+        for fichier in _fichiers(contexte):
+            if _couche(fichier) != "domaine":
+                continue
             for module in _imports(fichier):
-                assert _contexte_cible(module) in (None, "referentiel"), (
-                    f"{fichier.relative_to(RACINE)} : le référentiel ne doit dépendre "
-                    f"d'aucun autre contexte, or il importe « {module} »"
+                decompose = _decomposer(module)
+                if decompose is None or decompose[0] == contexte:
+                    continue
+                assert decompose[1] == "contrats", (
+                    f"{fichier.relative_to(RACINE)} est une entité et importe "
+                    f"« {module} ». Une entité n'emprunte que les contrats d'un autre "
+                    f"contexte : app.contextes.{decompose[0]}.contrats."
                 )
 
     def test_aucun_contexte_n_importe_le_point_d_entree(self):
         """Les contextes sont montés par `app.main`, jamais l'inverse."""
         for contexte in CONTEXTES:
-            for fichier in _modules(contexte):
+            for fichier in _fichiers(contexte):
                 for module in _imports(fichier):
                     assert module != "app.main" and not module.startswith("app.main."), (
                         f"{fichier.relative_to(RACINE)} importe app.main : inversion de contrôle"
                     )
 
     def test_le_graphe_est_acyclique(self):
-        """Un cycle entre contextes signifie que la frontière est mal placée.
-
-        Deux contextes qui s'appellent mutuellement n'en font qu'un, mal découpé : le
-        remède est un événement ou un déplacement de responsabilité, jamais une arête
-        de plus.
-        """
+        """Deux contextes qui s'appellent mutuellement n'en font qu'un, mal découpé. Le
+        remède est un événement ou un déplacement de responsabilité, jamais une arête."""
         vus: dict[str, int] = {}
 
         def visiter(contexte: str, chemin: list[str]) -> None:
             if vus.get(contexte) == 1:
-                boucle = " → ".join([*chemin, contexte])
-                raise AssertionError(f"cycle de dépendances : {boucle}")
+                raise AssertionError("cycle de dépendances : " + " → ".join([*chemin, contexte]))
             if vus.get(contexte) == 2:
                 return
             vus[contexte] = 1
@@ -256,24 +348,16 @@ class TestDependances:
             visiter(contexte, [])
 
     def test_le_socle_ne_depend_d_aucun_contexte_metier(self):
-        """Le socle est lisible par tous : il ne doit donc dépendre d'aucun métier.
-
-        Sinon toute évolution métier remonterait jusqu'à lui, et comme tout le monde le
-        lit, le graphe deviendrait un cycle géant.
-        """
         for contexte in sorted(SOCLE):
             interdites = ARETES_AUTORISEES[contexte] - SOCLE
             assert not interdites, (
-                f"« {contexte} » appartient au socle et ne peut dépendre d'aucun contexte "
-                f"métier, or il déclare : {sorted(interdites)}"
+                f"« {contexte} » appartient au socle, lisible par tous, et ne peut "
+                f"dépendre d'aucun métier, or il déclare : {sorted(interdites)}"
             )
 
     def test_le_pilotage_n_est_lu_par_personne(self):
-        """J · Pilotage est un puits : il agrège, il ne sert personne en amont.
-
-        Si un contexte métier venait à lire le pilotage, c'est qu'un indicateur y aurait
-        pris une valeur métier — il faudrait alors le redescendre dans le contexte qui
-        en est responsable.
-        """
+        """J agrège et n'est lu par personne. Si un contexte venait à le lire, c'est
+        qu'un indicateur y aurait pris une valeur métier, à redescendre chez son
+        responsable."""
         lecteurs = [c for c, cibles in ARETES_AUTORISEES.items() if "pilotage" in cibles]
         assert not lecteurs, f"le pilotage est lu par : {sorted(lecteurs)}"

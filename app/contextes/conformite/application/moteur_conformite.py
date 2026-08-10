@@ -10,13 +10,9 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
-import yaml
-
-from ..referentiel.api import ParametreResolu, ServiceParametres, StatutValidation
-from .jsonlogic import ErreurPredicat, evaluer
-from .modeles import (
+from app.contextes.conformite.application.resolution_parametres import resoudre_parametres
+from app.contextes.conformite.domaine.entites import (
     ConsequenceFiscale,
     Constat,
     FactureAControler,
@@ -24,28 +20,15 @@ from .modeles import (
     Regle,
     RegleEnEchec,
 )
-from .resolution import resoudre_parametres
+from app.contextes.conformite.domaine.jsonlogic import ErreurPredicat, evaluer
+from app.contextes.referentiel.api import (
+    ParametreResolu,
+    ServiceParametres,
+    StatutValidation,
+)
 
-__all__ = ["MoteurConformite", "charger_regles"]
+__all__ = ["MoteurConformite"]
 
-
-def charger_regles(dossier: Path) -> list[Regle]:
-    """Charge toutes les règles d'un dossier. Une règle malformée fait échouer le
-    chargement : mieux vaut un démarrage refusé qu'un contrôle silencieusement absent."""
-    regles: list[Regle] = []
-    for chemin in sorted(dossier.glob("*.yaml")):
-        brut = yaml.safe_load(chemin.read_text(encoding="utf-8"))
-        if not isinstance(brut, dict):
-            raise ValueError(f"{chemin.name} : un objet YAML est attendu à la racine")
-        try:
-            regles.append(Regle.model_validate(brut))
-        except Exception as exc:
-            raise ValueError(f"{chemin.name} : règle invalide — {exc}") from exc
-
-    doublons = {r.code for r in regles if sum(x.code == r.code for x in regles) > 1}
-    if doublons:
-        raise ValueError(f"codes de règle en double : {sorted(doublons)}")
-    return regles
 
 
 def calculer_enjeu(consequence: ConsequenceFiscale, facture: FactureAControler) -> Decimal | None:
@@ -72,12 +55,6 @@ class MoteurConformite:
         self._regles = regles
         self._parametres = parametres
 
-    @classmethod
-    def depuis_dossier(cls, referentiel: Path) -> MoteurConformite:
-        return cls(
-            regles=charger_regles(referentiel / "regles"),
-            parametres=ServiceParametres.depuis_yaml(referentiel / "parametres.yaml"),
-        )
 
     @property
     def regles(self) -> list[Regle]:

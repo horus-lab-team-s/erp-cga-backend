@@ -4,18 +4,15 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
-import yaml
+from app.contextes.referentiel.domaine.entites import (
+    Parametre,
+    ParametreResolu,
+    StatutValidation,
+)
+from app.contextes.referentiel.domaine.ports import DepotParametres
 
-from .modeles import Parametre, ParametreResolu, StatutValidation
-
-__all__ = [
-    "ServiceParametres",
-    "ParametreInconnu",
-    "AucuneVersionApplicable",
-    "charger_parametres",
-]
+__all__ = ["ServiceParametres", "ParametreInconnu", "AucuneVersionApplicable"]
 
 
 class ParametreInconnu(KeyError):
@@ -30,13 +27,6 @@ class AucuneVersionApplicable(LookupError):
     """
 
 
-def charger_parametres(chemin: Path) -> list[Parametre]:
-    contenu = yaml.safe_load(chemin.read_text(encoding="utf-8"))
-    if not isinstance(contenu, dict) or "parametres" not in contenu:
-        raise ValueError(f"{chemin} : clé « parametres » attendue à la racine")
-    return [Parametre.model_validate(brut) for brut in contenu["parametres"]]
-
-
 class ServiceParametres:
     """Toute lecture se fait à une date. Il n'existe volontairement aucune méthode
     permettant de lire « la valeur courante » sans préciser laquelle."""
@@ -48,8 +38,13 @@ class ServiceParametres:
         self._par_code: dict[str, Parametre] = {p.code: p for p in parametres}
 
     @classmethod
-    def depuis_yaml(cls, chemin: Path) -> ServiceParametres:
-        return cls(charger_parametres(chemin))
+    def depuis_depot(cls, depot: DepotParametres) -> ServiceParametres:
+        """Construit le service à partir de n'importe quelle source de paramètres.
+
+        Le cas d'usage ignore s'il s'agit d'un fichier, d'une base ou d'un cache :
+        c'est tout l'intérêt du port.
+        """
+        return cls(depot.charger())
 
     @property
     def codes(self) -> list[str]:

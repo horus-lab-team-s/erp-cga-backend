@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from app.contexts.conformite.modeles import Regle
-from app.contexts.conformite.moteur import MoteurConformite
-from app.contexts.referentiel.service import ServiceParametres
+from app.contextes.conformite.application.moteur_conformite import MoteurConformite
+from app.contextes.conformite.domaine.entites import Regle
+from app.contextes.referentiel.application.service_parametres import ServiceParametres
 
 CONTROLE_LE = date(2026, 7, 15)
 
@@ -71,7 +71,7 @@ class TestCoherenceDesReferences:
                 parametres.resoudre(code, regle.applicable_du)
 
     def test_aucune_regle_en_echec_sur_le_jeu_de_demonstration(self, moteur: MoteurConformite):
-        from app.contexts.conformite.donnees_demo import FACTURES_DEMO
+        from app.contextes.conformite.adaptateurs.sortant.donnees_demo import FACTURES_DEMO
 
         for reference, facture in FACTURES_DEMO.items():
             rapport = moteur.controler(facture)
@@ -97,7 +97,11 @@ class TestAucuneValeurLegaleEnDur:
     démonstration et des tests, qui manipulent légitimement des montants littéraux.
     """
 
-    DOMAINE = ("app/contexts/conformite/moteur.py", "app/contexts/conformite/resolution.py")
+    DOMAINE = (
+        "app/contextes/conformite/application/moteur_conformite.py",
+        "app/contextes/conformite/application/resolution_parametres.py",
+        "app/contextes/conformite/domaine/jsonlogic.py",
+    )
     #: Valeurs qui ne doivent jamais apparaître ailleurs que dans le référentiel.
     INTERDITES = (r"\b19[.,]25\b", r"\b100_?000\b", r"\b500_?000\b", r"\b50_?000_?000\b")
 
