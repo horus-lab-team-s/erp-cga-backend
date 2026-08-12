@@ -22,6 +22,14 @@ class Configuration(BaseSettings):
     #: connaît pas l'origine — voir Docs/architecture/02-referentiel-normatif.md § 3.
     dossier_referentiel: Path = RACINE_DEPOT / "Docs" / "referentiel"
 
+    #: Le contenu éditorial de la vitrine — articles, annonces, institutions.
+    #: Volontairement **hors de Docs/** : ce n'est pas de la documentation de
+    #: projet, c'est la matière que le cabinet édite lui-même. Un dossier à la
+    #: racine se trouve sans explication, et se sauvegarde sans se demander ce
+    #: qu'on emporte. Cible : une table PostgreSQL et un écran d'administration —
+    #: seul l'adaptateur sortant du contexte L changera ce jour-là.
+    dossier_contenu_vitrine: Path = RACINE_DEPOT / "Contenu_vitrine"
+
     origines_cors: list[str] = ["http://localhost:3000"]
 
 

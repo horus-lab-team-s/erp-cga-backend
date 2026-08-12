@@ -15,6 +15,9 @@ from app.contextes.conformite.adaptateurs.entrant.routes_http import (
 from app.contextes.referentiel.adaptateurs.entrant.routes_http import (
     routeur as routeur_referentiel,
 )
+from app.contextes.vitrine.adaptateurs.entrant.routes_http import (
+    routeur as routeur_vitrine,
+)
 from app.infrastructure.config import configuration
 
 DESCRIPTION = """
@@ -44,6 +47,9 @@ def creer_application() -> FastAPI:
     )
     application.include_router(routeur_referentiel)
     application.include_router(routeur_conformite)
+    # La vitrine publique : contenu éditorial du site, en lecture seule et sans
+    # authentification — tout ce qu'elle rend est déjà destiné à être affiché.
+    application.include_router(routeur_vitrine)
 
     @application.get("/sante", tags=["Technique"], summary="Vérification de disponibilité")
     def sante() -> dict[str, str]:

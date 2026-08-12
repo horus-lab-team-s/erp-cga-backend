@@ -19,10 +19,10 @@ plus externe. Une flèche ne va jamais de l'intérieur vers l'extérieur.
     │   └───────────────────────────────────────────────────┘   │
     └───────────────────────────────────────────────────────────┘
 
-**Contextes bornés — les frontières métier.** Onze contextes autonomes. On n'entre
+**Contextes bornés — les frontières métier.** Douze contextes autonomes. On n'entre
 chez un autre que par une surface publique déclarée, jamais par ses entrailles.
 
-Les couches vivent *à l'intérieur* de chaque contexte : cela donne onze modules
+Les couches vivent *à l'intérieur* de chaque contexte : cela donne douze modules
 métier complets, plutôt que quatre grands sacs techniques où le référentiel fiscal
 et la comptabilité se mélangeraient.
 
@@ -39,7 +39,7 @@ import pytest
 RACINE = Path(__file__).resolve().parents[1]
 CONTEXTES_DIR = RACINE / "app" / "contextes"
 
-# ── Les onze contextes bornés ─────────────────────────────────────────────────
+# ── Les douze contextes bornés ────────────────────────────────────────────────
 CONTEXTES: dict[str, str] = {
     "referentiel": "A",
     "portefeuille": "B",
@@ -52,6 +52,7 @@ CONTEXTES: dict[str, str] = {
     "creation_entreprise": "I",
     "pilotage": "J",
     "transverse": "K",
+    "vitrine": "L",
 }
 
 # ── Les couches, du plus interne au plus externe ──────────────────────────────
@@ -99,6 +100,12 @@ ARETES_AUTORISEES: dict[str, set[str]] = {
         "creation_entreprise",
         "social",
     },
+    # La vitrine ne lit aucun contexte métier, et c'est structurant : du contenu
+    # éditorial qui aurait besoin d'un paramètre légal ne serait plus du contenu,
+    # ce serait un calcul — et il appartiendrait au contexte qui le porte. Le jour
+    # où l'on voudrait afficher un barème sur le site, la bonne réponse sera une
+    # route du Référentiel appelée par le site, pas une arête ajoutée ici.
+    "vitrine": set(),
 }
 
 

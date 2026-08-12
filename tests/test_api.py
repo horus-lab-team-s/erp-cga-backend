@@ -103,9 +103,7 @@ class TestConformite:
         # La route ne doit pas être capturée par /demonstration/{reference}.
         assert all("facture" in r and "verdict" in r for r in rapports)
         # Distribution réaliste : l'écran ne doit pas être uniformément vert ni rouge.
-        gravites = {
-            r["verdict"]["comptabilisation_interdite"] for r in rapports
-        }
+        gravites = {r["verdict"]["comptabilisation_interdite"] for r in rapports}
         assert gravites == {True, False}
 
     def test_aucune_regle_en_echec_sur_tout_le_flux(self, client: TestClient):
@@ -126,3 +124,59 @@ class TestConformite:
         corps = client.post("/conformite/controler", json=facture).json()
         assert corps["verdict"]["comptabilisation_interdite"] is True
         assert [c["code_regle"] for c in corps["rapport"]["constats"]] == ["FAC-ID-003"]
+
+
+class TestVitrine:
+    """Le contenu éditorial servi au site public.
+
+    Ces routes sont en lecture seule et sans authentification : tout ce qu'elles
+    rendent est déjà destiné à être affiché. Ce qu'on éprouve ici, c'est le
+    contrat passé avec le site — pas la justesse du contenu, qui appartient au
+    cabinet.
+    """
+
+    def test_le_sommaire_porte_les_articles_et_les_comptes(self, client: TestClient):
+        # Les deux partent ensemble : le sommaire les affiche sur le même écran, et
+        # deux allers-retours pour une page doubleraient la latence sur mobile.
+        corps = client.get("/vitrine/articles").json()
+        assert corps["articles"]
+        assert set(corps["comptes_par_rubrique"])
+
+    def test_le_sommaire_va_du_plus_recent_au_plus_ancien(self, client: TestClient):
+        dates = [a["date"] for a in client.get("/vitrine/articles").json()["articles"]]
+        assert dates == sorted(dates, reverse=True)
+
+    def test_le_filtre_de_rubrique_restreint(self, client: TestClient):
+        corps = client.get("/vitrine/articles", params={"rubrique": "annonces"}).json()
+        assert corps["articles"]
+        assert {a["rubrique"] for a in corps["articles"]} == {"annonces"}
+
+    def test_une_rubrique_inconnue_montre_tout_plutot_qu_une_erreur(self, client: TestClient):
+        """Un lien mal recopié doit montrer le blog, pas une page d'erreur."""
+        tout = client.get("/vitrine/articles").json()["articles"]
+        farfelu = client.get("/vitrine/articles", params={"rubrique": "n-importe-quoi"})
+        assert farfelu.status_code == 200
+        assert len(farfelu.json()["articles"]) == len(tout)
+
+    def test_un_article_arrive_avec_ses_voisins_de_lecture(self, client: TestClient):
+        slug = client.get("/vitrine/articles").json()["articles"][0]["slug"]
+        corps = client.get(f"/vitrine/articles/{slug}").json()
+        assert corps["article"]["slug"] == slug
+        assert all(v["slug"] != slug for v in corps["voisins"])
+
+    def test_un_article_inconnu_est_un_404(self, client: TestClient):
+        assert client.get("/vitrine/articles/article-qui-n-existe-pas").status_code == 404
+
+    def test_la_date_est_obligatoire_pour_l_annonce(self, client: TestClient):
+        # Il n'existe volontairement aucune façon de demander « l'annonce courante » :
+        # le serveur et le visiteur ne sont pas toujours dans le même fuseau.
+        assert client.get("/vitrine/annonce").status_code == 422
+
+    def test_hors_fenetre_l_annonce_est_nulle(self, client: TestClient):
+        reponse = client.get("/vitrine/annonce", params={"a_la_date": "2000-01-01"})
+        assert reponse.status_code == 200
+        assert reponse.json() is None
+
+    def test_les_institutions_sont_servies(self, client: TestClient):
+        institutions = client.get("/vitrine/institutions").json()
+        assert {i["cle"] for i in institutions} >= {"dgi", "cnps", "onecca", "ohada"}
