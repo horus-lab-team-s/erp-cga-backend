@@ -82,7 +82,8 @@ ORDRE_DES_STATUTS = (
 def statut_pour_l_adherent(
     piece: PieceJustificative, a_corriger: set[str]
 ) -> StatutPourLAdherent:
-    """Le statut lu par l'adhérent. `a_corriger` : les pièces visées par une rectificative ouverte."""
+    """Le statut lu par l'adhérent. `a_corriger` : les pièces visées par une rectificative
+    ouverte."""
     if piece.identifiant in a_corriger:
         return StatutPourLAdherent.A_CORRIGER
     if piece.etat is EtatPiece.ARCHIVEE:

@@ -84,7 +84,9 @@ class TestLOrdreDeLaFile:
         assert [l_.piece for l_ in ordre] == ["NEUF", "VIEUX", "RICHE"]
         assert ordre[1].gravite == "MAJEUR", "la gravité affichée ne se surclasse pas"
         endormi = _ligne("OUBLI", "AVERTISSEMENT", None, 90, dort=True)
-        assert [l_.piece for l_ in ordonner_la_file([endormi, _ligne("BLOC", "BLOQUANT", None, 1)])] == [
+        assert [
+            l_.piece for l_ in ordonner_la_file([endormi, _ligne("BLOC", "BLOQUANT", None, 1)])
+        ] == [
             "BLOC",
             "OUBLI",
         ]
@@ -92,7 +94,11 @@ class TestLOrdreDeLaFile:
 
 class TestLesComptesEtLesGroupes:
     def test_les_compteurs_par_gravite(self):
-        lignes = [_ligne("A", "BLOQUANT", 1, 1), _ligne("B", "BLOQUANT", 1, 1), _ligne("C", "MAJEUR", 1, 1)]
+        lignes = [
+            _ligne("A", "BLOQUANT", 1, 1),
+            _ligne("B", "BLOQUANT", 1, 1),
+            _ligne("C", "MAJEUR", 1, 1),
+        ]
         assert compter_par_gravite(lignes) == {"BLOQUANT": 2, "MAJEUR": 1}
 
     def test_les_groupes_la_regle_la_plus_fournie_d_abord(self):
@@ -105,8 +111,16 @@ class TestLesComptesEtLesGroupes:
         (identite, documents) = grouper_par_regle(lignes)
         # R-ID passe devant : la gravité la plus forte du groupe l'emporte sur le nombre.
         assert identite.code_regle == "R-ID" and identite.gravite == "BLOQUANT"
-        assert identite.constats == 2 and identite.enjeu_cumule == Decimal(50) and identite.dossiers == 1
-        assert documents.constats == 2 and documents.enjeu_cumule == Decimal(300) and documents.dossiers == 2
+        assert (
+            identite.constats == 2
+            and identite.enjeu_cumule == Decimal(50)
+            and identite.dossiers == 1
+        )
+        assert (
+            documents.constats == 2
+            and documents.enjeu_cumule == Decimal(300)
+            and documents.dossiers == 2
+        )
 
 
 class TestLesReglages:
@@ -145,7 +159,9 @@ def neuf():
 
 def _client(courriel):
     client = TestClient(creer_application())
-    reponse = client.post("/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO})
+    reponse = client.post(
+        "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
+    )
     assert reponse.status_code == 200, reponse.text
     return client
 
@@ -158,7 +174,9 @@ class TestLaRoute:
         # Aucune ligne d'information : la file ne montre que ce qui appelle une décision.
         assert "INFORMATION" not in vue["par_gravite"]
         gravites = [l_["gravite"] for l_ in vue["lignes"]]
-        assert gravites == sorted(gravites, key=lambda g: ["BLOQUANT", "MAJEUR", "AVERTISSEMENT"].index(g))
+        assert gravites == sorted(
+            gravites, key=lambda g: ["BLOQUANT", "MAJEUR", "AVERTISSEMENT"].index(g)
+        )
         premiere = vue["lignes"][0]
         assert premiere["gravite"] == "BLOQUANT" and Decimal(premiere["enjeu"]) > 0
         assert premiere["anciennete"] > 0 and premiere["dort"] is True
@@ -175,7 +193,9 @@ class TestLaRoute:
         comptable = _client(COMPTABLE).get(FILE).json()
         dossiers_du_comptable = {l_["dossier"] for l_ in comptable["lignes"]}
         assert dossiers_du_comptable <= {l_["dossier"] for l_ in reviseur["lignes"]}
-        assert len(comptable["lignes"]) < len(reviseur["lignes"]), "le comptable voit tout le cabinet"
+        assert len(comptable["lignes"]) < len(reviseur["lignes"]), (
+            "le comptable voit tout le cabinet"
+        )
 
         client = _client(REVISEUR)
         bloquantes = client.get(FILE, params={"gravite": "BLOQUANT"}).json()
@@ -232,7 +252,8 @@ class TestLaRoute:
         assert ecart.status_code in (200, 201), ecart.text
         apres = client.get(FILE).json()
         assert not any(
-            l_["piece"] == vise["piece"] and l_["code_regle"] == vise["code_regle"] for l_ in apres["lignes"]
+            l_["piece"] == vise["piece"] and l_["code_regle"] == vise["code_regle"]
+            for l_ in apres["lignes"]
         )
         assert len(apres["lignes"]) == len(avant["lignes"]) - 1
 

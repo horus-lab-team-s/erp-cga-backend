@@ -40,6 +40,9 @@ from app.contextes.collecte.adaptateurs.sortant.magasins_memoire import (
     demandes_en_memoire,
     pieces_en_memoire,
 )
+from app.contextes.collecte.adaptateurs.sortant.reponses_adherent_yaml import (
+    charger_les_reponses_de_l_adherent,
+)
 from app.contextes.collecte.api import (
     CanalDepot,
     CompletudeDossier,
@@ -67,10 +70,8 @@ from app.contextes.collecte.application.demandes_de_piece import (
     satisfaire_une_demande,
     tracer_une_relance,
 )
-from app.contextes.collecte.adaptateurs.sortant.reponses_adherent_yaml import (
-    charger_les_reponses_de_l_adherent,
-)
 from app.contextes.collecte.application.lecture import lire_une_piece
+from app.contextes.collecte.application.traitement import classer_une_piece
 from app.contextes.collecte.domaine.demandes import NatureDeReponse
 from app.contextes.collecte.domaine.espace_adherent import (
     ReglagesDesReponses,
@@ -79,7 +80,6 @@ from app.contextes.collecte.domaine.espace_adherent import (
     texte_de_la_reponse,
     vue_des_justificatifs,
 )
-from app.contextes.collecte.application.traitement import classer_une_piece
 from app.contextes.collecte.domaine.ports import DepotDemandes, DepotPieces
 from app.contextes.transverse.api import (
     LOCATAIRE_PAR_DEFAUT,

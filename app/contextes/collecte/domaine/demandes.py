@@ -70,7 +70,8 @@ class StatutDemande(StrEnum):
 
 
 class NatureDeReponse(StrEnum):
-    """Ce que l'adhérent répond à une demande du cabinet (pas 112, maquette « Espace adhérent », vue C).
+    """Ce que l'adhérent répond à une demande du cabinet (pas 112, maquette « Espace adhérent »,
+    vue C).
 
     Deux réponses toutes faites et un message libre : « trois réponses toutes faites couvrent 90 %
     des cas et évitent la frappe au clavier sur un téléphone d'entrée de gamme ». La troisième

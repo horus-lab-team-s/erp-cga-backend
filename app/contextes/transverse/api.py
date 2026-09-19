@@ -171,6 +171,12 @@ from app.contextes.transverse.contrats import (
     verifier_chaine,
     verifier_code,
 )
+from app.contextes.transverse.domaine.acces_adherent import (
+    ReglagesDuRenvoi,
+    RenvoiRefuse,
+    renvois_du_jour,
+    type_de_lien,
+)
 from app.contextes.transverse.domaine.ports import (
     DepotComptes,
     DepotHabilitations,
@@ -180,13 +186,6 @@ from app.contextes.transverse.domaine.ports import (
     PortailDeclaratif,
     ServiceEmpreinte,
     ServiceNotification,
-)
-
-from app.contextes.transverse.domaine.acces_adherent import (
-    ReglagesDuRenvoi,
-    RenvoiRefuse,
-    renvois_du_jour,
-    type_de_lien,
 )
 
 __all__ = [

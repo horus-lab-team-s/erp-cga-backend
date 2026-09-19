@@ -55,8 +55,13 @@ class TestLaPeriode:
         assert libelle_de_periode(date(2026, 1, 1), date(2026, 3, 31)) == "1er trimestre 2026"
         assert libelle_de_periode(date(2026, 7, 1), date(2026, 9, 30)) == "3e trimestre 2026"
         assert libelle_de_periode(date(2025, 1, 1), date(2025, 12, 31)) == "année 2025"
-        assert libelle_de_periode(date(2026, 2, 1), date(2026, 4, 30)) == "du 01/02/2026 au 30/04/2026"
-        assert libelle_de_periode(date(2026, 7, 15), date(2026, 7, 31)) == "du 15/07/2026 au 31/07/2026"
+        assert (
+            libelle_de_periode(date(2026, 2, 1), date(2026, 4, 30)) == "du 01/02/2026 au 30/04/2026"
+        )
+        assert (
+            libelle_de_periode(date(2026, 7, 15), date(2026, 7, 31))
+            == "du 15/07/2026 au 31/07/2026"
+        )
 
 
 def _mois(code, mois, **champs):
@@ -108,7 +113,8 @@ class TestUneCarteParObligation:
         assert carte.etat is EtatPourLAdherent.EN_RETARD
         assert carte.periode == "avril 2026" and carte.echeance == date(2026, 5, 15)
         assert carte.jours == 97
-        # mai, juin, juillet : échéances passées au 20 août ; août (15/09) et septembre sont à venir.
+        # mai, juin, juillet : échéances passées au 20 août ; août (15/09) et septembre sont à
+        # venir.
         assert carte.autres_periodes_en_retard == 3
         assert carte.titre == "Cotisations CNPS"
         assert carte.de_quoi_s_agit_il.startswith("Les cotisations")
@@ -116,7 +122,14 @@ class TestUneCarteParObligation:
         assert carte.prochaine_echeance == date(2026, 9, 15)
 
     def test_sans_retard_la_prochaine_a_venir_dans_l_horizon(self):
-        vue = _vue([_deposee("CNPS", 7, date(2026, 8, 10), "A-7"), _mois("CNPS", 8), _mois("CNPS", 9), _mois("CNPS", 12)])
+        vue = _vue(
+            [
+                _deposee("CNPS", 7, date(2026, 8, 10), "A-7"),
+                _mois("CNPS", 8),
+                _mois("CNPS", 9),
+                _mois("CNPS", 12),
+            ]
+        )
         etats = [(c.etat, c.periode) for c in vue]
         assert etats == [
             (EtatPourLAdherent.A_VENIR, "août 2026"),
@@ -162,7 +175,11 @@ class TestUneCarteParObligation:
 
     def test_l_ordre_ce_qui_demande_un_geste_d_abord(self):
         preuve = PreuveEnvoyee(
-            code_obligation="IGS", periode_debut=date(2026, 7, 1), piece="P", envoyee_le=datetime(2026, 8, 1), par="A"
+            code_obligation="IGS",
+            periode_debut=date(2026, 7, 1),
+            piece="P",
+            envoyee_le=datetime(2026, 8, 1),
+            par="A",
         )
         vue = _vue(
             [
@@ -196,12 +213,21 @@ class TestUneCarteParObligation:
 
 class TestLesReglages:
     def test_ce_qui_mentirait(self):
-        texte = {"titre": "Titre", "de_quoi_s_agit_il": "Une explication.", "en_cas_de_retard": "Une majoration."}
+        texte = {
+            "titre": "Titre",
+            "de_quoi_s_agit_il": "Une explication.",
+            "en_cas_de_retard": "Une majoration.",
+        }
         with pytest.raises(ValidationError, match="expliquée deux fois"):
-            ReglagesDesEcheancesDeLAdherent(explications=[{"code": "IGS", **texte}, {"code": "IGS", **texte}])
+            ReglagesDesEcheancesDeLAdherent(
+                explications=[{"code": "IGS", **texte}, {"code": "IGS", **texte}]
+            )
         with pytest.raises(ValidationError, match="nomment qui les a validés"):
             ReglagesDesEcheancesDeLAdherent(statut="VALIDE")
-        assert ReglagesDesEcheancesDeLAdherent(statut="VALIDE", valide_par="r.ebolo").statut == "VALIDE"
+        assert (
+            ReglagesDesEcheancesDeLAdherent(statut="VALIDE", valide_par="r.ebolo").statut
+            == "VALIDE"
+        )
 
     def test_le_fichier_livre_est_a_valider_et_n_explique_que_le_catalogue(self):
         reglages = charger_les_echeances_de_l_adherent(REFERENTIEL)
@@ -221,7 +247,11 @@ AUTRE_ADHERENT = "mc.essomba@lacolombe.cm"
 REVISEUR = "a.bouba@cga-brcg.cm"
 ECHEANCES = f"/obligations/dossiers/{BATIMENT}/mes-echeances"
 PREUVES = f"/obligations/dossiers/{BATIMENT}/preuves-de-paiement"
-CNPS_JUILLET = {"code_obligation": "CNPS", "periode_debut": "2026-07-01", "periode_fin": "2026-07-31"}
+CNPS_JUILLET = {
+    "code_obligation": "CNPS",
+    "periode_debut": "2026-07-01",
+    "periode_fin": "2026-07-31",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -233,7 +263,9 @@ def neuf():
 
 def _client(courriel):
     client = TestClient(creer_application())
-    reponse = client.post("/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO})
+    reponse = client.post(
+        "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
+    )
     assert reponse.status_code == 200, reponse.text
     return client
 
@@ -242,7 +274,8 @@ def _carte(vue, code, periode_debut=None):
     return next(
         e
         for e in vue["echeances"]
-        if e["code_obligation"] == code and (periode_debut is None or e["periode_debut"] == periode_debut)
+        if e["code_obligation"] == code
+        and (periode_debut is None or e["periode_debut"] == periode_debut)
     )
 
 
@@ -271,13 +304,18 @@ class TestLesRoutes:
         double = adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-2026-0013"})
         assert double.status_code == 409 and "déjà été envoyée" in double.json()["detail"]
         # Une autre quittance pour la même échéance (la première était illisible) est reçue.
-        assert adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-2026-0019"}).status_code == 201
+        assert (
+            adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-2026-0019"}).status_code
+            == 201
+        )
 
         reviseur = _client(REVISEUR)
         avis = reviseur.get("/transverse/notifications").json()["notifications"]
         recus = [n for n in avis if n["titre"].startswith("Preuve de paiement reçue")]
         assert len(recus) == 2
-        assert {n["titre"] for n in recus} == {"Preuve de paiement reçue : Cotisations sociales CNPS, juillet 2026"}
+        assert {n["titre"] for n in recus} == {
+            "Preuve de paiement reçue : Cotisations sociales CNPS, juillet 2026"
+        }
         assert any("PJ-2026-0013" in n["texte"] for n in recus)
         assert all(n["lien"] == f"/obligations?dossier={BATIMENT}" for n in recus)
 
@@ -302,7 +340,9 @@ class TestLesRoutes:
 
     def test_les_refus(self):
         adherent = _client(ADHERENT)
-        inconnue = adherent.post(PREUVES, json={**CNPS_JUILLET, "periode_fin": "2026-07-30", "piece": "PJ-2026-0013"})
+        inconnue = adherent.post(
+            PREUVES, json={**CNPS_JUILLET, "periode_fin": "2026-07-30", "piece": "PJ-2026-0013"}
+        )
         assert inconnue.status_code == 404 and "Périodes à régler" in inconnue.json()["detail"]
         piece = adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-INEXISTANTE"})
         assert piece.status_code == 404
@@ -310,5 +350,13 @@ class TestLesRoutes:
         from app.contextes.collecte.api import pieces_en_memoire
 
         autre = next(p for p in pieces_en_memoire().toutes() if p.entreprise != BATIMENT)
-        assert adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": autre.identifiant}).status_code == 404
-        assert _client(AUTRE_ADHERENT).post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-2026-0013"}).status_code == 404
+        assert (
+            adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": autre.identifiant}).status_code
+            == 404
+        )
+        assert (
+            _client(AUTRE_ADHERENT)
+            .post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-2026-0013"})
+            .status_code
+            == 404
+        )

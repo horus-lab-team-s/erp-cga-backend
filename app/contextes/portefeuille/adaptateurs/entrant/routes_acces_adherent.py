@@ -50,8 +50,16 @@ ACTION_RENVOI = "compte.lien_d_acces_renvoye"
 
 #: Ce que le courriel dit du lien, selon son type.
 _GESTES = {
-    TypeJeton.ACTIVATION: ("définir votre mot de passe et ouvrir votre espace", "7 jours", "/activation"),
-    TypeJeton.REINITIALISATION: ("choisir un nouveau mot de passe", "2 heures", "/reinitialisation"),
+    TypeJeton.ACTIVATION: (
+        "définir votre mot de passe et ouvrir votre espace",
+        "7 jours",
+        "/activation",
+    ),
+    TypeJeton.REINITIALISATION: (
+        "choisir un nouveau mot de passe",
+        "2 heures",
+        "/reinitialisation",
+    ),
 }
 
 
@@ -74,7 +82,10 @@ class AccesDUnAdherent(BaseModel):
 def _renvois(compte: str) -> list[LienRenvoye]:
     return [
         LienRenvoye(
-            type=e.apres["type"], le=e.horodatage, par=e.apres["par"], verification=e.apres["verification"]
+            type=e.apres["type"],
+            le=e.horodatage,
+            par=e.apres["par"],
+            verification=e.apres["verification"],
         )
         for e in atelier().journal.lister(objet_type="compte", objet_id=compte)
         if e.action == ACTION_RENVOI
@@ -118,7 +129,8 @@ def lire_les_acces(acces: AccesRequis, niu: str) -> list[AccesDUnAdherent]:
 class DemandeDeLien(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    #: Comment l'interlocuteur a été reconnu : « rappelé au numéro du dossier », « venu avec sa CNI ».
+    #: Comment l'interlocuteur a été reconnu : « rappelé au numéro du dossier », « venu avec sa CNI
+    #».
     verification: str = Field(min_length=1, max_length=300)
 
 
@@ -132,7 +144,9 @@ class DemandeDeLien(BaseModel):
         422: {"description": "Vérification trop courte"},
     },
 )
-def renvoyer_un_lien(acces: AccesRequis, niu: str, compte: str, demande: DemandeDeLien) -> LienRenvoye:
+def renvoyer_un_lien(
+    acces: AccesRequis, niu: str, compte: str, demande: DemandeDeLien
+) -> LienRenvoye:
     exiger_dossier(acces, Permission.RELANCER_ADHERENT, niu)
     dossier = _lire(niu)
     reglages = reglages_du_renvoi()
@@ -140,19 +154,25 @@ def renvoyer_un_lien(acces: AccesRequis, niu: str, compte: str, demande: Demande
     if len(verification) < reglages.verification_minimum:
         raise HTTPException(
             status_code=422,
-            detail="écrivez comment vous avez reconnu votre interlocuteur (par exemple : rappelé au "
-            "numéro du dossier). Ce texte va au journal, à votre nom.",
+            detail="écrivez comment vous avez reconnu votre interlocuteur (par exemple : "
+            "rappelé au numéro du dossier). Ce texte va au journal, à votre nom.",
         )
     titulaire = next((c for c in _adherents(niu) if c.identifiant == compte), None)
     if titulaire is None:
         # Même réponse pour un compte inconnu et pour le compte d'un autre dossier.
-        raise HTTPException(status_code=404, detail=f"aucun compte adhérent {compte} sur ce dossier.")
+        raise HTTPException(
+            status_code=404, detail=f"aucun compte adhérent {compte} sur ce dossier."
+        )
     instant = maintenant()
     try:
         type_jeton = type_de_lien(titulaire.etat)
-        if renvois_du_jour([r.le.date() for r in _renvois(compte)], instant.date()) >= reglages.renvois_par_jour:
+        if (
+            renvois_du_jour([r.le.date() for r in _renvois(compte)], instant.date())
+            >= reglages.renvois_par_jour
+        ):
             raise RenvoiRefuse(
-                f"{reglages.renvois_par_jour} lien(s) déjà renvoyé(s) aujourd'hui à ce compte. Au-delà, "
+                f"{reglages.renvois_par_jour} lien(s) déjà renvoyé(s) aujourd'hui à ce compte. "
+                f"Au-delà, "
                 "chaque lien valide de plus est un risque : faites venir l'adhérent au cabinet."
             )
     except RenvoiRefuse as refus:
@@ -195,7 +215,9 @@ def renvoyer_un_lien(acces: AccesRequis, niu: str, compte: str, demande: Demande
             "par": acces.nom_complet,
         },
     )
-    return LienRenvoye(type=type_jeton.value, le=instant, par=acces.nom_complet, verification=verification)
+    return LienRenvoye(
+        type=type_jeton.value, le=instant, par=acces.nom_complet, verification=verification
+    )
 
 
 __all__ = ["routeur"]

@@ -26,7 +26,8 @@ des liens sans vérifier qui demande ». D'où trois garde-fous :
 2. **La vérification est écrite** : comment le chargé de clientèle s'est assuré de parler au bon
    interlocuteur (« rappelé au numéro du dossier », « venu au cabinet avec sa CNI »). Elle va au
    journal, avec son nom.
-3. **Un nombre borné de renvois par jour** pour un même compte (référentiel) : un chargé de clientèle
+3. **Un nombre borné de renvois par jour** pour un même compte (référentiel) : un chargé de
+   clientèle
    harcelé au téléphone ne multiplie pas les liens valides.
 
 Le type du lien se déduit de l'état du compte, jamais de la requête : un compte en attente reçoit

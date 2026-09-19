@@ -1,7 +1,8 @@
 """La pièce d'appui d'une dérogation (pas 118).
 
 Maquettes « Parcours réviseur », vue B (« Pièce d'appui : 4 attestations jointes ») et « Pilotage
-direction », vue E (« 3 dérogations sans pièce d'appui : à régulariser avant la revue trimestrielle »).
+direction », vue E (« 3 dérogations sans pièce d'appui : à régulariser avant la revue trimestrielle
+»).
 
 ─────────────────────────────────────────────────────────────────────────────────
 CE QUE CE FICHIER GARDE
@@ -65,7 +66,10 @@ class TestLaTransition:
         remplacee = jointe.joindre_une_piece_d_appui(
             "  Attestation DGI du 09/08  ", par="C-006", le=datetime(2026, 8, 10, 9, 0)
         )
-        assert remplacee.piece_appui == "Attestation DGI du 09/08" and remplacee.piece_appui_par == "C-006"
+        assert (
+            remplacee.piece_appui == "Attestation DGI du 09/08"
+            and remplacee.piece_appui_par == "C-006"
+        )
 
     def test_refusee_sur_un_ecart_sans_effet_ou_sans_reference(self):
         for statut in (StatutEcart.LEVE, StatutEcart.REFUSE):
@@ -76,7 +80,10 @@ class TestLaTransition:
 
     def test_un_ecart_effectif_accepte_encore_sa_preuve(self):
         effectif = _ecart(statut=StatutEcart.EFFECTIF)
-        assert effectif.joindre_une_piece_d_appui("PJ-9", par="C-003", le=LE_9_AOUT).piece_appui == "PJ-9"
+        assert (
+            effectif.joindre_une_piece_d_appui("PJ-9", par="C-003", le=LE_9_AOUT).piece_appui
+            == "PJ-9"
+        )
 
 
 class TestLaPolitique:
@@ -135,7 +142,9 @@ def neuf():
 
 def _client(courriel=REVISEUR):
     client = TestClient(creer_application())
-    reponse = client.post("/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO})
+    reponse = client.post(
+        "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
+    )
     assert reponse.status_code == 200, reponse.text
     return client
 
@@ -160,7 +169,9 @@ class TestLesRoutes:
         assert ecart["piece_appui"] == "PJ-2026-0042" and ecart["piece_appui_par"] == "C-003"
         entrees = [
             e.action
-            for e in atelier().journal.lister(objet_type="ecart_de_constat", objet_id=ecart["identifiant"])
+            for e in atelier().journal.lister(
+                objet_type="ecart_de_constat", objet_id=ecart["identifiant"]
+            )
         ]
         assert entrees == ["conformite.ecart_propose", "conformite.piece_d_appui_jointe"]
 
@@ -190,7 +201,9 @@ class TestLesRoutes:
     def test_le_journal_compte_ce_qui_reste_a_regulariser(self):
         client = _client()
         piece, regle = _un_constat_majeur(client)
-        client.post(f"/conformite/pieces/{piece}/ecarts", json={"code_regle": regle, "motif": MOTIF})
+        client.post(
+            f"/conformite/pieces/{piece}/ecarts", json={"code_regle": regle, "motif": MOTIF}
+        )
 
         journal = client.get("/conformite/derogations").json()
         assert journal["delai_de_regularisation_jours"] == 30

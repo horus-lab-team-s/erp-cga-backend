@@ -65,7 +65,8 @@ def _signalements(niu: str) -> list[SignalementDeChangement]:
             par=e.acteur,
         )
         for e in atelier().journal.lister(objet_type=OBJET_SIGNALEMENT, objet_id=niu)
-        # Seule action écrite sur ce type d'objet (mutant équivalent au pas 114) : le filtre protège la
+        # Seule action écrite sur ce type d'objet (mutant équivalent au pas 114) : le filtre
+        # protège la
         # lecture le jour où s'y ajoute une autre action (un signalement instruit, par exemple).
         if e.action == "portefeuille.changement_signale"
     ]

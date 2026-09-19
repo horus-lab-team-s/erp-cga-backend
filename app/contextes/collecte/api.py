@@ -96,9 +96,10 @@ from app.contextes.collecte.contrats import (
 from app.contextes.collecte.domaine.demandes import (
     JALONS_RELANCE_PIECE,
     SEUIL_ESCALADE_JOURS,
+    NatureDeReponse,
+    ReponseDeLAdherent,
     relances_du_jour,
 )
-from app.contextes.collecte.domaine.demandes import NatureDeReponse, ReponseDeLAdherent
 from app.contextes.collecte.domaine.doublons import detecter_doublons
 from app.contextes.collecte.domaine.espace_adherent import (
     ReglagesDesReponses,
@@ -196,7 +197,8 @@ __all__ = [
 
 
 def reglages_des_reponses() -> ReglagesDesReponses:
-    """Les réponses toutes faites, lues au référentiel : la même lecture que la route de la collecte."""
+    """Les réponses toutes faites, lues au référentiel : la même lecture que la route de la
+    collecte."""
     from app.contextes.collecte.adaptateurs.entrant.routes_http import (
         reglages_des_reponses as _reglages,
     )

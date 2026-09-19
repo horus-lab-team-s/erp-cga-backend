@@ -4,7 +4,8 @@
 D'OÙ VIENT CE MODULE
 
 Maquette « Espace adhérent CGA », vue F (« Réglages et états »), le réglage « Rappels avant les
-échéances · 7 jours et 2 jours avant ». Rien n'envoyait de rappel à l'adhérent : le cabinet relançait
+échéances · 7 jours et 2 jours avant ». Rien n'envoyait de rappel à l'adhérent : le cabinet
+relançait
 les retards (pas 55), une fois le mal fait. Un réglage sans envoi derrière serait un interrupteur
 qui ne commande rien : ce pas construit **les deux**, la préférence et le travail périodique qui
 l'honore.
@@ -66,8 +67,10 @@ class ReglagesDesRappels(BaseModel):
             raise ValueError(f"{self.source} : un jalon possible est écrit deux fois.")
         if not set(self.jalons_par_defaut) <= set(self.jalons_possibles):
             raise ValueError(
-                f"{self.source} : les jalons par défaut {list(self.jalons_par_defaut)} doivent être "
-                f"parmi les jalons possibles {list(self.jalons_possibles)} : l'écran ne saurait pas "
+                f"{self.source} : les jalons par défaut {list(self.jalons_par_defaut)} doivent "
+                f"être "
+                f"parmi les jalons possibles {list(self.jalons_possibles)} : l'écran ne saurait "
+                f"pas "
                 "afficher un réglage que l'adhérent ne peut pas choisir."
             )
         if self.actifs_par_defaut and not self.jalons_par_defaut:
@@ -79,7 +82,8 @@ class ReglagesDesRappels(BaseModel):
 
 
 class PreferenceDeRappels(BaseModel):
-    """Le réglage d'un compte adhérent. `defini` : faux tant qu'il n'a rien réglé (défaut du référentiel)."""
+    """Le réglage d'un compte adhérent. `defini` : faux tant qu'il n'a rien réglé (défaut du
+    référentiel)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -107,7 +111,8 @@ class PreferenceDeRappels(BaseModel):
 
 
 def jalon_du(jours_restants: int, jalons: tuple[int, ...]) -> int | None:
-    """Le jalon dû pour une échéance à `jours_restants` jours : le plus proche franchi, ou `None`."""
+    """Le jalon dû pour une échéance à `jours_restants` jours : le plus proche franchi, ou
+    `None`."""
     if jours_restants < 0:
         return None
     franchis = [j for j in jalons if jours_restants <= j]

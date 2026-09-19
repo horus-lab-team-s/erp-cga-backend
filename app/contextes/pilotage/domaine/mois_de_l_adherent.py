@@ -132,7 +132,9 @@ class ReglagesDeLEspaceAdherent(BaseModel):
     @model_validator(mode="after")
     def _coherence(self) -> ReglagesDeLEspaceAdherent:
         if not self.racines_d_achats or any(not r.isdigit() for r in self.racines_d_achats):
-            raise ValueError(f"{self.source} : racines_d_achats sont des débuts de numéro de compte.")
+            raise ValueError(
+                f"{self.source} : racines_d_achats sont des débuts de numéro de compte."
+            )
         for nom in (
             "a_envoyer",
             "a_envoyer_en_retard",
@@ -263,8 +265,13 @@ def rendre_le_bandeau(
 
 
 def achats_du_mois(lignes: list[tuple[str, bool, Decimal]], racines: tuple[str, ...]) -> Decimal:
-    """Le solde des comptes d'achats : (compte, au débit, montant) des écritures validées du mois."""
+    """Le solde des comptes d'achats : (compte, au débit, montant) des écritures validées du
+    mois."""
     return sum(
-        (montant if au_debit else -montant for compte, au_debit, montant in lignes if compte.startswith(racines)),
+        (
+            montant if au_debit else -montant
+            for compte, au_debit, montant in lignes
+            if compte.startswith(racines)
+        ),
         Decimal(0),
     )

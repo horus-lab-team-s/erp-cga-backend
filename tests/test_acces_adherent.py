@@ -60,7 +60,9 @@ def neuf():
 
 def _client(courriel=CHARGEE):
     client = TestClient(creer_application())
-    reponse = client.post("/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO})
+    reponse = client.post(
+        "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
+    )
     assert reponse.status_code == 200, reponse.text
     return client
 
@@ -97,10 +99,16 @@ class TestLeGeste:
             json={"secret": secret, "mot_de_passe": "Quincaillerie-Akwa-2026!"},
         )
         assert defini.status_code == 200, defini.text
-        assert anonyme.post(
-            "/transverse/session",
-            json={"courriel": "e.tchoumba@tchoumbaetfils.cm", "mot_de_passe": "Quincaillerie-Akwa-2026!"},
-        ).status_code == 200
+        assert (
+            anonyme.post(
+                "/transverse/session",
+                json={
+                    "courriel": "e.tchoumba@tchoumbaetfils.cm",
+                    "mot_de_passe": "Quincaillerie-Akwa-2026!",
+                },
+            ).status_code
+            == 200
+        )
 
         (apres,) = chargee.get(f"/portefeuille/entreprises/{TCHOUMBA}/acces-adherents").json()
         assert apres["etat"] == "ACTIF"
@@ -110,15 +118,19 @@ class TestLeGeste:
             if e.action == "compte.lien_d_acces_renvoye"
         )
         assert entree.acteur == "C-007" and entree.apres["dossier"] == TCHOUMBA
-        # Le jeton lui-même est émis au nom de la chargée, pas du « système » : qui a ouvert l'accès.
+        # Le jeton lui-même est émis au nom de la chargée, pas du « système » : qui a ouvert
+        # l'accès.
         emission = [
-            e for e in atelier().journal.lister(objet_type="compte", objet_id="A-003") if e.action == "jeton.emis"
+            e
+            for e in atelier().journal.lister(objet_type="compte", objet_id="A-003")
+            if e.action == "jeton.emis"
         ]
         assert emission[-1].acteur == "C-007"
 
     def test_un_compte_actif_recoit_une_reinitialisation(self):
         envoi = _client().post(
-            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien", json={"verification": VERIFICATION}
+            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien",
+            json={"verification": VERIFICATION},
         )
         assert envoi.status_code == 201 and envoi.json()["type"] == "REINITIALISATION"
         (courriel,) = _derniers_liens()
@@ -130,7 +142,8 @@ class TestLeGeste:
 class TestLesGardeFous:
     def test_la_verification_est_ecrite(self):
         refus = _client().post(
-            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien", json={"verification": "ok"}
+            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien",
+            json={"verification": "ok"},
         )
         assert refus.status_code == 422 and "comment vous avez reconnu" in refus.json()["detail"]
         assert _derniers_liens() == []
@@ -141,7 +154,9 @@ class TestLesGardeFous:
         for _ in range(2):
             assert chargee.post(chemin, json={"verification": VERIFICATION}).status_code == 201
         troisieme = chargee.post(chemin, json={"verification": VERIFICATION})
-        assert troisieme.status_code == 409 and "faites venir l'adhérent" in troisieme.json()["detail"]
+        assert (
+            troisieme.status_code == 409 and "faites venir l'adhérent" in troisieme.json()["detail"]
+        )
         assert len(_derniers_liens()) == 2
         with horloge_figee(datetime(2026, 9, 18, 9, 0)):
             assert _client().post(chemin, json={"verification": VERIFICATION}).status_code == 201
@@ -151,12 +166,14 @@ class TestLesGardeFous:
         boutique.comptes.enregistrer(boutique.comptes.lire("A-001").suspendre())
         chargee = _client()
         suspendu = chargee.post(
-            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien", json={"verification": VERIFICATION}
+            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien",
+            json={"verification": VERIFICATION},
         )
         assert suspendu.status_code == 409 and "suspendu" in suspendu.json()["detail"]
         # A-002 est l'adhérente de LA COLOMBE, pas de BATIMENT PLUS.
         autre = chargee.post(
-            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-002/lien", json={"verification": VERIFICATION}
+            f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-002/lien",
+            json={"verification": VERIFICATION},
         )
         assert autre.status_code == 404
         assert _derniers_liens() == []
@@ -164,7 +181,10 @@ class TestLesGardeFous:
     def test_seul_le_charge_de_clientele(self):
         for courriel in ("l.fotso@cga-brcg.cm", "jp.nkoa@batimentplus.cm"):
             client = _client(courriel)
-            assert client.get(f"/portefeuille/entreprises/{BATIMENT}/acces-adherents").status_code in (403, 404)
+            assert client.get(
+                f"/portefeuille/entreprises/{BATIMENT}/acces-adherents"
+            ).status_code in (403, 404)
             assert client.post(
-                f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien", json={"verification": VERIFICATION}
+                f"/portefeuille/entreprises/{BATIMENT}/acces-adherents/A-001/lien",
+                json={"verification": VERIFICATION},
             ).status_code in (403, 404)

@@ -208,10 +208,11 @@ def envoyer_une_preuve(
             f"dossier. Périodes à régler : {', '.join(connues) or 'aucune'}.",
         )
     if obligation.deposee:
+        periode = libelle_de_periode(obligation.periode_debut, obligation.periode_fin)
         raise HTTPException(
             status_code=409,
-            detail=f"{obligation.libelle} ({libelle_de_periode(obligation.periode_debut, obligation.periode_fin)}) "
-            f"est déjà déposée le {obligation.declaree_le:%d/%m/%Y} : il n'y a rien à prouver.",
+            detail=f"{obligation.libelle} ({periode}) est déjà déposée le "
+            f"{obligation.declaree_le:%d/%m/%Y} : il n'y a rien à prouver.",
         )
     session = session_de_travail()
     pieces = pieces_en_memoire() if session is None else DepotPiecesSql(session, courant())
@@ -268,7 +269,8 @@ def envoyer_une_preuve(
 #
 # ⚠️ CE QUE CETTE LISTE EST, ET CE QU'ELLE N'EST PAS
 #
-# La maquette liste « Attestation de non-redevance », « Reçu de dépôt », « Déclaration IGS », « États
+# La maquette liste « Attestation de non-redevance », « Reçu de dépôt », « Déclaration IGS », «
+# États
 # financiers », « Attestation d'adhésion », « Contrat de mission ». La plateforme ne produit
 # aujourd'hui **aucun document officiel** : une attestation « dont une banque peut vérifier
 # l'authenticité auprès du CGA » suppose un moyen de vérification, une signature et un modèle

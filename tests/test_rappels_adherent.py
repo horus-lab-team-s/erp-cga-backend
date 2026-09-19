@@ -63,7 +63,10 @@ class TestLesReglages:
             ReglagesDesRappels(jalons_possibles=(7, 7, 2))
         with pytest.raises(ValidationError, match="entre 0 et 60"):
             ReglagesDesRappels(jalons_possibles=(90, 7, 2))
-        assert ReglagesDesRappels(actifs_par_defaut=False, jalons_par_defaut=()).actifs_par_defaut is False
+        assert (
+            ReglagesDesRappels(actifs_par_defaut=False, jalons_par_defaut=()).actifs_par_defaut
+            is False
+        )
 
     def test_la_preference(self):
         with pytest.raises(ValidationError, match="au moins un moment"):
@@ -96,7 +99,9 @@ def neuf():
 
 def _client(courriel):
     client = TestClient(creer_application())
-    reponse = client.post("/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO})
+    reponse = client.post(
+        "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
+    )
     assert reponse.status_code == 200, reponse.text
     return client
 
@@ -171,14 +176,20 @@ class TestLeTravail:
 
     def test_un_compte_qui_a_coupe_les_rappels_n_en_recoit_pas(self):
         with horloge_figee(datetime(2026, 9, 1, 8, 0)):
-            assert _client(ADHERENT).post(RAPPELS, json={"actifs": False, "jalons": []}).status_code == 200
+            assert (
+                _client(ADHERENT).post(RAPPELS, json={"actifs": False, "jalons": []}).status_code
+                == 200
+            )
         with horloge_figee(datetime(2026, 9, 8, 8, 0)):
             envoyer_les_rappels()
             assert _rappels_cnps_aout() == []
 
     def test_les_jalons_choisis_sont_honores(self):
         with horloge_figee(datetime(2026, 9, 1, 8, 0)):
-            assert _client(ADHERENT).post(RAPPELS, json={"actifs": True, "jalons": [3]}).status_code == 200
+            assert (
+                _client(ADHERENT).post(RAPPELS, json={"actifs": True, "jalons": [3]}).status_code
+                == 200
+            )
         with horloge_figee(datetime(2026, 9, 8, 8, 0)):
             envoyer_les_rappels()
             assert _rappels_cnps_aout() == [], "le jalon 7, non choisi, est parti"
@@ -214,7 +225,12 @@ class TestCeQueLaBatterieAMontre:
 
     def test_des_rappels_coupes_ne_partent_pas_meme_avec_des_jalons(self):
         with horloge_figee(datetime(2026, 9, 1, 8, 0)):
-            assert _client(ADHERENT).post(RAPPELS, json={"actifs": False, "jalons": [7, 2]}).status_code == 200
+            assert (
+                _client(ADHERENT)
+                .post(RAPPELS, json={"actifs": False, "jalons": [7, 2]})
+                .status_code
+                == 200
+            )
         with horloge_figee(datetime(2026, 9, 8, 8, 0)):
             envoyer_les_rappels()
             assert _rappels_cnps_aout() == []
@@ -224,7 +240,9 @@ class TestCeQueLaBatterieAMontre:
 
         with horloge_figee(datetime(2026, 9, 8, 8, 0)):
             envoyer_les_rappels()
-            destinataires = {m.destinataire for m in service_de_notification().derniers("echeance.rappel")}
+            destinataires = {
+                m.destinataire for m in service_de_notification().derniers("echeance.rappel")
+            }
             assert ADHERENT in destinataires
             assert not any(d.endswith("@cga-brcg.cm") for d in destinataires)
 
@@ -254,4 +272,6 @@ class TestCeQueLaBatterieAMontre:
 
         from app.contextes.obligations.adaptateurs.entrant.travail_des_rappels import cle_du_rappel
 
-        assert cle_du_rappel("N1", "CNPS", date(2026, 8, 1), 7) != cle_du_rappel("N2", "CNPS", date(2026, 8, 1), 7)
+        assert cle_du_rappel("N1", "CNPS", date(2026, 8, 1), 7) != cle_du_rappel(
+            "N2", "CNPS", date(2026, 8, 1), 7
+        )

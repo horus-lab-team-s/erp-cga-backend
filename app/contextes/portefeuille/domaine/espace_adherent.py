@@ -79,7 +79,8 @@ class NatureReglee(BaseModel):
 
     nature: NatureDeChangement
     libelle: str = Field(min_length=3, max_length=60)
-    #: Ce que le cabinet fera, ou ce qu'il faudra fournir : « le cabinet demandera le nouveau bail ».
+    #: Ce que le cabinet fera, ou ce qu'il faudra fournir : « le cabinet demandera le nouveau bail
+    #».
     aide: str = Field(min_length=10, max_length=300)
 
 
@@ -87,7 +88,8 @@ class NatureReglee(BaseModel):
 NATURES_PAR_DEFAUT: dict[NatureDeChangement, tuple[str, str]] = {
     NatureDeChangement.ADRESSE: (
         "Adresse",
-        "Une nouvelle adresse peut changer votre centre des impôts, donc vos dates limites : le cabinet vérifie.",
+        "Une nouvelle adresse peut changer votre centre des impôts, donc vos dates limites : le "
+        "cabinet vérifie.",
     ),
     NatureDeChangement.DIRIGEANT: (
         "Gérant ou dirigeant",
@@ -95,7 +97,8 @@ NATURES_PAR_DEFAUT: dict[NatureDeChangement, tuple[str, str]] = {
     ),
     NatureDeChangement.ACTIVITE: (
         "Activité",
-        "Une nouvelle activité peut changer vos impôts : le cabinet vous rappelle avant toute démarche.",
+        "Une nouvelle activité peut changer vos impôts : le cabinet vous rappelle avant toute "
+        "démarche.",
     ),
     NatureDeChangement.TELEPHONE: (
         "Numéro de téléphone",
@@ -145,7 +148,8 @@ class ReglagesDeLaFicheAdherent(BaseModel):
             raise ValueError(f"{self.source} : un régime est expliqué deux fois.")
         if self.statut == "VALIDE" and not (self.valide_par or "").strip():
             raise ValueError(
-                f"{self.source} : des textes « validés » nomment qui les a validés. C'est l'adhérent "
+                f"{self.source} : des textes « validés » nomment qui les a validés. C'est "
+                f"l'adhérent "
                 "qui lit l'explication de son régime."
             )
         return self
@@ -182,7 +186,8 @@ class Interlocuteur(BaseModel):
 
 
 #: L'ordre des rôles à qui l'adhérent s'adresse. Le réviseur et la direction ne sont pas
-#: l'interlocuteur quotidien : un adhérent qui les appellerait contournerait son chargé de clientèle.
+#: l'interlocuteur quotidien : un adhérent qui les appellerait contournerait son chargé de
+#clientèle.
 ROLES_INTERLOCUTEURS = ("CHARGE_CLIENTELE", "COMPTABLE")
 
 
@@ -216,7 +221,8 @@ class SignalementDeChangement(BaseModel):
 def signalement_en_double(
     nouveau: SignalementDeChangement, precedents: list[SignalementDeChangement]
 ) -> bool:
-    """Le même signalement, le même jour, par le même compte : un double appui, pas un second changement."""
+    """Le même signalement, le même jour, par le même compte : un double appui, pas un second
+    changement."""
     return any(
         p.nature is nouveau.nature
         and p.message.strip() == nouveau.message.strip()

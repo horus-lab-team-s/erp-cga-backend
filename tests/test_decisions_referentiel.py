@@ -63,7 +63,10 @@ ADHERENT = "jp.nkoa@batimentplus.cm"
 ADMINISTRATEUR = "s.onana@cga-brcg.cm"
 LE = datetime(2026, 9, 15, 10, 0)
 #: La DSF, livrée « à valider » dans le référentiel commun depuis le 18 août 2026.
-VALIDER_LE_DELAI_DSF = "/transverse/referentiel/parametres/DSF_DELAI_JOURS_APRES_CLOTURE/versions/2019-01-01/validation"
+VALIDER_LE_DELAI_DSF = (
+    "/transverse/referentiel/parametres/DSF_DELAI_JOURS_APRES_CLOTURE"
+    "/versions/2019-01-01/validation"
+)
 FONDEMENT = {
     "texte": "Loi de finances 2027, article 7",
     "source": "Journal officiel du 30/12/2026, consulté",

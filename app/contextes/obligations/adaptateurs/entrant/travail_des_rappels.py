@@ -31,6 +31,8 @@ from datetime import timedelta
 from app.contextes.obligations.adaptateurs.entrant.routes_espace_adherent import (
     _instances,
     _preuves,
+)
+from app.contextes.obligations.adaptateurs.entrant.routes_espace_adherent import (
     _reglages as _reglages_des_echeances,
 )
 from app.contextes.obligations.adaptateurs.entrant.routes_http import depot_entreprises
@@ -64,7 +66,8 @@ def travail_des_rappels() -> Travail:
 
 def cle_du_rappel(dossier: str, code: str, periode_debut, jalon: int) -> str:
     """⚠️ Le dossier est dans la clé : un adhérent qui suit deux entreprises employeuses a deux CNPS
-    d'août. Sans lui, le rappel de la seconde passait pour déjà envoyé (vu en écrivant la batterie de
+    d'août. Sans lui, le rappel de la seconde passait pour déjà envoyé (vu en écrivant la batterie
+    de
     mutations du pas 115)."""
     return f"{dossier}:{code}:{periode_debut.isoformat()}:J-{jalon}"
 
@@ -98,7 +101,9 @@ def envoyer_les_rappels() -> str:
                 continue
             deja = {
                 e.apres.get("cle")
-                for e in boutique.journal.lister(objet_type=OBJET_RAPPEL, objet_id=compte.identifiant)
+                for e in boutique.journal.lister(
+                    objet_type=OBJET_RAPPEL, objet_id=compte.identifiant
+                )
                 if e.action == "obligations.rappel_d_echeance"
             }
             for carte in a_venir:
@@ -124,10 +129,17 @@ def envoyer_les_rappels() -> str:
                     action="obligations.rappel_d_echeance",
                     objet_type=OBJET_RAPPEL,
                     objet_id=compte.identifiant,
-                    apres={**contexte, "cle": cle, "compte": compte.identifiant, "dossier": dossier.niu},
+                    apres={
+                        **contexte,
+                        "cle": cle,
+                        "compte": compte.identifiant,
+                        "dossier": dossier.niu,
+                    },
                 )
-                # Défensif : les clés d'un même passage sont distinctes (dossier, obligation, période,
-                # jalon), et la batterie du pas 115 l'a montré (mutant équivalent). L'ajout protège le
+                # Défensif : les clés d'un même passage sont distinctes (dossier, obligation,
+                # période,
+                # jalon), et la batterie du pas 115 l'a montré (mutant équivalent). L'ajout protège
+                # le
                 # jour où une même échéance apparaîtrait deux fois dans la lecture.
                 deja.add(cle)
                 envoyes += 1

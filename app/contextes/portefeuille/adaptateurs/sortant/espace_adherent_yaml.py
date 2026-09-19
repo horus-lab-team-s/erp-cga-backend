@@ -1,7 +1,8 @@
 """Charge les mots de « Mon entreprise » (pas 114).
 
 `Docs/referentiel/portefeuille/espace_adherent.yaml`. Sans fichier, les valeurs du domaine : les
-codes (« SARL », « CDI », « REEL ») et les natures de changement de la maquette. Un fichier mal formé
+codes (« SARL », « CDI », « REEL ») et les natures de changement de la maquette. Un fichier mal
+formé
 lève : un régime expliqué deux fois, ou des textes « validés » sans nom, ne s'affichent pas.
 """
 

@@ -132,7 +132,11 @@ class GroupeDeRegle(BaseModel):
 
 
 def _rang_de_gravite(gravite: str) -> int:
-    return ORDRE_DES_GRAVITES.index(gravite) if gravite in ORDRE_DES_GRAVITES else len(ORDRE_DES_GRAVITES)
+    return (
+        ORDRE_DES_GRAVITES.index(gravite)
+        if gravite in ORDRE_DES_GRAVITES
+        else len(ORDRE_DES_GRAVITES)
+    )
 
 
 def ordonner_la_file(lignes: list[LigneDAnomalie]) -> list[LigneDAnomalie]:
@@ -140,7 +144,8 @@ def ordonner_la_file(lignes: list[LigneDAnomalie]) -> list[LigneDAnomalie]:
 
     ⚠️ **Un constat qui dort ne change pas de gravité et n'en sort pas.** Un premier essai le faisait
     monter d'un cran : un avertissement de deux mois, sans enjeu chiffré, passait alors devant un
-    constat bloquant du jour à 500 000 F. Un bloquant interdit la comptabilisation : il reste devant.
+    constat bloquant du jour à 500 000 F. Un bloquant interdit la comptabilisation : il reste
+    devant.
     """
 
     def cle(l_: LigneDAnomalie):

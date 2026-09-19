@@ -38,7 +38,8 @@ règle d'abord) et dit combien d'autres sont en retard ; sinon la prochaine à v
 la preuve est envoyée garde sa carte (« le cabinet la vérifie »), et seul le dernier dépôt de
 chaque obligation reste affiché.
 
-⚠️ **Les textes « de quoi s'agit-il » sont au référentiel** (`obligations/explications_adherent.yaml`)
+⚠️ **Les textes « de quoi s'agit-il » sont au référentiel**
+(`obligations/explications_adherent.yaml`)
 et **à valider par le fiscaliste** : une phrase fausse sur un impôt, lue par un adhérent, devient
 une décision. Sans texte, l'écran montre le libellé du catalogue et rien d'autre.
 ─────────────────────────────────────────────────────────────────────────────────
@@ -103,7 +104,8 @@ class ReglagesDesEcheancesDeLAdherent(BaseModel):
 
     #: Jusqu'où l'adhérent voit venir : une échéance dans six mois ne l'aide pas aujourd'hui.
     horizon_jours: int = Field(default=60, ge=7, le=366)
-    #: Combien de temps une obligation déposée reste montrée : l'effet visible du travail du cabinet.
+    #: Combien de temps une obligation déposée reste montrée : l'effet visible du travail du
+    #cabinet.
     deposees_montrees_jours: int = Field(default=90, ge=0, le=366)
     explications: tuple[ExplicationDObligation, ...] = ()
     #: « à valider » tant que le fiscaliste n'a pas relu les textes ; l'écran le dit.
@@ -145,7 +147,8 @@ class PreuveEnvoyee(BaseModel):
 
 
 class RappelDEcheance(BaseModel):
-    """La même obligation, période précédente : « Trimestre précédent · 275 000 FCFA · payé le 14 avril »."""
+    """La même obligation, période précédente : « Trimestre précédent · 275 000 FCFA · payé le 14
+    avril »."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -177,7 +180,8 @@ class EcheanceDeLAdherent(BaseModel):
     precedente: RappelDEcheance | None
     prochaine_echeance: date | None
     preuve: PreuveEnvoyee | None
-    #: Pour la carte « en retard » : les autres périodes de la même obligation en retard, sans preuve.
+    #: Pour la carte « en retard » : les autres périodes de la même obligation en retard, sans
+    #preuve.
     autres_periodes_en_retard: int = 0
     effectif_a_confirmer: bool
 
@@ -212,7 +216,9 @@ def echeances_de_l_adherent(
             if not o.deposee and o.echeance <= jour + timedelta(days=reglages.horizon_jours)
         ]
         prouvees = [(r, o) for r, o in a_regler if (code, o.periode_debut) in derniere_preuve]
-        sans_preuve = [(r, o) for r, o in a_regler if (code, o.periode_debut) not in derniere_preuve]
+        sans_preuve = [
+            (r, o) for r, o in a_regler if (code, o.periode_debut) not in derniere_preuve
+        ]
         en_retard = [(r, o) for r, o in sans_preuve if o.echeance < jour]
         for rang, _ in prouvees:
             choisies.append((rang, EtatPourLAdherent.PREUVE_ENVOYEE, 0))
@@ -234,7 +240,8 @@ def echeances_de_l_adherent(
         for rang, etat, autres in choisies:
             o = suite[rang]
             avant = suite[rang - 1] if rang > 0 else None
-            # ⚠️ Pas 113, trouvé à l'essai réel : « Prochaine échéance : 15 mars 2025 » sur une carte en
+            # ⚠️ Pas 113, trouvé à l'essai réel : « Prochaine échéance : 15 mars 2025 » sur une
+            # carte en
             # retard depuis février 2025. La prochaine échéance est la prochaine **à venir**, pas la
             # période suivante, qui est elle-même en retard (et comptée dans « autres périodes »).
             apres = next(
@@ -313,7 +320,8 @@ def echeances_a_rappeler(
     reglages: ReglagesDesEcheancesDeLAdherent,
     preuves: list[PreuveEnvoyee],
 ) -> list[EcheanceARappeler]:
-    """Chaque période **à venir**, non déposée et sans preuve : ce que les rappels du pas 115 lisent.
+    """Chaque période **à venir**, non déposée et sans preuve : ce que les rappels du pas 115
+    lisent.
 
     ⚠️ Pas les cartes de « Mes échéances ». Une carte par obligation montre la plus ancienne période
     en retard et cache les périodes suivantes : le premier essai des rappels n'envoyait rien pour la

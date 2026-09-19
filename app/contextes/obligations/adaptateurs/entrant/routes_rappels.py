@@ -4,8 +4,10 @@
 DEUX ROUTES
 
 * `GET /obligations/dossiers/{entreprise}/mes-rappels` (`REGLER_SES_RAPPELS`) : le réglage du compte
-  (ou le défaut du référentiel, dit comme tel), les jalons possibles, et pourquoi WhatsApp est grisé.
-* `POST /obligations/dossiers/{entreprise}/mes-rappels` : règle. Le réglage est **au compte**, pas au
+  (ou le défaut du référentiel, dit comme tel), les jalons possibles, et pourquoi WhatsApp est
+  grisé.
+* `POST /obligations/dossiers/{entreprise}/mes-rappels` : règle. Le réglage est **au compte**, pas
+  au
   dossier : un adhérent qui suit deux entreprises choisit une fois comment il veut être prévenu.
 
 LE RÉGLAGE EST UNE ENTRÉE DATÉE DU JOURNAL
@@ -44,7 +46,8 @@ def reglages_des_rappels() -> ReglagesDesRappels:
 
 
 def preference_du_compte(compte: str, reglages: ReglagesDesRappels) -> PreferenceDeRappels:
-    """La dernière préférence réglée par le compte, sinon le défaut du référentiel (`defini` faux)."""
+    """La dernière préférence réglée par le compte, sinon le défaut du référentiel (`defini`
+    faux)."""
     entrees = [
         e
         for e in atelier().journal.lister(objet_type=OBJET_REGLAGE, objet_id=compte)
@@ -72,7 +75,8 @@ def _vue(compte: str) -> VueDesRappels:
     return VueDesRappels(
         preference=preference_du_compte(compte, reglages),
         jalons_possibles=sorted(reglages.jalons_possibles, reverse=True),
-        # ⚠️ Écrit en dur **à faux**, et c'est une donnée, pas un oubli : aucun envoi WhatsApp n'existe.
+        # ⚠️ Écrit en dur **à faux**, et c'est une donnée, pas un oubli : aucun envoi WhatsApp
+        # n'existe.
         # Le jour où il existera, cette valeur viendra du registre des canaux.
         whatsapp_disponible=False,
         motif_whatsapp=reglages.motif_whatsapp,
@@ -106,7 +110,9 @@ class ReglageDemande(BaseModel):
         422: {"description": "Aucun moment choisi, ou un moment non proposé"},
     },
 )
-def regler_mes_rappels(acces: AccesRequis, entreprise: str, demande: ReglageDemande) -> VueDesRappels:
+def regler_mes_rappels(
+    acces: AccesRequis, entreprise: str, demande: ReglageDemande
+) -> VueDesRappels:
     exiger_dossier(acces, Permission.REGLER_SES_RAPPELS, entreprise)
     reglages = reglages_des_rappels()
     try:

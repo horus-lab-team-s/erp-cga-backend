@@ -1,4 +1,5 @@
-"""L'espace de l'adhérent : ce qu'on attend de lui, ses justificatifs, sa réponse au cabinet (pas 112).
+"""L'espace de l'adhérent : ce qu'on attend de lui, ses justificatifs, sa réponse au cabinet (pas
+112).
 
 Maquette « Espace adhérent CGA », vues B et C.
 
@@ -118,9 +119,12 @@ class TestLaReponse:
         lendemain = autre.repondre(_reponse(le=datetime(2026, 8, 6, 8, 0)))
         assert len(lendemain.reponses) == 3
         assert lendemain.derniere_reponse.le.day == 6
-        # La même réponse le lendemain, ou une autre précision le même jour, sont de vraies réponses.
+        # La même réponse le lendemain, ou une autre précision le même jour, sont de vraies
+        # réponses.
         encore = lendemain.repondre(_reponse(le=datetime(2026, 8, 7, 8, 0)))
-        precisee = encore.repondre(_reponse(le=datetime(2026, 8, 7, 9, 0), message="chez le fournisseur"))
+        precisee = encore.repondre(
+            _reponse(le=datetime(2026, 8, 7, 9, 0), message="chez le fournisseur")
+        )
         assert len(precisee.reponses) == 5
         # Une réponse ne ferme jamais la demande.
         assert lendemain.ouverte
@@ -156,7 +160,9 @@ class TestLeCasDUsage:
 
 class TestLesReglages:
     def test_les_reponses_absentes_reprennent_leur_libelle(self):
-        reglages = ReglagesDesReponses(reponses=[{"nature": "INTROUVABLE", "libelle": "Pas chez moi"}])
+        reglages = ReglagesDesReponses(
+            reponses=[{"nature": "INTROUVABLE", "libelle": "Pas chez moi"}]
+        )
         libelles = {r.nature: r.libelle for r in reglages.reponses}
         assert libelles == {
             NatureDeReponse.INTROUVABLE: "Pas chez moi",
@@ -181,19 +187,24 @@ class TestLesReglages:
         )
         assert (
             texte_de_la_reponse(plus_tard, reglages)
-            == "Je l'aurai la semaine prochaine · annoncée pour le 12/08/2026 · « chez le comptable »"
+            == "Je l'aurai la semaine prochaine · annoncée pour le 12/08/2026 · "
+            "« chez le comptable »"
         )
 
     def test_un_bandeau_qui_tairait_la_date_limite(self):
         with pytest.raises(ValidationError, match="doit citer"):
-            ReglagesDeLEspaceAdherent(a_envoyer=TexteDeBandeau(titre="Il manque {pieces}", detail="Vite."))
+            ReglagesDeLEspaceAdherent(
+                a_envoyer=TexteDeBandeau(titre="Il manque {pieces}", detail="Vite.")
+            )
         with pytest.raises(ValidationError, match="que l'écran ne connaît pas"):
             ReglagesDeLEspaceAdherent(
                 complet=TexteDeBandeau(titre="Complet {moi}", detail="Rien à faire.")
             )
         with pytest.raises(ValidationError, match="pas de date limite"):
             ReglagesDeLEspaceAdherent(
-                a_envoyer_en_retard=TexteDeBandeau(titre="Il manque {pieces}", detail="Avant le {date_limite}")
+                a_envoyer_en_retard=TexteDeBandeau(
+                    titre="Il manque {pieces}", detail="Avant le {date_limite}"
+                )
             )
         with pytest.raises(ValidationError, match="qui fait l'élision"):
             ReglagesDeLEspaceAdherent(
@@ -216,7 +227,9 @@ class TestLesReglages:
         assert espace.model_dump(exclude={"source"}) == ReglagesDeLEspaceAdherent().model_dump(
             exclude={"source"}
         )
-        assert charger_les_reponses_de_l_adherent(Path("/nulle/part")).source == "valeurs par défaut"
+        assert (
+            charger_les_reponses_de_l_adherent(Path("/nulle/part")).source == "valeurs par défaut"
+        )
 
 
 # ── 3. Les justificatifs ──────────────────────────────────────────────────────
@@ -249,16 +262,27 @@ class TestLesJustificatifs:
 
     def test_les_statuts_et_a_corriger_l_emporte(self):
         pieces = [
-            _piece("P1", etat=EtatPiece.COMPTABILISEE, date_document=date(2026, 7, 2), emetteur="ENEO"),
-            _piece("P2", etat=EtatPiece.COMPTABILISEE, date_document=date(2026, 7, 9), emetteur="SABLIÈRE"),
+            _piece(
+                "P1", etat=EtatPiece.COMPTABILISEE, date_document=date(2026, 7, 2), emetteur="ENEO"
+            ),
+            _piece(
+                "P2",
+                etat=EtatPiece.COMPTABILISEE,
+                date_document=date(2026, 7, 9),
+                emetteur="SABLIÈRE",
+            ),
             _piece("P3", etat=EtatPiece.ARCHIVEE, date_document=date(2026, 7, 5)),
-            _piece("P4", etat=EtatPiece.RAPPROCHEE, date_document=date(2026, 7, 7), emetteur="CAMTEL"),
+            _piece(
+                "P4", etat=EtatPiece.RAPPROCHEE, date_document=date(2026, 7, 7), emetteur="CAMTEL"
+            ),
             _piece("P5", date_document=date(2026, 5, 7)),
         ]
         rectificative = _demande(
             identifiant="DP-9", piece_a_rectifier="P2", motif="Le NIU du fournisseur manque"
         )
-        vue = vue_des_justificatifs(pieces=pieces, demandes_ouvertes=[rectificative], mois="2026-07")
+        vue = vue_des_justificatifs(
+            pieces=pieces, demandes_ouvertes=[rectificative], mois="2026-07"
+        )
         assert [(l_.identifiant, l_.statut) for l_ in vue.lignes] == [
             ("P2", StatutPourLAdherent.A_CORRIGER),
             ("P4", StatutPourLAdherent.RECU),
@@ -316,7 +340,9 @@ def _attendue(demande="DP-1", attendue_pour=date(2026, 8, 12)):
 class TestLeBandeau:
     def test_quatre_etats_et_ce_qui_est_demande_l_emporte(self):
         assert (
-            etat_du_mois(attendues=[_attendue()], attentes_deduites_sans_demande=2, pieces_du_mois=0)
+            etat_du_mois(
+                attendues=[_attendue()], attentes_deduites_sans_demande=2, pieces_du_mois=0
+            )
             is EtatDuMois.A_ENVOYER
         )
         assert (
@@ -371,7 +397,10 @@ class TestLeBandeau:
         assert complet.titre == "Votre dossier de juillet 2026 est complet"
         # L'élision, trouvée à l'essai réel.
         verification, _ = rendre_le_bandeau(
-            EtatDuMois.EN_VERIFICATION, attendues=[], nom_du_mois="août 2026", jour=date(2026, 9, 5),
+            EtatDuMois.EN_VERIFICATION,
+            attendues=[],
+            nom_du_mois="août 2026",
+            jour=date(2026, 9, 5),
             reglages=reglages,
         )
         assert verification.titre == "Le cabinet vérifie votre mois d'août 2026"
@@ -379,7 +408,11 @@ class TestLeBandeau:
 
     def test_les_achats_sont_nets_des_avoirs(self):
         assert achats_du_mois(
-            [("601100", True, Decimal(1000)), ("601100", False, Decimal(200)), ("401", True, Decimal(5))],
+            [
+                ("601100", True, Decimal(1000)),
+                ("601100", False, Decimal(200)),
+                ("401", True, Decimal(5)),
+            ],
             ("60",),
         ) == Decimal(800)
 
@@ -418,7 +451,9 @@ class TestLesRoutes:
     def test_l_accueil_dit_ce_qui_manque(self):
         vue = _client(ADHERENT).get(f"/pilotage/dossiers/{BATIMENT}/mon-mois").json()
         assert vue["mois"] == "2026-07" and vue["nom_du_mois"] == "juillet 2026"
-        ouvertes = _client(COMPTABLE).get("/collecte/demandes", params={"entreprise": BATIMENT}).json()
+        ouvertes = (
+            _client(COMPTABLE).get("/collecte/demandes", params={"entreprise": BATIMENT}).json()
+        )
         assert vue["bandeau"]["etat"] == "A_ENVOYER"
         assert vue["bandeau"]["titre"] == f"Il manque {len(ouvertes)} justificatifs"
         assert vue["date_limite"] == min(d["attendue_pour"] for d in ouvertes if d["attendue_pour"])
@@ -462,7 +497,10 @@ class TestLesRoutes:
         # L'adhérent voit que sa réponse est arrivée.
         vue = adherent.get(f"/pilotage/dossiers/{BATIMENT}/mon-mois").json()
         attendue = next(a for a in vue["attendues"] if a["demande"] == "DP-2026-002")
-        texte = "Je l'aurai la semaine prochaine · annoncée pour le 12/08/2026 · « Le fournisseur la refait »"
+        texte = (
+            "Je l'aurai la semaine prochaine · annoncée pour le 12/08/2026 · "
+            "« Le fournisseur la refait »"
+        )
         assert attendue["reponse"] == texte
 
         # Le comptable du dossier est prévenu, et la relance le montre.
@@ -516,7 +554,9 @@ class TestLesRoutes:
         assert [l_["identifiant"] for l_ in filtree["lignes"]] == ["PJ-2026-0013"]
         assert filtree["par_statut"] == vue["par_statut"]
         # Sans mois : le mois en cours.
-        assert adherent.get(f"/collecte/dossiers/{BATIMENT}/justificatifs").json()["mois"] == "2026-08"
+        assert (
+            adherent.get(f"/collecte/dossiers/{BATIMENT}/justificatifs").json()["mois"] == "2026-08"
+        )
         reponses = adherent.get("/collecte/reponses-possibles").json()
         assert [r["nature"] for r in reponses["reponses"]] == ["PLUS_TARD", "INTROUVABLE"]
 
@@ -573,5 +613,7 @@ class TestLesRoutes:
         )
         assert achats()[0] == base + 150000
         # Juin n'est pas verrouillé par ce verrou-là.
-        juin = adherent.get(f"/pilotage/dossiers/{BATIMENT}/mon-mois", params={"mois": "2026-06"}).json()
+        juin = adherent.get(
+            f"/pilotage/dossiers/{BATIMENT}/mon-mois", params={"mois": "2026-06"}
+        ).json()
         assert juin["achats"] is None and juin["mois_suivant"] == "2026-07"
