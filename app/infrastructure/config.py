@@ -219,6 +219,33 @@ class Configuration(BaseSettings):
     #: et il ne doit pas demander un changement de code.
     tracer_le_sql: bool = False
 
+    #: Le nombre de connexions que le moteur garde ouvertes, et celles qu'il
+    #: ouvre en plus quand la pointe dépasse.
+    #:
+    #: ⚠️ CES VALEURS N'ÉTAIENT PAS RÉGLÉES, ET LE DÉFAUT NE SE VOYAIT PAS.
+    #:
+    #: On s'en remettait au défaut de SQLAlchemy : cinq connexions, dix de
+    #: débordement. La construction du site public demande ses soixante-cinq
+    #: pages presque simultanément ; le bassin se vidait, deux articles
+    #: rendaient 500, et le site **basculait sur son contenu de secours en
+    #: silence**. Les pages sortaient en 200, l'exploitant ne voyait rien, et le
+    #: visiteur lisait un texte qui n'était pas celui du cabinet.
+    #:
+    #: ⚠️ LE PLAFOND SE CALCULE, IL NE SE DEVINE PAS.
+    #:
+    #: Une route synchrone de FastAPI s'exécute dans un fil du bac de threads,
+    #: quarante par défaut : quarante requêtes peuvent donc demander une
+    #: connexion en même temps, par processus. Trente couvre largement le trafic
+    #: réel d'un cabinet tout en laissant de la marge.
+    #:
+    #: Et il faut compter au-dessus : `max_connections` de PostgreSQL vaut cent
+    #: par défaut, et **chaque processus** d'application tient son propre bassin.
+    #: Trois répliques à trente font quatre-vingt-dix, plus les migrations et les
+    #: connexions d'administration. Au-delà, c'est PostgreSQL qui refuse, et le
+    #: message est alors bien moins clair que celui-ci.
+    pool_taille: int = 10
+    pool_debordement: int = 20
+
     #: ⚠️ Aucun secret en dépôt. Sans ces deux valeurs, le fournisseur Tara passe
     #: en **mode simulé** : aucun appel réseau, aucune validation automatique.
     #: Voir `adaptateurs/sortant/fournisseur_tara.py`.

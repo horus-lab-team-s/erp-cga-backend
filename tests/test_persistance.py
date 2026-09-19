@@ -737,3 +737,58 @@ class TestApplicationSurPostgresql:
             "/portefeuille/entreprises", params={"a_la_date": "2026-08-15"}
         ).json()
         assert len(lignes) == 3
+
+
+class TestLeBassinDeConnexions:
+    """⚠️ Le défaut qui a fait servir au public un contenu qui n'était pas le sien.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    Le bassin n'était pas réglé : cinq connexions, dix de débordement, les
+    valeurs par défaut de SQLAlchemy. La construction du site public demande ses
+    soixante-cinq pages presque en même temps ; le bassin se vidait, deux
+    articles rendaient 500, et le site basculait sur son contenu de secours **en
+    silence**. Les pages sortaient en 200.
+
+    Ces cas tiennent le réglage et son ordre de grandeur, pour qu'un retour au
+    défaut se voie ici plutôt qu'à la lecture d'un journal de construction.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    @staticmethod
+    def test_le_moteur_emploie_les_valeurs_de_la_configuration():
+        from app.infrastructure.base_de_donnees import moteur
+        from app.infrastructure.config import configuration
+
+        config = configuration()
+        bassin = moteur().pool
+
+        assert bassin.size() == config.pool_taille
+        assert bassin._max_overflow == config.pool_debordement
+
+    @staticmethod
+    def test_le_plafond_couvre_une_construction_de_site():
+        """Soixante-cinq pages demandées presque ensemble, par un seul client."""
+        from app.infrastructure.config import configuration
+
+        config = configuration()
+        plafond = config.pool_taille + config.pool_debordement
+
+        assert plafond >= 30, (
+            f"plafond de {plafond} connexions : une pointe de construction le "
+            "franchit, et le site public sert alors son contenu de secours sans "
+            "que rien ne le signale"
+        )
+
+    @staticmethod
+    def test_le_plafond_laisse_de_la_place_a_postgresql():
+        """⚠️ `max_connections` vaut cent par défaut, et chaque processus a son bassin."""
+        from app.infrastructure.config import configuration
+
+        config = configuration()
+        plafond = config.pool_taille + config.pool_debordement
+
+        assert plafond * 3 <= 100, (
+            f"trois répliques à {plafond} connexions dépassent le `max_connections` "
+            "par défaut de PostgreSQL. C'est alors la base qui refuse, avec un "
+            "message bien moins clair que celui du bassin"
+        )

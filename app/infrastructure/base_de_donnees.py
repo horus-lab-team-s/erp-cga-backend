@@ -129,6 +129,11 @@ def moteur() -> Engine:
     return create_engine(
         config.url_base_de_donnees,
         pool_pre_ping=True,
+        # Voir `Configuration.pool_taille` : le défaut de SQLAlchemy, cinq plus
+        # dix, s'épuisait dès qu'un client demandait plusieurs dizaines de pages
+        # à la fois — ce que fait la construction du site public.
+        pool_size=config.pool_taille,
+        max_overflow=config.pool_debordement,
         # `echo` sur une variable et non sur un booléen en dur : lire le SQL émis
         # est le premier geste de diagnostic, et il ne doit pas demander un
         # changement de code.
