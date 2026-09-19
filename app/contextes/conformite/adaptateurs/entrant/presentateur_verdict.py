@@ -62,6 +62,16 @@ def composer_verdict(rapport: RapportConformite) -> Verdict:
         titre = "Information — bonne pratique"
         detail = f"{nb} remarque{'s' if nb > 1 else ''}, sans conséquence fiscale"
 
+    # ⚠️ Pas 92 : « aucun constat » devenait faux après un écart. Le moteur a réagi, et
+    # c'est le cabinet qui a jugé le constat sans objet : le verdict le dit, sinon
+    # l'adhérent et le vérificateur liraient une facture que rien n'a arrêtée.
+    ecartes = len(rapport.constats_ecartes)
+    if ecartes:
+        pluriel = "s" if ecartes > 1 else ""
+        if severite is None:
+            titre = f"Conforme après écart — {ecartes} constat{pluriel} écarté{pluriel}"
+        detail = f"{detail} · {ecartes} constat{pluriel} écarté{pluriel} par le cabinet"
+
     avertissement = None
     if rapport.repose_sur_des_valeurs_non_validees:
         avertissement = (

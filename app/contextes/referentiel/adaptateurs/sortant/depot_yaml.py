@@ -14,9 +14,14 @@ from pathlib import Path
 
 import yaml
 
-from app.contextes.referentiel.domaine.entites import Parametre
+from app.contextes.referentiel.domaine.entites import Bareme, Parametre
 
-__all__ = ["DepotParametresYaml", "charger_parametres"]
+__all__ = [
+    "DepotBaremesYaml",
+    "DepotParametresYaml",
+    "charger_baremes",
+    "charger_parametres",
+]
 
 
 def charger_parametres(chemin: Path) -> list[Parametre]:
@@ -39,3 +44,31 @@ class DepotParametresYaml:
 
     def charger(self) -> list[Parametre]:
         return charger_parametres(self._chemin)
+
+
+def charger_baremes(chemin: Path) -> list[Bareme]:
+    """Lit et valide un fichier de barèmes progressifs.
+
+    Un fichier absent rend une liste vide plutôt que de lever : tous les
+    déploiements n'ont pas de barème, et le premier à en avoir besoin est la paie.
+    Un fichier **présent et malformé**, lui, fait échouer le chargement — c'est la
+    même discipline que pour les paramètres, et pour la même raison : un barème
+    amputé de sa dernière tranche calculerait un impôt faux sur les hauts revenus,
+    en silence.
+    """
+    if not chemin.exists():
+        return []
+    contenu = yaml.safe_load(chemin.read_text(encoding="utf-8"))
+    if not isinstance(contenu, dict) or "baremes" not in contenu:
+        raise ValueError(f"{chemin} : clé « baremes » attendue à la racine")
+    return [Bareme.model_validate(brut) for brut in contenu["baremes"]]
+
+
+class DepotBaremesYaml:
+    """Dépôt de barèmes adossé à un fichier YAML."""
+
+    def __init__(self, chemin: Path) -> None:
+        self._chemin = chemin
+
+    def charger(self) -> list[Bareme]:
+        return charger_baremes(self._chemin)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
@@ -10,6 +11,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contextes.referentiel.contrats import Fondement, ParametreResolu, StatutValidation
+from app.moteur.agregation import enjeu_maximal, niveau_le_plus_eleve
+from app.moteur.consequence import Consequence, TypeConsequence
+from app.moteur.jsonlogic import lire
 
 
 class Severite(StrEnum):
@@ -68,22 +72,48 @@ class ModeReglement(StrEnum):
 
 
 class Portee(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    """Le filtre appliqué avant toute évaluation. Une règle hors portée n'est ni
+    évaluée, ni comptée dans le total des règles appliquées.
 
-    type_document: list[TypeDocument] = Field(default_factory=lambda: list(TypeDocument))
-    regimes_emetteur: list[RegimeEmetteur] | None = None
-    exclusions: list[str] = Field(default_factory=list)
+    ⚠️ DEUX RÉGIMES, ET IL NE FAUT PAS LES CONFONDRE.
 
+    `regimes_emetteur` porte sur le **fournisseur** : une règle qui exige une
+    mention de TVA ne s'applique pas à un émetteur qui n'est pas assujetti.
 
-class ConsequenceFiscale(BaseModel):
-    """Déclarative : la règle *décrit* la conséquence, elle ne l'applique pas.
-
-    Un service en aval l'applique. C'est ce qui rend le moteur testable sans base et sans
-    effet de bord.
+    `regimes_destinataire` porte sur l'**adhérent** lui-même, et c'est lui qui
+    commande la déductibilité. Un adhérent au régime synthétique ne récupère
+    jamais la TVA : lui annoncer « TVA non déductible » énonce un préjudice qui
+    n'existe pas. Une règle systématiquement écartée finit par être ignorée le
+    jour où elle a raison — c'est le mécanisme par lequel un moteur de contrôle
+    perd la confiance de son réviseur.
     """
 
     model_config = ConfigDict(frozen=True)
 
+    type_document: list[TypeDocument] = Field(default_factory=lambda: list(TypeDocument))
+    regimes_emetteur: list[RegimeEmetteur] | None = None
+    regimes_destinataire: list[RegimeEmetteur] | None = None
+    exclusions: list[str] = Field(default_factory=list)
+
+
+class ConsequenceFiscale(Consequence):
+    """Déclarative : la règle *décrit* la conséquence, elle ne l'applique pas.
+
+    Un service en aval l'applique. C'est ce qui rend le moteur testable sans base et sans
+    effet de bord.
+
+    Elle spécialise `app.moteur.consequence.Consequence` pour le domaine fiscal. Son type
+    est toujours MONTANT : ce qu'une facture non conforme coûte se compte en argent, et le
+    chiffrage revient à `valoriser_fiscalement`, qui lit les faits du sujet.
+
+    L'unité reste indéterminée à ce niveau : la monnaie est portée par le document, et
+    l'inscrire ici en dur reviendrait à supposer qu'aucune facture n'est libellée
+    autrement.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    type: TypeConsequence = TypeConsequence.MONTANT
     tva_deductible: bool | None = None
     charge_deductible: bool | None = None
     poste_reintegration: str | None = None
@@ -116,6 +146,13 @@ class Regle(BaseModel):
     applicable_au: date | None = None
     severite: Severite
     statut: StatutValidation = StatutValidation.A_VALIDER
+    #: Qui engage sa responsabilité sur cette règle, et quand. Mêmes exigences que
+    #: pour un paramètre du référentiel : une règle VALIDE sans signataire vaudrait
+    #: moins qu'une règle A_VALIDER, parce qu'elle affirmerait sans engager
+    #: personne. Une règle porte davantage qu'un paramètre — elle porte une
+    #: *interprétation* du texte —, donc à plus forte raison.
+    valide_par: str | None = None
+    valide_le: date | None = None
     fondement: Fondement
     portee: Portee = Field(default_factory=Portee)
     #: JSONLogic. **VRAI = conforme. FAUX = constat émis.**
@@ -130,6 +167,11 @@ class Regle(BaseModel):
             raise ValueError(f"{self.code} : borne de validité incohérente")
         if not self.predicat:
             raise ValueError(f"{self.code} : prédicat vide")
+        if self.statut is StatutValidation.VALIDE and not (self.valide_par and self.valide_le):
+            raise ValueError(
+                f"{self.code} : une règle VALIDE doit porter valide_par et valide_le. "
+                "Une règle interprète un texte ; l'interprétation engage son auteur."
+            )
         return self
 
     def en_vigueur(self, a_la_date: date) -> bool:
@@ -137,13 +179,23 @@ class Regle(BaseModel):
             return False
         return self.applicable_au is None or a_la_date < self.applicable_au
 
-    def concerne(self, facture: FactureAControler) -> bool:
-        if facture.document.type not in self.portee.type_document:
+    def concerne(self, faits: Mapping[str, Any]) -> bool:
+        """La portée s'évalue sur les faits, comme les prédicats.
+
+        Elle ne reçoit donc pas la facture : une portée qui lirait un champ que le schéma
+        ne déclare pas écarterait des règles pour une raison invisible à leur auteur.
+        """
+        if lire(faits, "document.type") not in self.portee.type_document:
             return False
         regimes = self.portee.regimes_emetteur
-        if regimes and facture.emetteur.regime not in regimes:
+        if regimes and lire(faits, "emetteur.regime") not in regimes:
             return False
-        if "FOURNISSEUR_ETRANGER" in self.portee.exclusions and facture.emetteur.etranger:
+        # Le régime de l'adhérent commande la déductibilité : une règle de TVA
+        # n'a aucun objet pour un destinataire qui ne récupère jamais la taxe.
+        regimes = self.portee.regimes_destinataire
+        if regimes and lire(faits, "destinataire.regime") not in regimes:
+            return False
+        if "FOURNISSEUR_ETRANGER" in self.portee.exclusions and lire(faits, "emetteur.etranger"):
             return False
         return True
 
@@ -222,8 +274,11 @@ class FactureAControler(BaseModel):
     lignes: list[LigneFacture] = Field(default_factory=list)
     contexte: ContexteControle = Field(default_factory=ContexteControle)
 
-    def donnees_predicat(self) -> dict[str, Any]:
-        """Projection consommée par les prédicats JSONLogic.
+    def faits(self) -> dict[str, Any]:
+        """Le sujet réduit à des faits, sous les chemins que déclare `SCHEMA_FACTURE`.
+
+        Satisfait le protocole `app.moteur.faits.Sujet` : c'est par cette méthode, et
+        par elle seule, que le noyau d'évaluation accède à une facture.
 
         `somme_lignes_ht` est recalculée ici plutôt que crue sur parole : c'est
         précisément ce que la règle FAC-CAL-002 contrôle.
@@ -238,6 +293,21 @@ class FactureAControler(BaseModel):
             # on aligne sur le total pour ne pas produire un faux positif.
             brut["montants"]["somme_lignes_ht"] = self.montants.total_ht
         return brut
+
+
+# ── Les agrégateurs du domaine ───────────────────────────────────────────────────
+#
+# Montés une fois : ce sont des fonctions sans état, et les reconstruire à chaque lecture
+# de propriété serait du gaspillage sur un rapport qui porte des centaines de constats.
+
+#: Sans addition. Voir `enjeu_total`.
+_ENJEU_DE_CONFORMITE = enjeu_maximal(unite=None)
+
+#: L'ordre va du moins grave au plus grave, contrairement à `ORDRE_SEVERITE` qui numérote
+#: dans l'autre sens pour l'affichage.
+_PLUS_HAUTE_SEVERITE = niveau_le_plus_eleve(
+    [membre.value for membre in sorted(Severite, key=lambda s: ORDRE_SEVERITE[s])]
+)
 
 
 # ── Le résultat du contrôle ──────────────────────────────────────────────────────
@@ -276,6 +346,22 @@ class RegleEnEchec(BaseModel):
     motif: str
 
 
+class ConstatEcarte(BaseModel):
+    """Un constat que le moteur a produit et qu'un écart effectif neutralise (pas 92).
+
+    ⚠️ Ni le motif ni l'auteur ne figurent ici. Le rapport est lu par l'adhérent
+    aussi : il peut savoir qu'un constat a été écarté par le cabinet, il n'a pas à lire
+    la note interne du réviseur. Le détail vit dans l'écart lui-même, que seul le
+    cabinet consulte (voir `domaine/ecarts.py`).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    constat: Constat
+    #: L'identifiant de la décision : c'est le fil qui remonte au motif.
+    identifiant_ecart: str
+
+
 class RapportConformite(BaseModel):
     """Immuable. Réévaluer une facture produit un nouveau rapport, jamais une mise à jour
     de l'ancien : c'est ce qui rend la décision d'un comptable défendable six mois plus
@@ -286,6 +372,10 @@ class RapportConformite(BaseModel):
     reference_document: str
     date_operation: date
     constats: list[Constat] = Field(default_factory=list)
+    #: Pas 92 : les constats qu'un écart effectif a retirés de `constats`. Ils sortent
+    #: de tout calcul (conformité, TVA, charge, enjeu, blocage) et restent lisibles.
+    #: Toujours vide à la sortie du moteur : c'est `appliquer_les_ecarts` qui la remplit.
+    constats_ecartes: list[ConstatEcarte] = Field(default_factory=list)
     regles_appliquees: int = 0
     regles_en_echec: list[RegleEnEchec] = Field(default_factory=list)
     #: Paramètres du référentiel employés, avec leur valeur et leur date d'effet.
@@ -297,9 +387,8 @@ class RapportConformite(BaseModel):
 
     @property
     def severite_maximale(self) -> Severite | None:
-        if not self.constats:
-            return None
-        return max((c.severite for c in self.constats), key=lambda s: ORDRE_SEVERITE[s])
+        nominal = _PLUS_HAUTE_SEVERITE(self.constats).nominal
+        return Severite(nominal) if nominal else None
 
     @property
     def comptabilisation_interdite(self) -> bool:
@@ -315,9 +404,16 @@ class RapportConformite(BaseModel):
 
     @property
     def enjeu_total(self) -> Decimal:
-        """Somme des enjeux, sans double compte : une même facture ne peut pas voir sa
-        TVA rejetée deux fois par deux règles différentes."""
-        return max((c.enjeu for c in self.constats if c.enjeu is not None), default=Decimal(0))
+        """L'enjeu le plus élevé, **sans addition**.
+
+        Une même facture ne peut pas voir sa taxe rejetée deux fois par deux règles
+        différentes. La règle d'agrégation vit dans `app.moteur.agregation` avec les
+        trois autres, parce que c'est là qu'on voit qu'elle diffère de celles-ci : la
+        charge additionne, la conformité prend le maximum, et aucune règle générale ne
+        départage les deux.
+        """
+        valeur = _ENJEU_DE_CONFORMITE(self.constats).valeur
+        return valeur if valeur is not None else Decimal(0)
 
     @property
     def repose_sur_des_valeurs_non_validees(self) -> bool:

@@ -53,13 +53,20 @@ class _Adherent(NamedTuple):
     denomination: str
     niu: str
     rccm: str
+    #: Le régime du DESTINATAIRE, et il commande la déductibilité de la TVA.
+    #: Deux des six adhérents relèvent du synthétique : la règle FAC-ACH-007 n'a
+    #: alors rien à dire, puisqu'ils ne récupèrent la TVA sur aucun achat.
+    #: Source de vérité : le portefeuille du contexte B, dont ce jeu s'aligne.
+    regime: RegimeEmetteur = RegimeEmetteur.REEL
 
 
 BATIMENT = _Adherent("SARL BATIMENT PLUS", "M081234567890P", "RC/DLA/2021/B/0977")
-TCHOUMBA = _Adherent("ETS TCHOUMBA & FILS", "P019876543210K", "RC/DLA/2019/A/1842")
+TCHOUMBA = _Adherent("ETS TCHOUMBA & FILS", "P019876543210K", "RC/DLA/2019/A/1842",
+                     RegimeEmetteur.IGS)
 COLOMBE = _Adherent("BOULANGERIE LA COLOMBE SARL", "M071122334455J", "RC/YAO/2020/B/0311")
 AGRO = _Adherent("AGRO-NKOLO SA", "M065544332211L", "RC/BAF/2018/B/0145")
-NGUEMA = _Adherent("CABINET NGUEMA CONSEIL", "P027788990011M", "RC/DLA/2022/A/2510")
+NGUEMA = _Adherent("CABINET NGUEMA CONSEIL", "P027788990011M", "RC/DLA/2022/A/2510",
+                   RegimeEmetteur.IGS)
 CLINIQUE = _Adherent("CLINIQUE LE BON SAMARITAIN", "M093344556677N", "RC/YAO/2017/B/0892")
 
 
@@ -116,7 +123,7 @@ def _fabriquer(
             niu=adherent.niu,
             niu_actif=True,
             rccm=adherent.rccm,
-            regime=RegimeEmetteur.REEL,
+            regime=adherent.regime,
         ),
         montants=Montants(total_ht=montant_ht, total_tva=tva, total_ttc=montant_ht + tva),
         reglement=Reglement(mode=mode, date_reglement=date(2026, 7, min(jour + 3, 31))),

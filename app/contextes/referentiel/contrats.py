@@ -17,16 +17,32 @@ dépendrait du cercle externe, ce que la Clean Architecture interdit — et ce q
 from __future__ import annotations
 
 from app.contextes.referentiel.domaine.entites import (
+    Bareme,
+    BaremeResolu,
+    Borne,
     Fondement,
+    NatureParametre,
     Parametre,
     ParametreResolu,
+    SeuilSansBorne,
     StatutValidation,
+    TrancheBareme,
     Unite,
+    VersionBareme,
     VersionParametre,
+    seuil_atteint,
 )
 
 __all__ = [
+    "Borne",
+    "SeuilSansBorne",
+    "seuil_atteint",
+    "VersionBareme",
+    "TrancheBareme",
+    "BaremeResolu",
+    "Bareme",
     "Fondement",
+    "NatureParametre",
     "Parametre",
     "ParametreResolu",
     "StatutValidation",

@@ -18,7 +18,7 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-__all__ = ["evaluer", "ErreurPredicat", "OPERATEURS_AUTORISES"]
+__all__ = ["evaluer", "lire", "ErreurPredicat", "OPERATEURS_AUTORISES"]
 
 
 class ErreurPredicat(Exception):
@@ -162,6 +162,17 @@ _SIMPLES = {
 _SPECIAUX = {"var", "missing", "if", "?:", "and", "or", "some", "none", "all", "map", "filter"}
 
 OPERATEURS_AUTORISES: frozenset[str] = frozenset(_SIMPLES | _SPECIAUX)
+
+
+def lire(donnees: Any, chemin: str, defaut: Any = None) -> Any:
+    """Lit un fait par son chemin pointé, avec la sémantique exacte de `{"var": …}`.
+
+    Exposée parce que les valorisations en ont besoin : elles lisent les faits du sujet
+    comme les prédicats les lisent. Deux lecteurs de chemin divergeraient un jour sur un
+    cas limite — une clé absente, un indice de liste — et le constat produit ne
+    correspondrait plus à la règle qui l'a déclenché.
+    """
+    return _lire_var(chemin, donnees, defaut)
 
 
 def evaluer(regle: Any, donnees: Any = None) -> Any:

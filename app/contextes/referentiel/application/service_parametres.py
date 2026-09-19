@@ -6,13 +6,21 @@ from datetime import date
 from decimal import Decimal
 
 from app.contextes.referentiel.domaine.entites import (
+    Bareme,
+    BaremeResolu,
     Parametre,
     ParametreResolu,
     StatutValidation,
 )
-from app.contextes.referentiel.domaine.ports import DepotParametres
+from app.contextes.referentiel.domaine.ports import DepotBaremes, DepotParametres
 
-__all__ = ["ServiceParametres", "ParametreInconnu", "AucuneVersionApplicable"]
+__all__ = [
+    "AucuneVersionApplicable",
+    "BaremeInconnu",
+    "ParametreInconnu",
+    "ServiceBaremes",
+    "ServiceParametres",
+]
 
 
 class ParametreInconnu(KeyError):
@@ -67,10 +75,14 @@ class ServiceParametres:
                     libelle=parametre.libelle,
                     valeur=version.valeur,
                     unite=parametre.unite,
+                    nature=parametre.nature,
                     applicable_du=version.applicable_du,
                     statut=version.statut,
+                    valide_par=version.valide_par,
+                    valide_le=version.valide_le,
                     fondement=version.fondement,
                     note=version.note,
+                    borne=version.borne,
                 )
 
         periodes = ", ".join(
@@ -101,3 +113,76 @@ class ServiceParametres:
             except AucuneVersionApplicable:
                 continue
         return sorted(non_valides)
+
+
+class BaremeInconnu(KeyError):
+    """Code de barème absent du référentiel."""
+
+
+class ServiceBaremes:
+    """Lecture des barèmes progressifs, à une date. Jamais « le barème courant ».
+
+    Un service distinct de `ServiceParametres` plutôt qu'une méthode de plus :
+    les deux sources sont indépendantes — un déploiement peut n'avoir aucun
+    barème — et les fusionner obligerait à charger l'une pour lire l'autre.
+
+    Les mêmes deux erreurs, avec la même discipline : un barème absent ou sans
+    version applicable **lève**. Rendre un barème vide produirait un impôt nul,
+    et un impôt nul calculé par erreur ne se voit pas sur un bulletin de paie —
+    il se voit au redressement.
+    """
+
+    def __init__(self, baremes: list[Bareme]) -> None:
+        doublons = {b.code for b in baremes if sum(c.code == b.code for c in baremes) > 1}
+        if doublons:
+            raise ValueError(f"codes de barème en double : {sorted(doublons)}")
+        self._par_code: dict[str, Bareme] = {b.code: b for b in baremes}
+
+    @classmethod
+    def depuis_depot(cls, depot: DepotBaremes) -> ServiceBaremes:
+        return cls(depot.charger())
+
+    @property
+    def codes(self) -> list[str]:
+        return sorted(self._par_code)
+
+    def existe(self, code: str) -> bool:
+        return code in self._par_code
+
+    def resoudre(self, code: str, a_la_date: date) -> BaremeResolu:
+        bareme = self._par_code.get(code)
+        if bareme is None:
+            raise BaremeInconnu(
+                f"barème « {code} » absent du référentiel. "
+                f"Connus : {', '.join(self.codes) or 'aucun'}."
+            )
+        for version in bareme.versions:
+            if version.couvre(a_la_date):
+                return BaremeResolu(
+                    code=bareme.code,
+                    libelle=bareme.libelle,
+                    tranches=list(version.tranches),
+                    applicable_du=version.applicable_du,
+                    statut=version.statut,
+                    fondement=version.fondement,
+                    note=version.note,
+                )
+        raise AucuneVersionApplicable(
+            f"aucune version du barème « {code} » ne couvre le {a_la_date}."
+        )
+
+    def codes_non_valides(self, a_la_date: date) -> list[str]:
+        """Les barèmes applicables à cette date qui ne sont pas encore validés.
+
+        Sert au bandeau d'avertissement, comme pour les paramètres : un bulletin
+        de paie calculé sur un barème `A_VALIDER` doit le dire.
+        """
+        non_valides = []
+        for code in self.codes:
+            try:
+                resolu = self.resoudre(code, a_la_date)
+            except AucuneVersionApplicable:
+                continue
+            if resolu.statut is not StatutValidation.VALIDE:
+                non_valides.append(code)
+        return non_valides

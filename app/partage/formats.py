@@ -10,10 +10,19 @@ montant de se couper en fin de ligne. Les tests de rendu la normalisent avant co
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-__all__ = ["ESPACE_FINE", "montant", "montant_fcfa", "taux", "date_longue", "date_courte", "MOIS"]
+__all__ = [
+    "ESPACE_FINE",
+    "MOIS",
+    "date_courte",
+    "date_longue",
+    "moment_long",
+    "montant",
+    "montant_fcfa",
+    "taux",
+]
 
 #: Espace insécable étroite, U+202F.
 ESPACE_FINE = " "
@@ -65,3 +74,19 @@ def date_longue(jour: date) -> str:
 def date_courte(jour: date) -> str:
     """Forme compacte réservée aux tableaux denses. 2026-08-15 → « 15/08/2026 »."""
     return f"{jour.day:02d}/{jour.month:02d}/{jour.year}"
+
+
+def moment_long(instant: datetime) -> str:
+    """Un instant, lisible par un destinataire. « 30 août 2026 à 14h22 ».
+
+    ⚠️ Réservé à ce qui est **lu par un humain** — un courriel, un écran. Une
+    date d'expiration rendue en ISO (`2026-08-30T14:22:11`) oblige le lecteur à
+    décoder un format machine pour savoir s'il lui reste une heure ou trois
+    jours, et cette hésitation-là fait rater des délais.
+
+    Sans fuseau affiché : le cabinet et ses adhérents sont tous en WAT, et
+    ajouter « UTC+1 » sur chaque échéance ferait du bruit pour un lecteur qui
+    n'a rien à convertir. ⚠️ Le jour où un adhérent de la diaspora existe, ce
+    silence devient un défaut.
+    """
+    return f"{date_longue(instant.date())} à {instant.hour:02d}h{instant.minute:02d}"

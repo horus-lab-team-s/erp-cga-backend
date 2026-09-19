@@ -109,14 +109,24 @@ class TestReferentielReel:
 
     def test_seuil_especes_resoluble(self, parametres: ServiceParametres):
         resolu = parametres.resoudre("SEUIL_ESPECES_DEDUCTIBILITE_TVA", self.DATE)
-        assert resolu.valeur_decimale == Decimal(500_000)
+        assert resolu.valeur_decimale == Decimal(100_000)
         assert resolu.unite is Unite.FCFA
 
-    def test_divergence_de_sources_documentee(self, parametres: ServiceParametres):
-        # Q1 : le cadrage énonce 100 000, les maquettes 500 000. Tant que le fiscaliste
-        # n'a pas tranché, la note doit porter la trace du désaccord.
+    def test_la_divergence_tranchee_garde_la_trace_de_l_erreur(
+        self, parametres: ServiceParametres
+    ):
+        """Q1 est close. Le cadrage énonçait 100 000, les maquettes 500 000, et
+        c'est la maquette qui l'avait emporté — cinq fois le seuil légal.
+
+        Le CGI art. 143 tranche pour le cadrage. Ce qui compte désormais n'est
+        plus de porter la trace du désaccord, mais celle de la **correction** :
+        sans elle, personne ne saura dans deux ans qu'un contrôle de conformité
+        antérieur au 18 août 2026 a laissé passer des factures en espèces entre
+        100 000 et 500 000 FCFA."""
         resolu = parametres.resoudre("SEUIL_ESPECES_DEDUCTIBILITE_TVA", self.DATE)
-        assert resolu.note and "DIVERGENCE" in resolu.note
+        assert resolu.statut is StatutValidation.VALIDE
+        assert resolu.note and "CORRECTION" in resolu.note
+        assert "500 000" in resolu.note, "la valeur erronée doit rester nommée"
 
     def test_taux_de_tva_resoluble(self, parametres: ServiceParametres):
         assert parametres.valeur_numerique("TVA_TAUX_GENERAL", self.DATE) == Decimal("19.25")

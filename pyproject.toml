@@ -9,6 +9,25 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "PyYAML>=6.0",
+    # Argon2id pour la dérivation des mots de passe — contexte K. Aucun repli
+    # n'est prévu si la bibliothèque manque : voir empreinte_argon2.py.
+    "argon2-cffi>=21.3",
+    # Client HTTP sortant vers le prestataire de paiement — contexte M.
+    "httpx>=0.27",
+    # Persistance. `psycopg` en version 3 : la 2 n'est plus la voie recommandée.
+    "SQLAlchemy>=2.0",
+    "psycopg[binary]>=3.1",
+    "alembic>=1.13",
+    # Chiffrement au repos du secret TOTP — AES-256-GCM. ⚠️ Était déjà présent
+    # par transitivité, ce qui rendait le système dépendant d'un paquet que rien
+    # ne garantissait : une mise à jour de la dépendance qui l'apportait aurait
+    # cassé les connexions à second facteur. Voir coffre.py.
+    "cryptography>=42.0",
+    # Analyse des envois multipart — exigée par `UploadFile`. ⚠️ Sans elle,
+    # l'application refuse de **démarrer** dès qu'une route en déclare un : ce
+    # n'est pas une dégradation du dépôt de fichier, c'est le service entier qui
+    # ne monte pas. Voir collecte/adaptateurs/entrant/routes_http.py.
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +56,10 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
+# Les migrations sont **générées** par `alembic revision --autogenerate`. Les
+# reformater à la main les ferait diverger de ce que l'outil régénère, et une
+# migration relue doit ressembler à sa voisine. On les laisse telles quelles.
+"alembic/versions/*.py" = ["E501", "I001"]
 # `Query(...)` en valeur par défaut est l'idiome FastAPI pour déclarer un paramètre de
 # requête : B008 est un faux positif ici.
-"app/contextes/*/adaptateurs/entrant/routes_http.py" = ["B008"]
+"app/contextes/*/adaptateurs/entrant/*.py" = ["B008"]

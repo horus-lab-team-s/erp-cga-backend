@@ -40,6 +40,15 @@ def _facture(**remplacements) -> FactureAControler:
             rccm="RC/DLA/2015/B/0881",
             regime=RegimeEmetteur.REEL,
         ),
+        # Le destinataire est l'adhérent. Son régime commande la déductibilité :
+        # sans lui, les règles de TVA seraient hors portée et ne se
+        # déclencheraient jamais. Voir Portee.regimes_destinataire.
+        "destinataire": Partie(
+            denomination="SARL BATIMENT PLUS",
+            niu="M081234567890P",
+            niu_actif=True,
+            regime=RegimeEmetteur.REEL,
+        ),
         "montants": Montants(total_ht=D(100_000), total_tva=D(19_250), total_ttc=D(119_250)),
         "reglement": Reglement(mode=ModeReglement.VIREMENT),
         "lignes": [LigneFacture(designation="Ciment CPJ 42,5 — 20 sacs", montant_ht=D(100_000))],
@@ -115,8 +124,43 @@ class TestFAC_ACH_007:
         assert "FAC-ACH-007" not in _codes(moteur, facture)
 
     def test_passe_en_especes_sous_le_seuil(self, moteur: MoteurConformite):
-        facture = _facture(reglement=Reglement(mode=ModeReglement.ESPECES))  # TTC 119 250
+        # Sous 100 000 FCFA TTC, le règlement en espèces n'exclut rien.
+        facture = _facture(
+            montants=Montants(total_ht=D(50_000), total_tva=D(9_625), total_ttc=D(59_625)),
+            lignes=[LigneFacture(designation="Ciment CPJ 42,5", montant_ht=D(50_000))],
+            reglement=Reglement(mode=ModeReglement.ESPECES),
+        )
         assert "FAC-ACH-007" not in _codes(moteur, facture)
+
+    def test_la_borne_du_seuil_est_stricte(self, moteur: MoteurConformite):
+        """À EXACTEMENT 100 000 FCFA, LA DÉDUCTION EST REFUSÉE.
+
+        Le CGI art. 143 vise les opérations « d'une valeur au moins égale à cent
+        mille » : la borne est incluse dans l'interdiction. Un prédicat écrit
+        « <= seuil » au lieu de « < seuil » laisserait passer la facture pile au
+        seuil, et c'est précisément le montant qu'un fournisseur choisit quand il
+        cherche la limite. Ce test tient la borne.
+        """
+        pile = _facture(
+            montants=Montants(total_ht=D(83_857), total_tva=D(16_143), total_ttc=D(100_000)),
+            lignes=[LigneFacture(designation="Ciment CPJ 42,5", montant_ht=D(83_857))],
+            reglement=Reglement(mode=ModeReglement.ESPECES),
+        )
+        assert "FAC-ACH-007" in _codes(moteur, pile)
+
+    def test_l_ancien_seuil_errone_ne_laisse_plus_passer(self, moteur: MoteurConformite):
+        """La facture qui motivait la correction du 18 août 2026.
+
+        300 000 FCFA réglés en espèces : sous l'ancien seuil de 500 000, aucun
+        constat n'était émis et la TVA était portée en déductible. L'erreur ne se
+        voyait pas à la saisie — elle se serait vue au contrôle, en rappel.
+        """
+        facture = _facture(
+            montants=Montants(total_ht=D(251_572), total_tva=D(48_428), total_ttc=D(300_000)),
+            lignes=[LigneFacture(designation="Ciment CPJ 42,5", montant_ht=D(251_572))],
+            reglement=Reglement(mode=ModeReglement.ESPECES),
+        )
+        assert "FAC-ACH-007" in _codes(moteur, facture)
 
     def test_echoue_en_especes_au_dela_du_seuil(self, moteur: MoteurConformite):
         facture = _facture(
@@ -136,6 +180,47 @@ class TestFAC_ACH_007:
         assert not rapport.tva_deductible
         assert rapport.charge_deductible
         assert rapport.enjeu_total == D(379_350)
+
+    def test_sans_objet_pour_un_adherent_au_regime_synthetique(
+        self, moteur: MoteurConformite
+    ):
+        """Un adhérent non assujetti ne récupère jamais la TVA.
+
+        Lui annoncer « TVA non déductible : 379 350 FCFA » énoncerait un
+        préjudice qui n'existe pas : qu'il paie en espèces ou par virement, la
+        taxe reste un coût définitif incorporé au prix d'achat.
+
+        C'est `Portee.regimes_destinataire` qui écarte la règle — et c'est une
+        distinction que le filtre sur le régime de l'ÉMETTEUR ne pouvait pas
+        exprimer.
+        """
+        facture = _facture(
+            destinataire=Partie(
+                denomination="ETS TCHOUMBA & FILS",
+                niu="P019876543210K",
+                niu_actif=True,
+                regime=RegimeEmetteur.IGS,
+            ),
+            montants=Montants(total_ht=D(1_970_650), total_tva=D(379_350), total_ttc=D(2_350_000)),
+            lignes=[LigneFacture(designation="Ciment CPJ 42,5", montant_ht=D(1_970_650))],
+            reglement=Reglement(mode=ModeReglement.ESPECES),
+        )
+        rapport = moteur.controler(facture)
+        assert "FAC-ACH-007" not in {c.code_regle for c in rapport.constats}
+        assert rapport.enjeu_total == D(0)
+
+    def test_une_regle_hors_portee_n_est_pas_comptee_comme_appliquee(
+        self, moteur: MoteurConformite
+    ):
+        # Sinon le bandeau annoncerait « 5 règles appliquées » alors que l'une
+        # d'elles n'a jamais été évaluée.
+        au_reel = moteur.controler(_facture())
+        au_synthetique = moteur.controler(
+            _facture(
+                destinataire=Partie(denomination="X", regime=RegimeEmetteur.IGS),
+            )
+        )
+        assert au_synthetique.regles_appliquees == au_reel.regles_appliquees - 1
 
 
 class TestFAC_CAL_002:

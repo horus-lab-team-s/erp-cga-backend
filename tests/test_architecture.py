@@ -36,24 +36,32 @@ from pathlib import Path
 
 import pytest
 
+from app.registre import (
+    ARETES_AUTORISEES,
+    SERVICES,
+    SOCLE,
+    autorises_pour,
+)
+
 RACINE = Path(__file__).resolve().parents[1]
 CONTEXTES_DIR = RACINE / "app" / "contextes"
 
-# ── Les douze contextes bornés ────────────────────────────────────────────────
-CONTEXTES: dict[str, str] = {
-    "referentiel": "A",
-    "portefeuille": "B",
-    "collecte": "C",
-    "conformite": "D",
-    "comptabilite": "E",
-    "obligations": "F",
-    "social": "G",
-    "cloture": "H",
-    "creation_entreprise": "I",
-    "pilotage": "J",
-    "transverse": "K",
-    "vitrine": "L",
-}
+# ── Les quatorze contextes bornés ─────────────────────────────────────────────
+#: ⚠️ **Projection du registre, et non seconde déclaration.**
+#:
+#: Cette table vivait ici, avec le graphe des dépendances. Elle y était juste et
+#: vérifiée, et **invisible à l'exécution** : aucune route ne pouvait dire quels
+#: services existent, ni ce qui tombe avec l'un d'eux, et le tableau « ce qui tourne
+#: aujourd'hui » du document de conception était de la prose recopiée à la main.
+#:
+#: Elle est désormais lue depuis `app/registre/`. Le même graphe interdit une arête
+#: à la relecture et répond à la sonde : deux vérités recopiées finissent toujours
+#: par diverger, et celle qui dérive est celle que personne ne relit.
+#:
+#: ⚠️ Le test ne perd rien à cette bascule. Il compare toujours la déclaration au
+#: **système de fichiers** et aux **imports réels** ; c'est cette confrontation qui
+#: protège, pas l'endroit où la déclaration est écrite.
+CONTEXTES: dict[str, str] = {s.nom: s.lettre for s in SERVICES}
 
 # ── Les couches, du plus interne au plus externe ──────────────────────────────
 #: Une couche n'importe que son propre rang ou un rang inférieur.
@@ -65,48 +73,8 @@ RANG_COUCHE: dict[str, int] = {"domaine": 1, "application": 2, "adaptateurs": 3}
 RANG_SURFACE: dict[str, int] = {"contrats": 1, "api": 2}
 
 
-def autorises_pour(contexte: str) -> set[str]:
-    """Cibles métier permises depuis un contexte : ses arêtes, plus le socle.
-
-    L'expansion du socle ne vaut que pour les contextes métier : appliquée au socle
-    lui-même, elle créerait un cycle referentiel ↔ transverse.
-    """
-    if contexte in SOCLE:
-        return set(ARETES_AUTORISEES[contexte])
-    return ARETES_AUTORISEES[contexte] | (SOCLE - {contexte})
 
 
-# ── Le graphe métier, établi flux par flux dans 10-flux-fonctionnels.md ───────
-SOCLE: frozenset[str] = frozenset({"referentiel", "transverse"})
-
-ARETES_AUTORISEES: dict[str, set[str]] = {
-    "referentiel": set(),
-    "transverse": {"referentiel"},
-    "portefeuille": set(),
-    "conformite": set(),
-    "collecte": {"portefeuille", "conformite"},
-    "comptabilite": {"portefeuille", "conformite", "collecte"},
-    "obligations": {"portefeuille", "comptabilite", "conformite", "collecte"},
-    "social": {"portefeuille"},
-    "cloture": {"portefeuille", "comptabilite", "conformite", "collecte", "obligations"},
-    "creation_entreprise": {"portefeuille", "conformite"},
-    "pilotage": {
-        "portefeuille",
-        "conformite",
-        "collecte",
-        "comptabilite",
-        "obligations",
-        "cloture",
-        "creation_entreprise",
-        "social",
-    },
-    # La vitrine ne lit aucun contexte métier, et c'est structurant : du contenu
-    # éditorial qui aurait besoin d'un paramètre légal ne serait plus du contenu,
-    # ce serait un calcul — et il appartiendrait au contexte qui le porte. Le jour
-    # où l'on voudrait afficher un barème sur le site, la bonne réponse sera une
-    # route du Référentiel appelée par le site, pas une arête ajoutée ici.
-    "vitrine": set(),
-}
 
 
 # ── Lecture des imports ───────────────────────────────────────────────────────
@@ -160,7 +128,7 @@ def _couche(fichier: Path) -> str | None:
 
 
 class TestStructure:
-    def test_les_onze_contextes_existent(self):
+    def test_les_quatorze_contextes_existent(self):
         presents = {
             d.name for d in CONTEXTES_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")
         }
@@ -368,3 +336,267 @@ class TestDependancesEntreContextes:
         responsable."""
         lecteurs = [c for c, cibles in ARETES_AUTORISEES.items() if "pilotage" in cibles]
         assert not lecteurs, f"le pilotage est lu par : {sorted(lecteurs)}"
+
+
+# ── Le noyau d'évaluation ─────────────────────────────────────────────────────
+
+
+MOTEUR_DIR = RACINE / "app" / "moteur"
+ORCHESTRATION_DIR = RACINE / "app" / "orchestration"
+REGISTRE_DIR = RACINE / "app" / "registre"
+
+
+class TestNoyauMoteur:
+    """`app/moteur/` porte le mécanisme d'évaluation, pas le métier.
+
+    Le même noyau sert à contrôler une pièce, à chiffrer une prestation, à évaluer une
+    charge et à surveiller le fonctionnement interne. Il ne tient cette promesse que
+    tant qu'il ignore ce qu'est une facture, un impôt ou une monnaie : la première
+    importation d'un contexte métier le rendrait inutilisable par les trois autres
+    usages, et personne ne s'en apercevrait avant d'essayer.
+
+    Ces garde-fous sont posés avant la généralisation, et non après, parce qu'après il
+    n'y a plus rien à protéger.
+    """
+
+    def test_le_paquet_existe_et_declare_sa_portee(self):
+        init = MOTEUR_DIR / "__init__.py"
+        assert init.exists(), "app/moteur/__init__.py doit exister"
+        docstring = ast.get_docstring(ast.parse(init.read_text(encoding="utf-8")))
+        assert docstring, "app/moteur/__init__.py doit documenter la portée du noyau"
+
+    def test_le_noyau_n_importe_aucun_contexte_metier(self):
+        for fichier in sorted(MOTEUR_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert _decomposer(module) is None, (
+                    f"{fichier.relative_to(RACINE)} importe « {module} ». Le noyau "
+                    "d'évaluation ne connaît aucun contexte métier : ce dont il a besoin "
+                    "lui est passé en argument, sous forme de faits et de règles."
+                )
+
+    def test_le_noyau_ne_depend_d_aucune_infrastructure(self):
+        """Le noyau est du calcul pur. Une base, une horloge ou un réseau le rendraient
+        impossible à tester sans montage, et impossible à exécuter par lots."""
+        for fichier in sorted(MOTEUR_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert not module.startswith("app.infrastructure"), (
+                    f"{fichier.relative_to(RACINE)} importe « {module} ». Le noyau ne "
+                    "lit ni base ni horloge : la date lui est donnée."
+                )
+
+    def test_le_noyau_n_execute_aucun_code_arbitraire(self):
+        """Un prédicat est une donnée, pas un programme. `eval`, `exec` et l'import
+        dynamique ouvriraient au référentiel la possibilité d'exécuter n'importe quoi,
+        alors qu'il est édité par des fiscalistes et stocké en base."""
+        interdits = {"eval", "exec", "compile", "__import__"}
+        for fichier in sorted(MOTEUR_DIR.rglob("*.py")):
+            arbre = ast.parse(fichier.read_text(encoding="utf-8"), filename=str(fichier))
+            for noeud in ast.walk(arbre):
+                if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name):
+                    assert noeud.func.id not in interdits, (
+                        f"{fichier.relative_to(RACINE)} appelle « {noeud.func.id} ». "
+                        "Un cas qui résiste à l'expression déclarative demande un "
+                        "opérateur de plus dans le noyau, jamais une échappatoire."
+                    )
+
+
+# ── Le socle d'orchestration ──────────────────────────────────────────────────
+
+
+class TestSocleOrchestration:
+    """`app/orchestration/` porte la coordination, pas le métier.
+
+    Même discipline que `app/moteur/`, et pour la même raison. Une saga qui
+    saurait ce qu'est un tenant ne servirait plus à orchestrer un rapprochement
+    bancaire ou une clôture d'exercice, et personne ne s'en apercevrait avant
+    d'essayer.
+
+    ⚠️ Ces garde-fous sont posés **avant** la deuxième saga, et non après. Après,
+    il n'y a plus rien à protéger : le couplage est déjà écrit.
+    """
+
+    def test_le_paquet_existe_et_declare_sa_portee(self):
+        init = ORCHESTRATION_DIR / "__init__.py"
+        assert init.exists(), "app/orchestration/__init__.py doit exister"
+        docstring = ast.get_docstring(ast.parse(init.read_text(encoding="utf-8")))
+        assert docstring, "app/orchestration/__init__.py doit documenter sa portée"
+
+    def test_il_n_importe_aucun_contexte_metier(self):
+        for fichier in sorted(ORCHESTRATION_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert _decomposer(module) is None, (
+                    f"{fichier.relative_to(RACINE)} importe « {module} ». Le socle "
+                    "d'orchestration ne connaît aucun contexte métier : les étapes "
+                    "et leurs compensations lui sont passées en argument."
+                )
+
+    def test_il_ne_depend_d_aucune_infrastructure(self):
+        """La saga est du calcul pur. Une base ou une horloge la rendraient
+        impossible à éprouver sans montage, et impossible à rejouer à une date
+        choisie."""
+        for fichier in sorted(ORCHESTRATION_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert not module.startswith("app.infrastructure"), (
+                    f"{fichier.relative_to(RACINE)} importe « {module} ». Le socle "
+                    "ne lit ni base ni horloge : l'instant lui est donné, et la "
+                    "persistance de l'avancement appartient à l'appelant."
+                )
+
+    def test_il_n_importe_pas_le_moteur_et_reciproquement(self):
+        """Deux mécanismes, deux sujets : l'un évalue des règles, l'autre
+        enchaîne des effets. Les lier ferait qu'un domaine qui n'a besoin que
+        d'évaluer traînerait la machinerie de compensation, et l'inverse."""
+        for fichier in sorted(ORCHESTRATION_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert not module.startswith("app.moteur"), (
+                    f"{fichier.relative_to(RACINE)} importe « {module} »."
+                )
+        for fichier in sorted(MOTEUR_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert not module.startswith("app.orchestration"), (
+                    f"{fichier.relative_to(RACINE)} importe « {module} »."
+                )
+
+
+# ── Le registre des services ──────────────────────────────────────────────────
+
+
+class TestRegistreDesServices:
+    """`app/registre/` décrit les services. Il n'en est aucun.
+
+    ⚠️ Ces garde-fous existent parce que le registre est **lu par tout le monde** :
+    le test d'architecture, la sonde de santé, une route. Un registre qui
+    importerait un contexte métier créerait un cycle à l'exécution — le contexte
+    serait décrit par un registre qui a besoin de lui pour se charger — et le jour
+    où l'on voudrait le consulter avant le démarrage, il ne se chargerait plus.
+    """
+
+    def test_le_paquet_existe_et_declare_sa_portee(self):
+        init = REGISTRE_DIR / "__init__.py"
+        assert init.exists(), "app/registre/__init__.py doit exister"
+        docstring = ast.get_docstring(ast.parse(init.read_text(encoding="utf-8")))
+        assert docstring, "app/registre/__init__.py doit documenter sa portée"
+
+    def test_il_n_importe_aucun_contexte_metier(self):
+        """Il ne connaît que des **noms**, jamais les objets qu'ils désignent."""
+        for fichier in sorted(REGISTRE_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert _decomposer(module) is None, (
+                    f"{fichier.relative_to(RACINE)} importe « {module} ». Le registre "
+                    "décrit les services et n'en est aucun : il ne connaît que des noms."
+                )
+
+    def test_il_ne_depend_d_aucune_infrastructure(self):
+        """Consulter le registre ne doit demander ni base, ni horloge, ni cadre web.
+
+        C'est ce qui permet de le lire depuis un outil en ligne de commande, depuis
+        un test unitaire, et depuis une sonde qui doit répondre **même quand la base
+        est tombée** — c'est-à-dire précisément quand on la consulte.
+        """
+        for fichier in sorted(REGISTRE_DIR.rglob("*.py")):
+            for module in _imports(fichier):
+                assert not module.startswith(("app.infrastructure", "fastapi")), (
+                    f"{fichier.relative_to(RACINE)} importe « {module} »."
+                )
+
+    def test_chaque_service_declare_a_son_repertoire(self):
+        """Une déclaration sans répertoire est une place réservée qui n'existe pas.
+
+        Le cas inverse — un répertoire non déclaré — est déjà couvert par
+        `TestContextes` : les deux ensemble ferment la boucle.
+        """
+        for service in SERVICES:
+            assert (CONTEXTES_DIR / service.nom).is_dir(), (
+                f"« {service.nom} » est déclaré au registre sans répertoire."
+            )
+
+    def test_aucune_lettre_n_est_employee_deux_fois(self):
+        """Les documents désignent les contextes par leur lettre depuis l'origine.
+
+        Deux services sur la même lettre rendraient toute la documentation
+        ambiguë, et c'est le genre de collision qu'une relecture ne voit pas.
+        """
+        lettres = [s.lettre for s in SERVICES]
+        assert len(set(lettres)) == len(lettres), f"lettres en double : {lettres}"
+
+    def test_aucun_prefixe_http_n_est_partage(self):
+        """⚠️ Deux services sous le même préfixe rendraient l'état de joignabilité faux.
+
+        Et surtout : le jour où la passerelle routera vers des services séparés,
+        c'est sur ce préfixe qu'elle routera. Un préfixe partagé serait alors une
+        ambiguïté de routage, pas seulement d'affichage.
+        """
+        prefixes = [p for s in SERVICES for p in s.prefixes]
+        assert len(set(prefixes)) == len(prefixes), f"préfixes en double : {prefixes}"
+
+    def test_le_graphe_couvre_exactement_les_services_declares(self):
+        """Une arête déclarée pour un service inexistant ne serait jamais vérifiée."""
+        assert set(ARETES_AUTORISEES) == {s.nom for s in SERVICES}
+
+    def test_le_graphe_ne_pointe_que_vers_des_services_declares(self):
+        for nom, cibles in ARETES_AUTORISEES.items():
+            inconnues = cibles - {s.nom for s in SERVICES}
+            assert not inconnues, f"« {nom} » dépend de services inconnus : {inconnues}"
+
+    def test_le_socle_ne_depend_d_aucun_metier(self):
+        """Un socle qui lirait le métier créerait un cycle à l'exécution : le métier
+        a besoin de savoir qui parle avant de répondre, et l'identité aurait besoin
+        du métier pour le dire."""
+        for nom in sorted(SOCLE):
+            assert not (autorises_pour(nom) - SOCLE), (
+                f"« {nom} » appartient au socle et dépend de métier."
+            )
+
+
+# ── La suite se garde elle-même ───────────────────────────────────────────────
+
+
+class TestAucunTestNEstVide:
+    """Un test dont le corps n'est qu'une docstring passe pour toujours en ne
+    prouvant rien.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **C'est la pire forme de test**, pire qu'un test absent : il occupe la place
+    de celui qui aurait attrapé la faute, il compte dans le total, et son nom
+    affirme une propriété que rien ne vérifie.
+
+    Le cas s'est présenté en écrivant la persistance du suivi de relance : deux
+    fonctions avaient été rédigées avec leur docstring et sans leur corps, et la
+    suite est passée au vert.
+
+    ⚠️ Ce garde-fou **n'exige pas d'assertion**. Une vingtaine de cas de cette suite
+    vérifient qu'un appel *ne lève pas* — un slug valide qui passe, une double
+    déconnexion qui ne tombe pas — et l'absence d'exception y est l'assertion. Leur
+    nom le dit. Exiger un `assert` les obligerait à écrire `assert True`, ce qui
+    n'ajouterait rien et masquerait la distinction.
+
+    Ce qui est interdit est le corps **vide**, où rien n'est même appelé.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def test_aucun_corps_de_test_ne_se_reduit_a_sa_docstring(self):
+        vides = []
+        for fichier in sorted((RACINE / "tests").glob("test_*.py")):
+            arbre = ast.parse(fichier.read_text(encoding="utf-8"))
+            for noeud in ast.walk(arbre):
+                if not (
+                    isinstance(noeud, ast.FunctionDef)
+                    and noeud.name.startswith("test_")
+                ):
+                    continue
+                corps = [
+                    e
+                    for e in noeud.body
+                    if not (
+                        isinstance(e, ast.Expr)
+                        and isinstance(e.value, ast.Constant)
+                        and isinstance(e.value.value, str)
+                    )
+                ]
+                if not corps or all(isinstance(e, ast.Pass) for e in corps):
+                    vides.append(f"{fichier.name}::{noeud.name}")
+
+        assert not vides, (
+            "ces tests n'ont qu'une docstring et passent en ne prouvant rien : "
+            f"{vides}"
+        )

@@ -3,27 +3,25 @@
 from __future__ import annotations
 
 from datetime import date
-from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.contextes.referentiel.api import (
     AucuneVersionApplicable,
-    DepotParametresYaml,
     ParametreInconnu,
     ParametreResolu,
     ServiceParametres,
+    service_parametres,
 )
-from app.infrastructure.config import configuration
 
 routeur = APIRouter(prefix="/referentiel", tags=["Référentiel normatif"])
 
 
-@lru_cache
 def service() -> ServiceParametres:
-    depot = DepotParametresYaml(configuration().dossier_referentiel / "parametres.yaml")
-    return ServiceParametres.depuis_depot(depot)
+    # ⚠️ Pas 95 : le référentiel **du cabinet**, par le point de montage unique, et non plus
+    # le fichier commun mémoïsé ici. Voir `service_parametres` dans `referentiel/api.py`.
+    return service_parametres()
 
 
 class EtatValidation(BaseModel):
