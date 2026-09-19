@@ -1,0 +1,233 @@
+# Ce qui doit être vrai avant qu'un changement n'entre dans `main`.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CETTE CHAÎNE PROTÈGE, ET QUI N'EST PAS ÉVIDENT
+#
+# La plupart des garde-fous de ce dépôt sont des **tests**, pas des conventions :
+#
+#   · `test_architecture.py` refuse une dépendance entre contextes qui n'est pas
+#     déclarée : le découpage n'est pas une intention, il est vérifié ;
+#   · `test_tables.py` refuse une table oubliée du recensement, oubli qui s'est
+#     produit trois fois et qui est silencieux ;
+#   · `test_integrite_referentiel.py` refuse une règle sans fondement légal ;
+#   · `test_conformite_des_ports.py` refuse une réalisation à qui il manque une
+#     méthode de son port : un `Protocol` ne vérifie rien à l'exécution, et
+#     l'oubli ne se voit qu'au premier appel, en production ;
+#   · `test_concurrence.py` refuse une régression sur l'ajout concurrent au
+#     journal d'audit, défaut qui a survécu à 993 tests et n'est apparu qu'en
+#     lançant huit souscriptions simultanées.
+#
+# Aucun ne se remarque en relecture. Ils ne valent que s'ils tournent à chaque
+# proposition, et c'est ce que fait ce fichier.
+#
+# ⚠️ CETTE CHAÎNE RÉCUPÈRE QUATRE DÉPÔTS, ET C'EST INDISPENSABLE
+#
+# Depuis la scission, l'invariant du projet — *tout ce que le serveur permet est
+# à l'écran* — porte sur le serveur et les deux interfaces à la fois, et les
+# manifestes de déploiement vivent dans le dépôt de la plateforme. Les tests qui
+# ne trouvent pas un voisin s'**ignorent** plutôt que d'échouer, pour que ce
+# dépôt reste testable seul sur un poste de travail.
+#
+# C'est précisément pour cela que la chaîne doit les récupérer : sans eux, elle
+# afficherait « tests passés » en ayant sauté les seuls contrôles qui regardent
+# l'ensemble du produit. Le contrôle « aucun test n'a été sauté », plus bas, est
+# ce qui rend cet oubli impossible.
+#
+# POURQUOI LES TESTS S'EXÉCUTENT CONTRE UN VRAI POSTGRESQL
+#
+# Une partie des tests se **saute** s'il n'y a pas de base, sans bruit, en vert.
+# Une chaîne sans base afficherait « tests passés » en n'ayant vérifié aucun
+# cloisonnement, aucune contrainte d'unicité, aucune migration. C'est exactement
+# l'endroit où un faux vert coûte le plus cher.
+#
+# ⚠️ L'URL DE TEST PORTE UN MOT DE PASSE, ET CE N'EST PAS DÉCORATIF
+#
+# Les tests qui vérifient le cloisonnement se reconnectent sous des rôles
+# restreints en reposant l'utilisateur sur cette URL. Donnée sans mot de passe,
+# la reconnexion garde le compte de départ ; si celui-ci est superutilisateur,
+# il contourne toutes les politiques et quarante cas tombent d'un coup, en
+# accusant le cloisonnement d'être cassé alors que c'est la connexion qui
+# l'était.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Vérification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Une proposition mise à jour annule la vérification précédente : elle porte sur
+# un code qui n'existe plus.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # ⚠️ Les dépôts voisins sont récupérés SOUS l'espace de travail, et non à côté.
+  # `actions/checkout` refuse un chemin qui en sort. La convention de recherche
+  # par variable d'environnement — la même que sur un poste de travail — est ce
+  # qui rend cette disposition possible sans rien coder en dur.
+  CGA_RACINE_CONSOLE: ${{ github.workspace }}/voisins/console:${{ github.workspace }}/voisins/vitrine
+  CGA_RACINE_VITRINE: ${{ github.workspace }}/voisins/vitrine
+  CGA_RACINE_PLATEFORME: ${{ github.workspace }}/voisins/plateforme
+
+jobs:
+  serveur:
+    # ⚠️ Aucun nombre dans ce nom : celui qui s'y trouvait annonçait « 1000
+    # tests » alors que la suite en compte près du quadruple. Un intitulé chiffré
+    # vieillit, et personne ne le corrige parce que personne ne le lit.
+    name: Serveur — ruff, migrations et suite complète sur PostgreSQL
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cga
+          POSTGRES_PASSWORD: cga
+          POSTGRES_DB: cga_test
+        ports: ["5432:5432"]
+        # Sans cette sonde, les tests démarrent avant que la base n'accepte les
+        # connexions, et échouent une fois sur trois : le genre d'échec qu'une
+        # équipe apprend à relancer au lieu de lire.
+        options: >-
+          --health-cmd "pg_isready -U cga -d cga_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: La console
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/erp-cga-console
+          path: voisins/console
+
+      - name: La vitrine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/erp-cga-vitrine
+          path: voisins/vitrine
+
+      - name: La plateforme
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/erp-cga-plateforme
+          path: voisins/plateforme
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Installer
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check app tests
+
+      - name: Migrations
+        # ⚠️ Exécutées **avant** les tests, et c'est le seul endroit où elles
+        # sont vérifiées. `create_all` suffit aux tests ; la production, elle,
+        # ne connaît qu'Alembic. Une migration cassée passerait inaperçue
+        # jusqu'au déploiement sans cette étape.
+        env:
+          CGA_URL_BASE_DE_DONNEES: postgresql+psycopg://cga:cga@localhost:5432/cga_test
+        run: alembic upgrade head
+
+      - name: Le modèle et les migrations disent la même chose
+        # ⚠️ **L'outil qui a trouvé le défaut le plus discret du projet.**
+        #
+        # Le modèle déclarait `unique=True` sur une colonne, sensible à la casse ;
+        # la migration posait un index d'expression sur `lower(...)`, insensible.
+        # Les deux bases ne se comportaient donc pas de la même façon : celle de
+        # la production refusait « Station » à côté de « station », celle de la
+        # suite de tests, montée par `create_all`, les acceptait toutes les deux.
+        # Deux locataires auraient répondu au même nom d'hôte.
+        #
+        # Rien ne pouvait le signaler : chaque déclaration était valide prise
+        # seule. `alembic check` compare le schéma déclaré au schéma migré, et
+        # c'est la seule chose qui voie l'écart.
+        env:
+          CGA_URL_BASE_DE_DONNEES: postgresql+psycopg://cga:cga@localhost:5432/cga_test
+        run: alembic check
+
+      - name: Tests
+        env:
+          CGA_URL_BASE_DE_DONNEES: postgresql+psycopg://cga:cga@localhost:5432/cga_test
+          CGA_URL_BASE_DE_DONNEES_TEST: postgresql+psycopg://cga:cga@localhost:5432/cga_test
+        # `-rs` fait dire à pytest **pourquoi** un test a été sauté. Sans lui,
+        # l'étape suivante annoncerait un saut sans dire lequel, et le premier
+        # geste serait de relancer la chaîne au lieu de lire.
+        #
+        # La sortie est conservée pour que le contrôle qui suit n'exécute pas la
+        # suite une seconde fois : elle prend plusieurs minutes, et la doubler
+        # apprendrait à ne plus attendre la chaîne.
+        run: |
+          set -o pipefail
+          pytest -q -rs | tee resultat-des-tests.txt
+
+      - name: Aucun test n'a été sauté
+        # ⚠️ Le contrôle qui donne sa valeur à l'étape précédente.
+        #
+        # Une variable d'environnement mal nommée, un service PostgreSQL qui
+        # démarre trop tard, un dépôt voisin qu'on a oublié de récupérer : dans
+        # les trois cas la suite reste **verte** en n'ayant rien vérifié de ce
+        # qui touche à la base ni de ce qui porte sur l'ensemble du produit.
+        run: |
+          if grep -qE "[0-9]+ skipped" resultat-des-tests.txt; then
+            echo "::error::des tests ont été sautés : base ou dépôt voisin manquant"
+            grep -E "^SKIPPED" resultat-des-tests.txt || true
+            grep -E "[0-9]+ (passed|skipped)" resultat-des-tests.txt || true
+            exit 1
+          fi
+          echo "aucun test sauté : base et voisins bien employés"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Les interfaces, pour les outils qui les lisent
+        # Les trois outils ci-dessous comparent les routes du serveur aux appels
+        # réels des interfaces, et cette comparaison passe par le compilateur
+        # TypeScript de chaque dépôt.
+        run: |
+          npm ci --prefix voisins/console
+          npm ci --prefix voisins/vitrine
+
+      - name: Tout ce que le serveur permet est à l'écran
+        # ⚠️ Ces outils ÉCHOUENT quand ils ne trouvent pas ce qu'ils doivent
+        # lire, au lieu d'annoncer « zéro écart ». Un outil de vérification qui
+        # se tait faute de matière éteint l'alarme qu'il portait.
+        run: |
+          python -m outils.avancement_des_ecrans
+          python -m outils.couverture_des_ecrans
+          python -m outils.contrat_des_ecrans
+
+  image:
+    name: Image — construction du conteneur du serveur
+    runs-on: ubuntu-latest
+    # Rien ne sert de construire l'image d'un code qui ne passe pas.
+    needs: [serveur]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # ⚠️ Construite, jamais poussée. Ce qui est vérifié ici, c'est que le
+      # `Dockerfile` tient : le contexte, les chemins du référentiel, les droits
+      # du point de montage. Publier une image demanderait un registre et des
+      # identifiants, et ce n'est pas une décision de développement.
+      #
+      # ⚠️ Le contexte est le dépôt lui-même depuis la scission. C'était la
+      # racine du monodépôt, et les chemins qui commençaient par
+      # « Backend_erp_cga/ » désignaient un dossier qui n'existe plus.
+      - name: Serveur
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

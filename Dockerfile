@@ -48,7 +48,7 @@ ENV VIRTUAL_ENV=/opt/venv \
 RUN python -m venv "$VIRTUAL_ENV"
 
 WORKDIR /construction
-COPY Backend_erp_cga/pyproject.toml Backend_erp_cga/README.md ./
+COPY pyproject.toml README.md ./
 # Le paquet doit exister pour que `pip install .` aboutisse. On ne copie ici
 # qu'un squelette : copier le vrai code invaliderait le cache d'installation au
 # premier changement d'une ligne.
@@ -75,14 +75,19 @@ RUN groupadd --system cga && useradd --system --gid cga --home /application cga
 COPY --from=construction /opt/venv /opt/venv
 
 WORKDIR /application
-COPY --chown=cga:cga Backend_erp_cga/app ./app
-COPY --chown=cga:cga Backend_erp_cga/alembic ./alembic
-COPY --chown=cga:cga Backend_erp_cga/alembic.ini ./
+COPY --chown=cga:cga app ./app
+COPY --chown=cga:cga alembic ./alembic
+COPY --chown=cga:cga alembic.ini ./
 
 # Le référentiel normatif et le contenu éditorial ne sont pas du code : ce sont
 # des données versionnées à la racine du dépôt. La configuration les cherche par
-# défaut trois niveaux au-dessus du module, convention qui n'a pas de sens dans
-# une image — d'où ces chemins explicites.
+# défaut deux niveaux au-dessus du module, convention qui n'a pas de sens dans
+# une image, d'où ces chemins explicites.
+#
+# ⚠️ Depuis la scission, le contexte de construction est ce dépôt et non le
+# monodépôt : « docker build . » depuis la racine de `erp-cga-backend`. Les
+# chemins qui commençaient par « Backend_erp_cga/ » désignaient un dossier qui
+# n'existe plus, et l'image ne se construisait plus du tout.
 ENV CGA_DOSSIER_REFERENTIEL=/application/donnees/referentiel \
     CGA_DOSSIER_CONTENU_VITRINE=/application/donnees/contenu_vitrine
 COPY --chown=cga:cga Docs/referentiel /application/donnees/referentiel
