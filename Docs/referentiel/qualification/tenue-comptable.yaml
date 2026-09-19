@@ -1,0 +1,65 @@
+service: tenue-comptable
+version: "1"
+
+questions:
+  - code: regime_fiscal
+    libelle: Régime fiscal actuel
+    type: ENUM
+    valeurs: [REEL_NORMAL, SIMPLIFIE, LIBERATOIRE, NON_IMMATRICULE]
+    rang: 0
+    obligatoire: true
+    aide: >-
+      Déclaré par le client. Le régime réel se constate sur pièces : marquer la réponse comme CONSTATEE seulement après avoir vu un avis.
+
+  - code: pieces_par_mois
+    libelle: Pièces déposées par mois, en moyenne
+    type: ENTIER
+    unite: pièces
+    rang: 1
+    obligatoire: true
+    aide: >-
+      Le premier facteur de charge. Une estimation vaut mieux qu'un blanc : demander « combien de factures d'achat par semaine » aide le client à répondre.
+
+  - code: comptes_bancaires
+    libelle: Comptes bancaires à rapprocher
+    type: ENTIER
+    rang: 2
+    obligatoire: true
+
+  - code: salaries
+    libelle: Salariés à traiter en paie
+    type: ENTIER
+    rang: 3
+    obligatoire: true
+
+  - code: etablissements
+    libelle: Établissements distincts
+    type: ENTIER
+    rang: 4
+    obligatoire: true
+
+  - code: exercices_en_retard
+    libelle: Exercices non clôturés en retard
+    type: ENTIER
+    rang: 5
+    obligatoire: true
+    aide: >-
+      Un retard se rattrape et se facture à part. En découvrir un après la signature est la cause la plus fréquente de litige sur honoraires.
+
+  - code: qualite_pieces
+    libelle: Qualité des pièces fournies, telle qu'observée
+    type: ENUM
+    valeurs: [BONNE, MOYENNE, MAUVAISE]
+    rang: 6
+    aide: >-
+      À l'appréciation du responsable après avoir vu un échantillon. Laisser vide tant qu'il n'a rien vu.
+
+  - code: comptable_actuel
+    libelle: Cabinet ou comptable actuel
+    type: TEXTE
+    rang: 7
+
+  - code: date_reprise_souhaitee
+    libelle: Date de reprise souhaitée
+    type: DATE
+    rang: 8

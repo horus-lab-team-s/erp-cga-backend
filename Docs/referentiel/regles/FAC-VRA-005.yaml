@@ -1,0 +1,42 @@
+code: FAC-VRA-005
+libelle: Absence de doublon possible avec une facture déjà reçue
+categorie: VRAISEMBLANCE
+version: "2026.1"
+applicable_du: 2026-01-01
+applicable_au: null
+severite: AVERTISSEMENT
+statut: A_VALIDER
+
+fondement:
+  texte: >-
+    Contrôle interne du Centre, sans fondement légal. Relève de l'obligation de
+    sincérité que l'administration attend du CGA sur les comptes qu'il présente.
+  source: Document de cadrage § 4.3, catégorie 8 ; dossier de design § 13.6
+
+portee:
+  type_document: [FACTURE_ACHAT]
+
+# predicat VRAI = conforme. FAUX = constat émis.
+# `doublons_potentiels` est calculé en amont par le contexte Collecte : nombre de
+# factures du même fournisseur, du même montant TTC, reçues dans la fenêtre
+# DOUBLON_FENETRE_JOURS autour de la date d'émission.
+predicat:
+  "==": [{ var: contexte.doublons_potentiels }, 0]
+
+consequence:
+  verification_requise: true
+
+message: >-
+  Une facture du même fournisseur et du même montant a déjà été reçue dans la période.
+
+remediation: >-
+  Vérifier auprès de l'adhérent avant comptabilisation. Deux livraisons distinctes de
+  même montant sont possibles : joindre les bons de livraison le cas échéant.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CALIBRAGE — cette règle est écartée à 68 % dans le jeu de démonstration, pour
+# 31 constats. Elle est trop bruyante en l'état. Premier levier : réduire la
+# fenêtre DOUBLON_FENETRE_JOURS. Second levier : n'émettre le constat que si le
+# libellé des lignes est également identique.
+# Voir Docs/architecture/03-moteur-conformite.md § 10.
+# ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,42 @@
+code: FAC-ID-003
+libelle: NIU du fournisseur présent, valide et actif
+categorie: IDENTIFICATION_EMETTEUR
+version: "2026.1"
+applicable_du: 2019-01-01
+applicable_au: null
+severite: BLOQUANT
+statut: A_VALIDER
+
+fondement:
+  texte: >-
+    CGI art. 150 (5) — mentions obligatoires de la facture. Conditions d'exercice du
+    droit à déduction : facture délivrée par un fournisseur immatriculé, soumis au
+    régime du réel, et mentionnant son NIU.
+  source: Document de cadrage § 2.4 ; dossier de design § 13.6
+
+portee:
+  type_document: [FACTURE_ACHAT]
+  # La LF 2025 exclut de la déduction les charges justifiées par des factures sans
+  # mentions obligatoires, SAUF pour les fournisseurs étrangers.
+  exclusions: [FOURNISSEUR_ETRANGER]
+
+# predicat VRAI = conforme. FAUX = constat émis.
+predicat:
+  and:
+    - "!!": [{ var: emetteur.niu }]
+    - regex: [{ var: emetteur.niu }, { param: FORMAT_NIU }]
+    - "==": [{ var: emetteur.niu_actif }, true]
+
+consequence:
+  tva_deductible: false
+  charge_deductible: false
+  poste_reintegration: TAB_PASSAGE.CHARGES_NON_DEDUCTIBLES
+
+message: >-
+  La facture ne porte pas le numéro d'identifiant unique du fournisseur, mention
+  obligatoire, ou celui-ci n'est pas reconnu. Ni la TVA ni la charge ne sont
+  déductibles.
+
+remediation: >-
+  Demander une facture rectificative portant le NIU. Vérifier l'activité du NIU sur le
+  portail DGI. Ne pas comptabiliser en l'état.

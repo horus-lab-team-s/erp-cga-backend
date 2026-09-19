@@ -1,0 +1,18 @@
+code: CHG-QUA-001
+libelle: Pièces fournies mal classées
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1, critère « qualité des dépôts ». Constat de production : un client qui apporte un sac coûte environ deux fois le temps d'un client qui apporte des pièces classées.
+  source: Grille de charge du centre, à transmettre
+
+# Le critère que les grilles maison oublient, et qui explique le mieux les écarts de charge réels. Un client qui apporte un sac coûte deux fois le temps d'un client qui apporte des pièces classées.
+# VRAI = dossier ordinaire. FAUX = le critère est atteint, les points s'ajoutent.
+predicat:
+  "==": [{ var: qualite_pieces }, "BONNE"]
+
+points: 5
+
+statut: A_VALIDER

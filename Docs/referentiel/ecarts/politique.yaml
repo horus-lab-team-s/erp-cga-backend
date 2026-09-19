@@ -1,0 +1,107 @@
+# La politique d'écart des constats de conformité (pas 92).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CE FICHIER EST UNE DÉCISION DU CABINET, PAS UN RÉGLAGE TECHNIQUE
+#
+# Écarter un constat, c'est décider qu'une anomalie détectée par le moteur n'en est
+# pas une sur cette facture. Un vérificateur demandera pourquoi, et qui l'a décidé.
+# Ce fichier dit ce que le cabinet permet, et à quelles conditions.
+#
+# LE SENS DES VALEURS PAR DÉFAUT
+#
+# Tout ce qui n'est pas écrit ici prend la valeur la plus prudente :
+#   * une sévérité absente n'est pas écartable ;
+#   * une sévérité écartable sans mention de `second_regard` en exige un ;
+#   * sans ce fichier, rien n'est écartable du tout.
+# Retirer une ligne ferme donc une porte, elle n'en ouvre jamais.
+#
+# UNE CLÉ MAL ORTHOGRAPHIÉE FAIT ÉCHOUER LE CHARGEMENT
+#
+# C'est voulu. `second_regart: false` ignoré en silence laisserait croire au cabinet
+# que son réglage est en vigueur, alors que la valeur prudente s'appliquerait.
+#
+# ⚠️ UN CHANGEMENT S'APPLIQUE AUSSI AUX ÉCARTS DÉJÀ DÉCIDÉS
+#
+# Durcir la politique suspend les écarts qui ne la respectent plus : le constat
+# réapparaît, et l'écran dit pourquoi. Assouplir ne confirme rien de ce qui attend.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Longueur minimale du motif, en caractères, espaces de bord exclus. Au moins 10.
+motif_minimum: 20
+
+par_severite:
+  # Un BLOQUANT interdit la comptabilisation (facture qui n'en est pas une,
+  # émetteur inconnu). L'écarter reviendrait à comptabiliser ce que la loi refuse :
+  # l'action attendue est la facture rectificative.
+  BLOQUANT:
+    ecartable: false
+
+  # Un MAJEUR coûte de l'argent au dossier (TVA rejetée, charge réintégrée). Il se
+  # répercute jusqu'à la liasse : deux personnes doivent l'avoir regardé.
+  MAJEUR:
+    ecartable: true
+    second_regard: true
+    # Pas 118 : ce qui coûte de l'argent au dossier se défend avec une preuve, pas avec un
+    # souvenir. L'attestation, la copie d'écran du fichier DGI, le courriel du fournisseur.
+    piece_appui_exigee: true
+
+  # Sans conséquence chiffrée : le réviseur en décide seul.
+  AVERTISSEMENT:
+    ecartable: true
+    second_regard: false
+    # Aucune conséquence chiffrée : le motif suffit, la pièce reste bienvenue.
+    piece_appui_exigee: false
+
+  INFORMATION:
+    ecartable: true
+    second_regard: false
+    piece_appui_exigee: false
+
+# Pas 118 : combien de jours le cabinet se donne pour joindre la pièce d'appui d'un écart
+# qui l'exige. La pièce arrive souvent après la décision : le fournisseur envoie son
+# attestation le lendemain. Au-delà, le journal des dérogations le compte, et la revue
+# trimestrielle commence par là.
+delai_de_regularisation_jours: 30
+
+# Des règles qu'aucun motif ne peut écarter, quelle que soit leur sévérité.
+# Vide aujourd'hui : le cabinet n'en a désigné aucune.
+regles_non_ecartables: []
+
+# Qui peut donner le second regard. Le réviseur (ECARTER_CONSTAT), pourvu qu'il ne
+# soit pas l'auteur de la proposition, et le fiscaliste (MODIFIER_REGLE) : celui qui
+# écrit les règles est le mieux placé pour dire qu'une règle a tort sur un cas.
+permissions_du_second_regard:
+  - ECARTER_CONSTAT
+  - MODIFIER_REGLE
+
+# Pas 99 : la revue de qualité des règles. Une règle souvent écartée accuse des cas
+# légitimes : son seuil est mal calibré, ou sa formulation piège. Le taux d'écartement
+# (écartés sur constats) la signale au fiscaliste, qui la corrige au constructeur.
+revue_des_regles:
+  # Au-delà d'un constat écarté sur trois : à recalibrer.
+  a_recalibrer: 0.34
+  # Au-delà de six sur dix : trop bruyante, le réviseur passe plus de temps à écarter qu'à contrôler.
+  trop_bruyante: 0.60
+  # En dessous de cinq constats sur la période, on ne juge pas.
+  constats_minimum: 5
+
+# Pas 103 : les motifs types proposés à l'écart, en particulier en masse.
+#
+# ⚠️ LE MOTIF TYPE ACCÉLÈRE, LE MOTIF DÉTAILLÉ ENGAGE
+#
+# Un motif type classe la décision (« NIU vérifié hors facture ») ; il ne remplace
+# jamais le motif détaillé, qui reste obligatoire, n'est jamais prérempli, et sera
+# opposé à l'administration. `regles` restreint un motif à certaines règles ; vide,
+# il est proposé partout. Valeurs de départ, à arrêter par le cabinet.
+motifs_types:
+  - code: NIU_VERIFIE_HORS_FACTURE
+    libelle: NIU obtenu hors facture et vérifié au fichier DGI
+    regles: [FAC-ID-003, FAC-ID-012]
+  - code: REGLEMENT_JUSTIFIE
+    libelle: Mode de règlement justifié par une pièce bancaire
+    regles: [FAC-ACH-007]
+  - code: DESIGNATION_PRECISEE
+    libelle: Désignation précisée par un bon de commande ou de livraison
+    regles: [FAC-DOC-011]
+  - code: ERREUR_DE_LECTURE
+    libelle: Erreur de lecture de la facture, vérifiée sur l'original

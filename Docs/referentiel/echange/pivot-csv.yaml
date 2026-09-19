@@ -1,0 +1,51 @@
+# Le format pivot du centre : lisible, complet, sans hypothèse sur personne.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# À QUOI SERT UN PROFIL QUI NE VISE AUCUN LOGICIEL
+#
+# Trois usages, et chacun compte :
+#
+# * **reprendre un dossier ailleurs.** Un adhérent qui quitte le centre part
+#   avec ses écritures dans un format que n'importe quel tableur ouvre. C'est ce
+#   que le dossier de conception appelle l'export de sortie, et ce qui évite
+#   qu'un client se sente retenu par son format ;
+# * **vérifier un profil.** Comparer la sortie d'un profil logiciel à celle du
+#   pivot montre ce que le premier laisse tomber ;
+# * **répondre à un vérificateur.** Un contrôleur demande un fichier lisible,
+#   pas un format propriétaire.
+#
+# ⚠️ `utf-8` et `\n` ici, contrairement aux profils de progiciels : ce fichier
+# est destiné à un humain et à un tableur moderne, pas à un importeur hérité.
+# Un pivot qui adopterait les contraintes d'un logiciel cesserait d'être neutre.
+# ─────────────────────────────────────────────────────────────────────────────
+
+code: pivot-csv
+libelle: Format pivot du centre — toutes colonnes, lisible
+remarque: >-
+  Ne vise aucun logiciel. Sert à la reprise d'un dossier, au contrôle d'un autre
+  profil, et à toute demande d'un vérificateur.
+
+separateur: ";"
+encodage: utf-8
+fin_de_ligne: lf
+decimale: "."
+format_date: "%Y-%m-%d"
+entete: true
+forme_du_sens: COLONNE_UNIQUE
+marqueur_debit: D
+marqueur_credit: C
+
+colonnes:
+  - champ: exercice
+  - champ: journal
+  - champ: numero
+  - champ: date_operation
+  - champ: libelle_ecriture
+  - champ: piece_justificative
+  - champ: reference_externe
+  - champ: compte
+  - champ: libelle_ligne
+  - champ: sens
+  - champ: montant
+  - champ: tiers
+  - champ: lettrage

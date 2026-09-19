@@ -1,0 +1,36 @@
+# Le plan de travail des collaborateurs (pas 104).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CES VALEURS DÉCIDENT
+#
+# Le plan de travail répond à « par quoi je commence ? » : une file de tâches sur les
+# dossiers du collaborateur, ordonnée par échéance puis par gravité. Ce fichier règle
+# les délais internes du cabinet, qu'aucun texte ne fixe :
+#
+#   delai_de_traitement_des_pieces_jours  une pièce reçue se traite dans ce délai ;
+#   rapprochement_avant_le_jour           le relevé du mois se rapproche avant ce jour
+#                                         du mois suivant ;
+#   transmission_avant_le_jour            le mois se transmet au réviseur avant ce jour ;
+#   horizon_des_declarations_jours        les déclarations échéant dans cet horizon
+#                                         entrent dans le plan ;
+#   urgente_sous_jours, elevee_sous_jours les seuils de priorité (jours restants) ;
+#   ordre_de_gravite                      à échéance égale, qui passe devant. Chaque
+#                                         nature de tâche y figure exactement une fois.
+#
+# Sans ce fichier, les mêmes valeurs s'appliquent. Une clé mal orthographiée fait
+# échouer le chargement. ⚠️ Valeurs de départ, à arrêter par la direction.
+# ─────────────────────────────────────────────────────────────────────────────
+
+delai_de_traitement_des_pieces_jours: 5
+rapprochement_avant_le_jour: 10
+transmission_avant_le_jour: 20
+horizon_des_declarations_jours: 15
+urgente_sous_jours: 2
+elevee_sous_jours: 7
+ordre_de_gravite:
+  - PREPARER_DECLARATION
+  - REPRENDRE_REMARQUES
+  - TRAITER_PIECES
+  - RAPPROCHER_RELEVE
+  - TRANSMETTRE_MOIS
+  - RELANCER_PIECES

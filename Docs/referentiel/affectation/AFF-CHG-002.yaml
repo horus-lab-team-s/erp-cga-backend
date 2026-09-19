@@ -1,0 +1,19 @@
+code: AFF-CHG-002
+libelle: Charge pondérée excessive
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Au-delà de cent vingt points, la pratique du centre est de ne plus rien confier avant qu'un dossier se referme. Le critère est aujourd'hui pénalisant et non rédhibitoire, pour que la demande trouve toujours quelqu'un tant que l'effectif est réduit.
+  source: Grille de charge du centre, à transmettre
+
+# Deuxième palier. Il se cumule avec AFF-CHG-001 : au-delà de cent vingt points,
+# les deux se déclenchent et pèsent soixante au total. C'est la façon d'exprimer
+# une progression sans opérateur de palier dans le moteur.
+predicat:
+  "<": [{ var: charge_ponderee }, 120]
+
+penalite: 40
+
+statut: A_VALIDER

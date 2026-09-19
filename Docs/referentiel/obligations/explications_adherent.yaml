@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Les échéances telles que l'adhérent les lit (pas 113)
+#
+# Maquette « Espace adhérent CGA », vue D : « De quoi s'agit-il ? », en langage
+# courant, sans article de loi ni sigle non expliqué.
+#
+# ⚠️ STATUT : A_VALIDER. Ces textes sont une PROPOSITION rédigée à partir de la
+# maquette et du catalogue des obligations. Une phrase fausse sur un impôt, lue par
+# un adhérent, devient une décision : le fiscaliste les relit, puis passe le statut à
+# VALIDE en se nommant (valide_par). Tant qu'ils ne sont pas validés, l'écran dit
+# « explication en cours de validation par le cabinet ».
+#
+# Une obligation sans texte montre son libellé du catalogue, et rien d'autre.
+# ─────────────────────────────────────────────────────────────────────────────
+
+statut: A_VALIDER
+valide_par: null
+
+# Jusqu'où l'adhérent voit venir ses échéances, en jours.
+horizon_jours: 60
+# Combien de temps une obligation déposée reste affichée, en jours.
+deposees_montrees_jours: 90
+
+explications:
+  - code: IGS
+    titre: "Impôt trimestriel"
+    de_quoi_s_agit_il: "Cet impôt remplace la TVA et l'impôt sur les bénéfices pour votre entreprise, tant que vos ventes restent sous le plafond de votre régime. Il se règle chaque trimestre, au centre des impôts de rattachement."
+    en_cas_de_retard: "Un retard entraîne une majoration. Réglez dès que possible, puis envoyez la quittance : le cabinet la joint à votre dossier."
+
+  - code: TVA
+    titre: "TVA du mois"
+    de_quoi_s_agit_il: "La TVA que vous avez facturée à vos clients, moins celle que vous avez payée sur vos achats professionnels. Le cabinet la calcule à partir de vos justificatifs et la déclare chaque mois."
+    en_cas_de_retard: "Un retard entraîne des pénalités qui augmentent chaque mois. Envoyez vos justificatifs à temps : sans eux, la TVA de vos achats ne peut pas être déduite."
+
+  - code: IRPP_ACOMPTE
+    titre: "Acompte d'impôt sur le revenu"
+    de_quoi_s_agit_il: "Une avance mensuelle sur l'impôt dû sur les bénéfices de l'année. Elle est déduite de l'impôt calculé à la clôture de l'exercice."
+    en_cas_de_retard: "Un retard entraîne une majoration. Le cabinet vous indique le montant ; réglez-le, puis envoyez la quittance."
+
+  - code: IRPP_SALAIRES
+    titre: "Retenues sur les salaires"
+    de_quoi_s_agit_il: "L'impôt retenu sur les salaires de vos employés, et les taxes calculées sur ces salaires. Vous les reversez chaque mois à l'administration."
+    en_cas_de_retard: "Une retenue non reversée à temps est majorée. Le cabinet prépare la déclaration à partir des bulletins de paie."
+
+  - code: CNPS
+    titre: "Cotisations sociales CNPS"
+    de_quoi_s_agit_il: "Les cotisations de sécurité sociale de vos employés : retraite, prestations familiales, accidents du travail. Elles se déclarent et se paient chaque mois à la CNPS."
+    en_cas_de_retard: "Un retard entraîne des majorations, et vos employés peuvent perdre des droits. Réglez dès que possible, puis envoyez la preuve."
+
+  - code: DSF
+    titre: "Déclaration annuelle"
+    de_quoi_s_agit_il: "Les comptes de votre entreprise pour l'année écoulée, remis à l'administration. Le cabinet les établit à partir de votre comptabilité de l'année."
+    en_cas_de_retard: "Un dépôt tardif est sanctionné par une amende. Répondez vite aux demandes du cabinet pour que les comptes soient prêts."
+
+  - code: PATENTE
+    titre: "Patente"
+    de_quoi_s_agit_il: "La contribution annuelle qui autorise votre activité commerciale. Elle se règle en début d'année."
+    en_cas_de_retard: "Exercer sans patente réglée expose à une amende et à la fermeture de l'établissement. Réglez-la, puis envoyez la quittance."

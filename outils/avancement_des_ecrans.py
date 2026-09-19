@@ -37,7 +37,7 @@ incomplète, soit la route n'a pas d'usage à l'écran, et quelqu'un doit le dir
 Qu'un geste branché est bien fait, ni que les états vide, erreur et hors ligne existent.
 Il suit la grille : ajouter un geste attendu fait baisser le chiffre, et c'est voulu.
 
-USAGE (depuis `Backend_erp_cga`)
+USAGE (depuis la racine de `erp-cga-backend`)
 
     CGA_PERSISTANCE=memoire python -m outils.avancement_des_ecrans           # par écran
     CGA_PERSISTANCE=memoire python -m outils.avancement_des_ecrans --detail  # et chaque geste
@@ -47,6 +47,7 @@ USAGE (depuis `Backend_erp_cga`)
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -54,15 +55,35 @@ from typing import Any
 
 import yaml
 
-from outils.contrat_des_ecrans import RACINE_FRONTEND, _route_de
+from outils.contrat_des_ecrans import RACINES_FRONTEND, _route_de
 
-GRILLE = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "Docs"
-    / "architecture"
-    / "avancement"
-    / "grille-des-ecrans.yaml"
-)
+
+def _grille_des_ecrans() -> pathlib.Path:
+    """Où trouver la grille, qui vit désormais dans le dépôt de la plateforme.
+
+    ⚠️ **Cet outil lit trois dépôts** : celui-ci pour les routes, ceux des interfaces pour
+    les appels, et celui de la plateforme pour la cible déclarée. C'est le prix de la
+    scission, et il se paie en réglages plutôt qu'en silence : une grille introuvable fait
+    **échouer** l'outil, jamais afficher « cent pour cent ».
+
+    Le chemin se règle par `CGA_RACINE_PLATEFORME` ; à défaut, on cherche le dépôt frère.
+    """
+    reglee = os.environ.get("CGA_RACINE_PLATEFORME")
+    voisins = pathlib.Path(__file__).resolve().parents[2]
+    candidats = [pathlib.Path(reglee)] if reglee else [voisins / "erp-cga-plateforme", voisins]
+    sous_chemin = pathlib.Path("Docs") / "architecture" / "avancement" / "grille-des-ecrans.yaml"
+    for candidat in candidats:
+        if (candidat / sous_chemin).is_file():
+            return candidat / sous_chemin
+    raise SystemExit(
+        "grille des écrans introuvable : elle déclare la cible que cet outil mesure, et "
+        "elle vit dans le dépôt `erp-cga-plateforme` depuis la scission.\n"
+        "  Régler CGA_RACINE_PLATEFORME, ou placer ce dépôt à côté de celui-ci.\n"
+        f"  Cherché dans : {', '.join(str(c / sous_chemin) for c in candidats)}"
+    )
+
+
+GRILLE = _grille_des_ecrans()
 
 #: Les routes d'infrastructure, qu'aucun écran n'a à appeler : elles ne sont pas
 #: signalées comme absentes de la grille.
@@ -98,15 +119,28 @@ def routes_du_backend() -> set[tuple[str, str]]:
 
 
 def pages_du_frontend() -> set[str]:
-    """Les pages, sans le préfixe de langue ni les groupes de routes « (…) »."""
+    """Les pages, sans le préfixe de langue ni les groupes de routes « (…) ».
+
+    ⚠️ **Les deux interfaces, pas seulement la console.** La grille décrit les écrans
+    du produit entier, et cinq d'entre eux — la souscription et le suivi du proforma —
+    sont servis par la vitrine. N'ouvrir que la console les déclarait « absents du
+    frontend » et faisait refuser la grille, alors que les pages existaient et
+    fonctionnaient. C'est le même piège que sur la couverture des routes, au même
+    endroit du même chantier : *une question qui porte sur deux dépôts ne se répond
+    pas en en lisant un.*
+    """
     pages = set()
-    for fichier in (RACINE_FRONTEND / "app" / "[locale]").rglob("page.tsx"):
-        parties = [
-            p
-            for p in fichier.parent.relative_to(RACINE_FRONTEND / "app" / "[locale]").parts
-            if not (p.startswith("(") and p.endswith(")"))
-        ]
-        pages.add("/" + "/".join(parties))
+    for racine in RACINES_FRONTEND:
+        depart = racine / "app" / "[locale]"
+        if not depart.is_dir():
+            continue
+        for fichier in depart.rglob("page.tsx"):
+            parties = [
+                p
+                for p in fichier.parent.relative_to(depart).parts
+                if not (p.startswith("(") and p.endswith(")"))
+            ]
+            pages.add("/" + "/".join(parties))
     return pages
 
 
@@ -118,14 +152,24 @@ def routes_atteintes_par_page(routes: set[tuple[str, str]]) -> dict[str, set[tup
     des collaborateurs lisent les mêmes routes. Le script Node suit désormais, depuis
     chaque page et ses gabarits, les symboles réellement employés jusqu'aux appels.
     """
-    sortie = subprocess.run(
-        ["node", "outils/types-des-appels.mjs", "--pages"],
-        cwd=RACINE_FRONTEND,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    releve = json.loads(sortie.stdout)
+    # ⚠️ Un relevé par interface, fusionné. Les clés de `parPage` sont des chemins de
+    # page, et deux dépôts ne servent jamais la même page : la fusion est donc sûre.
+    # Les listes d'appels, elles, se concatènent.
+    releve: dict[str, Any] = {"appels": [], "parPage": {}}
+    for racine in RACINES_FRONTEND:
+        if not (racine / "outils" / "types-des-appels.mjs").is_file():
+            continue
+        sortie = subprocess.run(
+            ["node", "outils/types-des-appels.mjs", "--pages"],
+            cwd=racine,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        part = json.loads(sortie.stdout)
+        releve["appels"] += part["appels"]
+        for page, cles in part["parPage"].items():
+            releve["parPage"].setdefault(page, []).extend(cles)
     chemins: dict[str, dict[str, Any]] = {}
     for methode, chemin in routes:
         chemins.setdefault(chemin, {})[methode.lower()] = {}

@@ -23,13 +23,35 @@ silence. C'est la panne la moins chère à éviter et la plus chère à trouver.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 import yaml
 
-from app.infrastructure.config import RACINE_DEPOT, Configuration
+from app.infrastructure.config import Configuration
+from app.infrastructure.voisinage import PLATEFORME, VARIABLE_PLATEFORME, un_depot_voisin
 
-MANIFESTES = RACINE_DEPOT / "deploiement" / "kubernetes"
+# ⚠️ LES MANIFESTES NE SONT PLUS DANS CE DÉPÔT.
+#
+# Ils décrivent la configuration de ce serveur, mais ils sont partis avec la
+# conception et le déploiement, dans `erp-cga-plateforme`. Ce fichier est donc le
+# seul de la suite qui ait besoin d'un second dépôt pour s'exécuter.
+#
+# Quand ce dépôt est absent, les tests sont IGNORÉS et non mis en échec. Les faire
+# échouer rendrait le serveur intestable seul, et une suite rouge par construction
+# finit par ne plus être lue. Mais la chaîne d'intégration, elle, récupère les deux
+# dépôts : c'est là que ces tests comptent, et le message dit exactement comment
+# leur désigner le voisin.
+_plateforme = un_depot_voisin(PLATEFORME, VARIABLE_PLATEFORME, "deploiement/kubernetes")
+MANIFESTES = (_plateforme or Path("/depot-plateforme-absent")) / "deploiement" / "kubernetes"
+
+pytestmark = pytest.mark.skipif(
+    _plateforme is None,
+    reason=(
+        "les manifestes vivent dans le dépôt `erp-cga-plateforme` depuis la scission. "
+        f"Le désigner par {VARIABLE_PLATEFORME}, ou le cloner à côté de celui-ci."
+    ),
+)
 
 #: Le préfixe que la configuration impose à toutes ses variables.
 PREFIXE = "CGA_"

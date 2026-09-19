@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# L'accueil de l'adhérent : le bandeau du mois (pas 112)
+#
+# Maquette « Espace adhérent CGA », vue B : « le bandeau d'état est la première chose
+# lue et ne dit qu'une chose : ce qui manque, ou que tout est complet ».
+#
+# Le mois observé est le mois précédent : c'est sa déclaration que le cabinet prépare.
+#
+# Valeurs citables dans les textes : {mois} (« juillet 2026 »), {de_mois} (« de juillet 2026 »,
+# « d'août 2026 » : l'élision est faite, ne jamais écrire « de {mois} »), {pieces}
+# (« 3 justificatifs »), {date_limite} (« 12/08/2026 », seulement dans a_envoyer).
+# ⚠️ a_envoyer doit citer {date_limite} ; les autres ne le peuvent pas.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Les comptes dont le solde fait « vos achats du mois », montrés seulement quand le
+# mois est revu (verrouillé) : un montant en cours de saisie, lu comme définitif,
+# fonde une décision de trésorerie sur un brouillon.
+racines_d_achats: ["60"]
+
+a_envoyer:
+  titre: "Il manque {pieces}"
+  detail: "Envoyez-les avant le {date_limite} pour que votre déclaration soit prête à temps."
+
+a_envoyer_en_retard:
+  titre: "Il manque {pieces}"
+  detail: "La date prévue est passée : envoyez-les dès que possible, le cabinet vous attend."
+
+a_envoyer_sans_date:
+  titre: "Il manque {pieces}"
+  detail: "Envoyez-les dès que possible pour que votre déclaration soit prête à temps."
+
+en_verification:
+  titre: "Le cabinet vérifie votre mois {de_mois}"
+  detail: "Il vous écrira s'il lui manque une pièce. Vous n'avez rien à faire pour l'instant."
+
+aucune_piece:
+  titre: "Aucun justificatif pour {mois}"
+  detail: "Si vous avez acheté ou vendu en {mois}, envoyez vos factures : c'est le meilleur moment, et cela évite de les chercher plus tard."
+
+complet:
+  titre: "Votre dossier {de_mois} est complet"
+  detail: "Le cabinet prépare votre déclaration. Vous n'avez rien à faire."

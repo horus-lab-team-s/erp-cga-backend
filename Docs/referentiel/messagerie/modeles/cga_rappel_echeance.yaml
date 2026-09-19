@@ -1,0 +1,12 @@
+nom: cga_rappel_echeance
+libelle: Rappel d'échéance
+langue: fr
+categorie: UTILITAIRE
+statut: EN_ATTENTE
+usage: >-
+  Avant une échéance fiscale ou sociale, sur un dossier suivi. Hors parcours d'acquisition, mais approuvé en même temps.
+corps: |-
+  Bonjour {{1}}, l'échéance {{2}} arrive le {{3}}.
+  Il nous manque encore : {{4}}.
+  Répondez à ce message pour nous transmettre les pièces ou signaler une
+  difficulté.

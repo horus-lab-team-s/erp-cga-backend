@@ -1,0 +1,61 @@
+# Depuis combien de temps un dossier commercial peut dormir avant qu'on le dise.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CE FICHIER NE FAIT PARTIR AUCUN MESSAGE À UN CLIENT
+#
+# La veille est interne. Elle dépose un événement que l'équipe lit ; elle
+# n'écrit jamais au prospect. Les délais peuvent donc être serrés sans risque
+# pour le canal de messagerie, contrairement à ceux de `relance/paliers.yaml`,
+# où chaque nombre coûte de l'argent et peut coûter le canal.
+#
+# UN ÉTAT ABSENT DE CE FICHIER N'EST PAS SOUS VEILLE
+#
+# L'absence est une décision, pas un oubli. Trois états sont volontairement
+# hors veille, et chacun pour sa raison :
+#
+#   QUALIFIEE       traversé en quelques secondes, le chiffrage suit la
+#                   qualification. Une alerte sur un état qu'on ne fait que
+#                   traverser serait du bruit pur.
+#
+#   PROFORMA_EMISE  déjà couvert par la relance graduée. Deux mécanismes qui
+#                   surveillent le même silence produisent deux alertes pour
+#                   un seul fait, et celle qu'on lit finit par être celle
+#                   qu'on croit.
+#
+#   ACCEPTEE        déjà couvert par `impaye_apres_jours` du plan de relance,
+#                   qui remonte l'engagement non réglé à un humain.
+#
+# LE DÉLAI COURT DEPUIS L'ENTRÉE DANS L'ÉTAT, PAS DEPUIS LE DÉPÔT
+#
+# C'est `depuis_le` qui est comparé, et il est remis à l'instant du passage à
+# chaque transition. Un dossier de trois mois qui vient d'entrer en
+# conversation n'est pas en retard : il vient de bouger.
+# ─────────────────────────────────────────────────────────────────────────────
+
+etats:
+  # Personne n'a été désigné. En exploitation normale l'affectation est
+  # immédiate au dépôt : rester ici une journée veut dire qu'aucun candidat
+  # n'a été trouvé, ce qui est un problème d'organisation et non de délai.
+  - etat: DEPOSEE
+    apres_heures: 24
+
+  # Un responsable a été désigné et n'a rien enregistré. C'est le retard qui
+  # coûte le plus cher : un prospect rappelé le lendemain est presque toujours
+  # perdu, et il ne le dit jamais.
+  #
+  # ⚠️ 48 heures, et non 24 comme la reprise automatique prévue à l'en-tête du
+  # dossier commercial. Signaler exactement au moment où la machine reprend la
+  # main ferait alerter sur un dossier que le système est en train de traiter.
+  - etat: AFFECTEE
+    apres_heures: 48
+
+  # L'échange a commencé et s'est arrêté. Plus long, parce qu'un prospect qui
+  # réfléchit n'est pas un prospect perdu, et qu'une semaine est le rythme
+  # ordinaire d'un dossier de création d'entreprise.
+  - etat: EN_CONVERSATION
+    apres_heures: 168
+
+  # Le chiffrage est fait, la proforma n'est pas sortie. C'est le retard le
+  # plus regrettable des cinq : tout le travail est déjà fait.
+  - etat: CHIFFREE
+    apres_heures: 72

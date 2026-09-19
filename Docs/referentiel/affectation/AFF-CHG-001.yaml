@@ -1,0 +1,18 @@
+code: AFF-CHG-001
+libelle: Charge pondérée déjà soutenue
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    La charge se compte en dossiers ouverts pondérés par leur score de charge, et non en nombre de dossiers : dix tenues simples ne pèsent pas dix créations. Le seuil de soixante points correspond à la tranche « soutenue » de la grille de charge du centre.
+  source: Grille de charge du centre, à transmettre
+
+# VRAI = la charge reste sous le seuil. FAUX = elle est soutenue, la pénalité
+# s'ajoute sans écarter : un responsable chargé reste préférable à personne.
+predicat:
+  "<": [{ var: charge_ponderee }, 60]
+
+penalite: 20
+
+statut: A_VALIDER

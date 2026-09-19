@@ -1,0 +1,28 @@
+# L'échantillon proposé au réviseur sur un mois transmis (pas 102).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CES VALEURS DÉCIDENT
+#
+# Le réviseur ne relit pas toutes les écritures d'un mois : il contrôle celles que
+# le système juge atypiques, et en ajoute s'il le souhaite (par ses remarques).
+# Une écriture entre dans l'échantillon si l'un de ces critères la signale :
+#
+#   montant rond       multiple de `pas_du_montant_rond` ET au moins
+#                      `seuil_du_montant_rond` (500 000, 1 000 000…) ;
+#   montant élevé      parmi les `plus_gros_montants` du mois ;
+#   compte rare        un compte portant au plus `compte_rare_au_plus` lignes
+#                      sur l'exercice (l'erreur d'imputation se cache là) ;
+#   contre-passation   toujours : une correction dont il faut comprendre la cause.
+#
+# Les écritures les plus signalées viennent d'abord, dans la limite de
+# `taille_maximum`. L'échantillon est figé à la transmission.
+#
+# Sans ce fichier, les mêmes valeurs s'appliquent. Une clé mal orthographiée fait
+# échouer le chargement. ⚠️ Valeurs de départ, à arrêter par le réviseur du cabinet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+pas_du_montant_rond: 100000
+seuil_du_montant_rond: 500000
+plus_gros_montants: 3
+compte_rare_au_plus: 2
+taille_maximum: 20

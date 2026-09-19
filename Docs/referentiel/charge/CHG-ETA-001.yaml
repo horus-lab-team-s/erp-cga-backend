@@ -1,0 +1,18 @@
+code: CHG-ETA-001
+libelle: Plusieurs établissements distincts
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1, critère « implantation ». Chaque établissement a ses obligations locales et sa ventilation propre.
+  source: Grille de charge du centre, à transmettre
+
+# Chaque établissement a ses obligations locales et sa ventilation propre.
+# VRAI = dossier ordinaire. FAUX = le critère est atteint, les points s'ajoutent.
+predicat:
+  "<=": [{ var: etablissements }, 1]
+
+points: 8
+
+statut: A_VALIDER

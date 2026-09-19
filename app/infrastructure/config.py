@@ -9,8 +9,16 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-#: Racine du dépôt : Backend_erp_cga/app/core/config.py → trois niveaux au-dessus.
-RACINE_DEPOT = Path(__file__).resolve().parents[3]
+#: Racine du dépôt : app/infrastructure/config.py → deux niveaux au-dessus.
+#:
+#: ⚠️ C'était **trois** niveaux avant la scission, parce que le serveur vivait dans
+#: `Backend_erp_cga/` au sein d'un monodépôt et que tout ce qu'il lisait se trouvait
+#: un cran plus haut. Il est maintenant seul dans son dépôt : un niveau de trop et
+#: le serveur cherchait son référentiel légal chez le voisin, où il ne trouvait
+#: rien, et démarrait quand même avec les valeurs de repli du domaine. Une erreur
+#: de niveau dans ce calcul ne se voit donc pas au démarrage : elle se voit sur un
+#: taux d'imposition.
+RACINE_DEPOT = Path(__file__).resolve().parents[2]
 
 
 class Configuration(BaseSettings):
@@ -21,7 +29,18 @@ class Configuration(BaseSettings):
 
     #: Le référentiel est aujourd'hui un dossier de fichiers YAML versionnés en Git.
     #: Cible : une table PostgreSQL éditable par le fiscaliste. Le service de lecture ne
-    #: connaît pas l'origine — voir Docs/architecture/02-referentiel-normatif.md § 3.
+    #: connaît pas l'origine, voir Docs/architecture/02-referentiel-normatif.md § 3.
+    #:
+    #: ⚠️ IL EST DANS CE DÉPÔT, ET C'EST UN CHOIX. À la scission, toute la
+    #: documentation est partie dans le dépôt de la plateforme. Celui-ci est resté,
+    #: parce qu'il n'est pas de la documentation : le serveur le lit à chaque
+    #: requête, pour décider d'un taux, d'un seuil, d'un motif de refus. Un serveur
+    #: qui ne peut ni démarrer ni être testé sans cloner un second dépôt serait un
+    #: serveur qu'on finit par tester ailleurs, c'est-à-dire nulle part.
+    #:
+    #: Ce que la plateforme garde, ce sont les textes qui expliquent ces valeurs et
+    #: la fiche de contreseing du fiscaliste. Le fondement se discute, la valeur
+    #: s'exécute.
     dossier_referentiel: Path = RACINE_DEPOT / "Docs" / "referentiel"
 
     #: Le contenu éditorial de la vitrine — articles, annonces, institutions.

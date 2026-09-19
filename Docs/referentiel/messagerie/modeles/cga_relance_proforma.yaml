@@ -1,0 +1,11 @@
+nom: cga_relance_proforma
+libelle: Relance de proforma
+langue: fr
+categorie: UTILITAIRE
+statut: EN_ATTENTE
+usage: >-
+  Étape 7, à 3, 7 et 14 jours après l'émission, tant qu'il n'y a pas de réponse. ⚠️ Chaque déclenchement est facturé si la fenêtre est fermée.
+corps: |-
+  Bonjour {{1}}, votre proforma n° {{2}} reste disponible jusqu'au {{3}}.
+  Si quelque chose vous retient, dites-le nous : nous pouvons en reparler.
+  {{4}}

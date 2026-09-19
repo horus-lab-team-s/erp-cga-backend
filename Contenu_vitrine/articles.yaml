@@ -1,0 +1,701 @@
+# Contenu de la vitrine publique — modifiable sans recompilation.
+#
+# Servi par le backend (contexte L · Vitrine) et lu par le site à la construction
+# des pages. Une correction ici est en ligne au redémarrage du backend, sans qu'un
+# développeur intervienne.
+#
+# Les articles du blog.
+#
+# « rubrique » doit valoir l'une des valeurs de l'énumération Rubrique, dans
+# app/contextes/vitrine/domaine/entites.py — le chargement échoue sinon, et c'est
+# voulu : mieux vaut un démarrage refusé qu'un article invisible.
+#
+# « date » est celle de la publication d'origine, jamais celle de la saisie : c'est
+# elle qui permet de juger de la fraîcheur d'une règle fiscale.
+#
+# « image » doit être en paysage et faire 1200 px de large au moins. C'est la
+# vignette de partage : en dessous de 600 px, Facebook renonce à la grande carte.
+#
+# « source » renvoie à la capture de Docs/publications-facebook-blog/ qui a servi
+# de matière, pour pouvoir toujours remonter à l'original.
+
+articles:
+    - slug: "capital-minimum-sarl-100000-fcfa"
+      rubrique: "saviezVous"
+      titre: "Une SARL se crée avec 100 000 FCFA de capital, et sans notaire"
+      accroche: |-
+          Vous croyez encore qu'il faut un million et un notaire pour créer une SARL au Cameroun ? Ce n'est plus vrai depuis 2017.
+      resume: |-
+          Depuis février 2017, le capital minimum d'une SARL est de 100 000 FCFA, et ses statuts peuvent être établis sous seing privé tant que le capital reste sous 1 000 000 FCFA.
+      date: "2018-01-15"
+      image: "/images/services/creation-entreprise.jpg"
+      minutes: 3
+      mots_cles:
+          - "SARL"
+          - "capital social"
+          - "statuts"
+          - "notaire"
+          - "création"
+      source: "pub-1"
+      appel:
+        texte: "Estimer le coût de ma création"
+        href: "/estimation"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                C'est l'idée reçue qui décourage le plus de porteurs de projets, et celle que nous entendons le plus souvent au comptoir : « je créerai ma société quand j'aurai le million ». Ce million n'est plus exigé.
+          - type: "intertitre"
+            texte: "Ce que dit le texte"
+          - type: "paragraphe"
+            texte: |-
+                Depuis février 2017, le capital social minimum d'une société à responsabilité limitée est fixé à 100 000 FCFA. Le capital n'est plus une barrière à l'entrée : c'est une mise de départ, que vous fixez selon vos besoins réels de trésorerie et non selon un seuil légal.
+          - type: "paragraphe"
+            texte: |-
+                Second changement, tout aussi utile : tant que le capital reste inférieur à 1 000 000 FCFA — donc jusqu'à 999 999 FCFA — les statuts peuvent être établis sous seing privé, sans passer par un notaire. L'économie porte sur les honoraires et, tout autant, sur les délais.
+          - type: "encadre"
+            titre: "Attention au seuil"
+            texte: |-
+                Au franc près : à 1 000 000 FCFA de capital, l'acte notarié redevient obligatoire. Un capital annoncé « au million » par confort de langage coûte donc sensiblement plus cher qu'un capital à 999 999 FCFA.
+          - type: "intertitre"
+            texte: "Ce que cela change pour vous"
+          - type: "liste"
+            points:
+                - |-
+                    Le capital se choisit désormais en fonction de votre activité, pas d'un plancher légal.
+                - |-
+                    Un capital modeste n'empêche ni d'ouvrir un compte bancaire, ni de répondre à un appel d'offres : ce sont vos états financiers qui vous qualifient.
+                - |-
+                    Le recours au notaire redevient un choix, pour les montages qui le justifient, et non un passage obligé.
+                - |-
+                    La formalisation cesse d'être un projet lointain : elle devient une démarche de quelques jours.
+          - type: "paragraphe"
+            texte: |-
+                Reste à choisir la forme juridique qui correspond vraiment à votre activité, à votre nombre d'associés et à votre chiffre d'affaires prévisionnel. C'est là que nous intervenons.
+    - slug: "titre-de-patente-supprime-non-redevance"
+      rubrique: "saviezVous"
+      titre: "Le titre de patente n'existe plus : place à l'attestation de non-redevance"
+      accroche: |-
+          Cherchez-vous encore un titre de patente à afficher dans votre boutique ? Il a été supprimé — mais la patente, elle, se paie toujours.
+      resume: |-
+          La loi de finances 2017 a supprimé le titre de patente et son affichage obligatoire. La patente reste calculée et payée comme tout impôt, et c'est l'attestation de non-redevance, à renouveler tous les trois mois, qui la remplace au mur.
+      date: "2018-02-06"
+      image: "/images/heros/rue-commercante.jpg"
+      minutes: 3
+      mots_cles:
+          - "patente"
+          - "non-redevance"
+          - "loi de finances"
+          - "affichage"
+          - "contrôle"
+      source: "pub-2, pub-5"
+      appel:
+        texte: "Confier ce suivi au cabinet"
+        href: "/devenir-adherent"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                La confusion est fréquente, et elle coûte cher aux commerçants contrôlés : la suppression du titre de patente n'est pas la suppression de la patente.
+          - type: "intertitre"
+            texte: "Ce qui a disparu"
+          - type: "paragraphe"
+            texte: |-
+                La loi de finances 2017 a annulé le titre de patente et l'obligation de l'afficher dans l'établissement. Le document cartonné que l'on encadrait derrière le comptoir n'a plus d'existence légale, et personne ne peut plus vous en réclamer un.
+          - type: "intertitre"
+            texte: "Ce qui demeure"
+          - type: "paragraphe"
+            texte: |-
+                La patente reste due. Elle continue d'être calculée sur votre chiffre d'affaires et payée comme tout autre impôt, aux mêmes échéances. Un contribuable qui a compris « plus de titre » comme « plus de patente » accumule une dette et des pénalités sans s'en apercevoir.
+          - type: "intertitre"
+            texte: "Ce qui l'a remplacé"
+          - type: "paragraphe"
+            texte: |-
+                L'attestation de non-redevance vient en remplacement du titre de patente. Elle établit que vous êtes à jour de vos obligations, et elle doit être renouvelée tous les trois mois. C'est elle que l'on vous demandera lors d'un contrôle, à l'ouverture d'un compte, ou à l'appui d'un dossier de marché.
+          - type: "encadre"
+            titre: "Le piège du trimestre"
+            texte: |-
+                Une non-redevance périmée équivaut, aux yeux de votre interlocuteur, à une absence de document. Beaucoup d'entreprises la demandent une fois, la classent, et découvrent le jour d'un appel d'offres qu'elle a expiré depuis huit mois. C'est un des points que nos adhérents n'ont plus à surveiller eux-mêmes.
+    - slug: "regime-imposition-chiffre-affaires"
+      rubrique: "saviezVous"
+      titre: |-
+          Votre régime d'imposition dépend de votre chiffre d'affaires, plus de votre forme juridique
+      accroche: |-
+          SARL, SAS ou établissement : ce n'est plus votre forme juridique qui détermine votre régime d'imposition. C'est ce que vous encaissez.
+      resume: |-
+          Le critère du régime d'imposition a changé : c'est le chiffre d'affaires réalisé qui range l'entreprise dans son régime, et non plus la forme juridique choisie à la création.
+      date: "2018-02-20"
+      image: "/images/services/suivi-comptable.jpg"
+      minutes: 3
+      mots_cles:
+          - "régime d'imposition"
+          - "chiffre d'affaires"
+          - "forme juridique"
+          - "fiscalité"
+      source: "pub-3"
+      appel:
+        texte: "Parler de ma situation"
+        href: "/contact"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Longtemps, on choisissait sa forme juridique en pensant d'abord à l'impôt. Ce raisonnement est devenu faux, et le garder conduit à des choix de structure inadaptés.
+          - type: "paragraphe"
+            texte: |-
+                La forme juridique de votre entreprise n'est plus le critère déterminant de son régime d'imposition. C'est son chiffre d'affaires qui la range dans un régime, et ce régime peut donc changer d'une année sur l'autre, sans que vous ayez rien modifié à vos statuts.
+          - type: "intertitre"
+            texte: "Les deux conséquences pratiques"
+          - type: "liste"
+            points:
+                - |-
+                    À la création, la forme juridique se choisit sur des critères de gouvernance et de responsabilité — nombre d'associés, entrée d'investisseurs, transmission — et non sur une supposée économie d'impôt.
+                - |-
+                    En cours de vie, un franchissement de seuil de chiffre d'affaires fait basculer de régime. Les obligations déclaratives changent avec lui, et c'est en général là que naissent les retards.
+          - type: "encadre"
+            titre: "À surveiller en cours d'exercice"
+            texte: |-
+                Le basculement se constate sur l'exercice écoulé, mais il s'anticipe en cours d'année. Une entreprise qui voit son chiffre d'affaires s'emballer au troisième trimestre a intérêt à préparer dès ce moment-là le régime dans lequel elle entrera.
+          - type: "paragraphe"
+            texte: |-
+                C'est précisément le travail d'un centre de gestion agréé : suivre le seuil avec vous, et vous prévenir avant le franchissement plutôt qu'après la pénalité.
+    - slug: "loi-de-finances-2018-taxe-fonciere-30-juin"
+      rubrique: "saviezVous"
+      titre: |-
+          Loi de finances 2018 : la taxe foncière est exigible au 30 juin, et non plus au 15 mars
+      accroche: |-
+          Trois mois et demi de plus pour votre taxe foncière : la loi de finances 2018 en a reporté l'échéance.
+      resume: |-
+          L'article 579 (1) de la loi de finances 2018 proroge le délai d'exigibilité de la taxe foncière, qui passe du 15 mars au 30 juin de chaque année. La circulaire n° 003 MINFI/DGI/LRI/L du 15 janvier 2018 en précise les modalités d'application.
+      date: "2018-01-19"
+      image: "/images/services/juridique.jpg"
+      minutes: 3
+      mots_cles:
+          - "loi de finances 2018"
+          - "taxe foncière"
+          - "circulaire"
+          - "échéance"
+          - "DGI"
+      source: "pub-11"
+      appel:
+        texte: "Recevoir nos notes de synthèse"
+        href: "/devenir-adherent"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                La loi n° 2017/021 du 20 décembre 2017 portant loi de finances de la République du Cameroun pour l'exercice 2018 a introduit plusieurs changements de calendrier. Le plus immédiatement utile aux propriétaires concerne la taxe foncière.
+          - type: "intertitre"
+            texte: "Le report"
+          - type: "paragraphe"
+            texte: |-
+                L'article 579 (1) proroge le délai d'exigibilité de la taxe foncière : il passe du 15 mars au 30 juin de chaque année. Les modalités d'application sont précisées par la circulaire n° 003 MINFI/DGI/LRI/L du 15 janvier 2018, que nous invitons chaque propriétaire à consulter.
+          - type: "encadre"
+            titre: "Un report n'est pas une remise"
+            texte: |-
+                Le délai supplémentaire ne change rien au montant dû, ni aux pénalités qui courent après le 30 juin. Décaler le paiement dans le calendrier ne le décale pas dans la trésorerie : nous conseillons de provisionner à la date d'origine et de payer à la date légale.
+          - type: "paragraphe"
+            texte: |-
+                Chaque loi de finances apporte son lot de modifications de seuils, de taux et de délais. Nos adhérents en reçoivent la synthèse commentée, limitée à ce qui concerne réellement leur activité.
+    - slug: "comment-elaborer-sa-dsf"
+      rubrique: "lundiComptable"
+      titre: "Comment élaborer sa DSF, en six étapes simples"
+      accroche: |-
+          La DSF n'est pas un formulaire à remplir la veille : c'est l'aboutissement de six étapes. Voici lesquelles.
+      resume: |-
+          La Déclaration Statistique et Fiscale récapitule ce que l'entreprise a gagné, dépensé et payé comme impôts. Notre comptable Aicha en détaille le montage, du rassemblement des pièces au dépôt dans les délais.
+      date: "2025-12-22"
+      image: "/images/services/suivi-comptable.jpg"
+      minutes: 5
+      mots_cles:
+          - "DSF"
+          - "déclaration statistique et fiscale"
+          - "états financiers"
+          - "clôture"
+      source: "pub-33"
+      appel:
+        texte: "Faire tenir ma comptabilité"
+        href: "/devenir-adherent"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                La DSF — Déclaration Statistique et Fiscale — est le document que toute entreprise dépose chaque année pour montrer ce qu'elle a gagné, ce qu'elle a dépensé et ce qu'elle a payé comme impôts. C'est la photographie annuelle de l'entreprise, et c'est sur elle que l'administration travaille.
+          - type: "paragraphe"
+            texte: |-
+                Elle se monte en six temps. Aucun ne peut être sauté, et chacun se prépare bien avant l'échéance.
+          - type: "intertitre"
+            texte: "1 · Rassembler les pièces"
+          - type: "paragraphe"
+            texte: |-
+                On commence par réunir les factures de ventes et d'achats, les relevés bancaires, et le détail des dépenses — loyer, salaires, eau, électricité. Sans documents, il n'y a pas de bonne DSF : il n'y a qu'une déclaration approximative, et une approximation se paie au contrôle.
+          - type: "intertitre"
+            texte: "2 · Mettre la comptabilité à jour"
+          - type: "paragraphe"
+            texte: |-
+                Toutes les entrées et sorties d'argent sont enregistrées selon les règles comptables. C'est cet enregistrement qui permet de savoir si l'entreprise a fait un bénéfice ou une perte — et non l'état du compte bancaire en fin d'année.
+          - type: "intertitre"
+            texte: "3 · Inventorier stocks et immobilisations"
+          - type: "paragraphe"
+            texte: |-
+                On compte ce qui reste en stock à la clôture, et on recense les biens durables de l'entreprise avec leur amortissement. Un stock non inventorié fausse mécaniquement le résultat.
+          - type: "intertitre"
+            texte: "4 · Vérifier dettes, créances et rapprochements bancaires"
+          - type: "paragraphe"
+            texte: |-
+                Ce que l'entreprise doit, ce qu'on lui doit, et la concordance entre sa comptabilité et ses relevés de banque. Un écart de rapprochement non expliqué en fin d'exercice devient très difficile à retrouver l'année suivante.
+          - type: "intertitre"
+            texte: "5 · Préparer les états financiers"
+          - type: "paragraphe"
+            texte: |-
+                Bilan, compte de résultat, tableau des flux : les états financiers se déduisent d'une comptabilité tenue correctement. S'ils sont difficiles à établir, le problème est en amont.
+          - type: "intertitre"
+            texte: "6 · Remplir et déposer dans les délais"
+          - type: "paragraphe"
+            texte: |-
+                La DSF est renseignée à partir de ces états, puis déposée. Le dépôt tardif entraîne des pénalités qui n'ont rien à voir avec le montant de l'impôt lui-même.
+          - type: "encadre"
+            titre: "Un bon accompagnement fait toute la différence"
+            texte: |-
+                Les six étapes sont simples à énoncer et longues à mener. Nos adhérents ne les découvrent pas en mars : la comptabilité est tenue en continu, et la DSF n'est plus qu'une mise en forme.
+    - slug: "pas-de-clients-pas-d-obligations-fiscales"
+      rubrique: "vraiOuFaux"
+      titre: "« Pas encore de clients, donc pas d'obligations fiscales » — vrai ou faux ?"
+      accroche: |-
+          Votre entreprise n'a encore rien encaissé. Croyez-vous qu'elle n'a rien à déclarer ? C'est l'erreur qui coûte le plus cher la première année.
+      resume: |-
+          Une entreprise qui n'a pas encore de recette ni de clients serait dispensée de déclarer. C'est faux, et la sanction ne porte pas sur l'impôt : elle porte sur le silence.
+      date: "2026-01-17"
+      image: "/images/pages/contact-a.jpg"
+      minutes: 3
+      mots_cles:
+          - "obligations fiscales"
+          - "déclaration néant"
+          - "démarrage"
+          - "pénalités"
+      source: "pub-19"
+      appel:
+        texte: "Faire le point sur mes obligations"
+        href: "/contact"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                L'affirmation revient à chaque démarrage, et elle paraît de bon sens : pas de chiffre d'affaires, donc pas d'impôt, donc rien à faire. La première moitié est vraie, la seconde est fausse — et c'est là que se perdent beaucoup de jeunes entreprises.
+          - type: "encadre"
+            titre: "Faux"
+            texte: |-
+                L'obligation ne naît pas de la recette : elle naît de l'immatriculation. Dès que votre entreprise existe au registre du commerce et au fichier des contribuables, elle doit déclarer — même pour dire qu'elle n'a rien encaissé.
+          - type: "intertitre"
+            texte: "Ce qu'il faut distinguer"
+          - type: "liste"
+            points:
+                - |-
+                    L'impôt dû : il se calcule sur ce que vous avez réalisé. À zéro de recette, il peut effectivement être nul.
+                - |-
+                    La déclaration : elle est due de toute façon, à l'échéance, y compris à zéro. C'est ce qu'on appelle une déclaration néant.
+                - |-
+                    La pénalité de non-déclaration : elle frappe l'absence de dépôt, pas le montant. Elle tombe donc même sur une entreprise qui n'a rien gagné.
+          - type: "paragraphe"
+            texte: |-
+                Autrement dit : une entreprise sans activité qui déclare ne paie rien. Une entreprise sans activité qui ne déclare pas finit par payer — des pénalités, pour un chiffre d'affaires inexistant. C'est l'impôt le plus absurde qui soit, et le plus facile à éviter.
+          - type: "intertitre"
+            texte: "Le cas de l'entreprise en sommeil"
+          - type: "paragraphe"
+            texte: |-
+                Un projet qui traîne, une activité mise en pause : l'entreprise reste juridiquement vivante et ses obligations courent. Si vous ne comptez pas exercer avant plusieurs mois, parlez-nous-en. Il existe des façons propres de suspendre une activité ; l'oubli n'en fait pas partie.
+    - slug: "a-qui-s-applique-l-igs"
+      rubrique: "coinFiscaliste"
+      titre: "À qui s'applique réellement l'Impôt Général Synthétique ?"
+      accroche: |-
+          Beaucoup d'entrepreneurs entendent parler de l'IGS sans savoir s'ils sont concernés. Résultat : incompréhension, négligence, puis sanction.
+      resume: |-
+          L'IGS est un régime d'imposition simplifié appliqué à certaines petites entreprises et activités génératrices de revenus. Notre fiscaliste explique qui il vise, et pourquoi il se paie même sans bénéfice.
+      date: "2026-01-23"
+      image: "/images/pages/cabinet-a.jpg"
+      minutes: 4
+      mots_cles:
+          - "IGS"
+          - "impôt général synthétique"
+          - "régime simplifié"
+          - "petites entreprises"
+      source: "pub-22"
+      appel:
+        texte: "Vérifier mon régime d'imposition"
+        href: "/contact"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Trois lettres qui circulent beaucoup, et que peu d'entrepreneurs rapportent à leur propre situation. Faisons le point clairement.
+          - type: "intertitre"
+            texte: "Qu'est-ce que l'IGS ?"
+          - type: "paragraphe"
+            texte: |-
+                L'Impôt Général Synthétique est un régime d'imposition simplifié, appliqué à certaines petites entreprises et aux activités génératrices de revenus. Simplifié veut dire qu'il remplace plusieurs impositions par une seule, calculée selon un barème — et non qu'il serait facultatif.
+          - type: "encadre"
+            titre: "Le point que tout le monde manque"
+            texte: |-
+                L'IGS ne dépend pas toujours du bénéfice réalisé, mais de l'existence et de l'activité de l'entreprise. Une année sans bénéfice n'est donc pas, en elle-même, une année sans IGS.
+          - type: "intertitre"
+            texte: "Comment savoir si vous êtes concerné"
+          - type: "liste"
+            points:
+                - |-
+                    Le premier critère est votre chiffre d'affaires : c'est lui qui détermine votre régime d'imposition, et non la forme juridique que vous avez choisie.
+                - |-
+                    Le deuxième est la nature de votre activité : commerce, artisanat, prestation de services et activités génératrices de revenus ne sont pas traités de la même façon.
+                - |-
+                    Le troisième est votre situation déclarative réelle : beaucoup d'entrepreneurs relèvent d'un régime sur le papier et d'un autre dans les faits, faute d'avoir signalé un franchissement de seuil.
+          - type: "intertitre"
+            texte: "Ce que la négligence coûte"
+          - type: "paragraphe"
+            texte: |-
+                Ne pas savoir qu'on relève de l'IGS ne suspend pas l'impôt : cela accumule un arriéré, auquel s'ajoutent les pénalités de retard. Le rattrapage se fait en bloc, souvent au pire moment — lors d'un contrôle, ou quand on a besoin d'une attestation de non-redevance pour un marché.
+          - type: "paragraphe"
+            texte: |-
+                Adhérer à un centre de gestion agréé, c'est faire vérifier chaque année le régime dont vous relevez réellement, et payer ce que vous devez — ni plus, ni plus tard.
+    - slug: "obligations-comptables-de-debut-d-annee"
+      rubrique: "lundiComptable"
+      titre: "Les huit obligations comptables de début d'année"
+      accroche: |-
+          Janvier n'est pas un simple changement de calendrier : c'est le mois qui décide de votre conformité, de votre imposition et de votre crédibilité pour toute l'année.
+      resume: |-
+          « On verra ça plus tard » est l'erreur la plus coûteuse du début d'année. Notre comptable Aïcha donne la liste des huit points à traiter dès janvier pour aborder l'exercice en règle.
+      date: "2025-12-08"
+      image: "/images/pages/formations-b.jpg"
+      minutes: 5
+      mots_cles:
+          - "début d'année"
+          - "clôture"
+          - "inventaire"
+          - "rapprochement bancaire"
+          - "DSF"
+      source: "pub-38, pub-25"
+      appel:
+        texte: "Confier ma clôture au cabinet"
+        href: "/devenir-adherent"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Beaucoup d'entreprises repoussent la comptabilité en début d'année, en se disant qu'il sera toujours temps. C'est l'erreur la plus coûteuse du calendrier : janvier est le moment stratégique qui détermine la conformité, le niveau d'imposition et la crédibilité de l'entreprise pour les douze mois qui suivent.
+          - type: "paragraphe"
+            texte: |-
+                Trop d'entrepreneurs démarrent l'année avec une comptabilité incomplète, des documents non classés, des incohérences bancaires et aucune vision réelle de leur activité. Voici la liste que suit notre comptable.
+          - type: "intertitre"
+            texte: "1 · Mettre à jour la comptabilité de l'année écoulée"
+          - type: "paragraphe"
+            texte: |-
+                Enregistrer toutes les opérations, régulariser les écritures en suspens, vérifier les journaux. Sans cette mise à jour, il est simplement impossible d'établir une DSF correcte.
+          - type: "intertitre"
+            texte: "2 · Remettre les rapprochements bancaires à jour"
+          - type: "paragraphe"
+            texte: |-
+                Chaque compte doit concorder avec son relevé. Un écart laissé en fin d'exercice devient très difficile à retrouver l'année suivante, quand plus personne ne se souvient de l'opération.
+          - type: "intertitre"
+            texte: "3 · Inventorier les immobilisations et les amortissements"
+          - type: "paragraphe"
+            texte: |-
+                Recenser les biens durables, vérifier leur existence physique et calculer les amortissements de l'exercice. Un matériel cédé ou hors service qui reste au bilan fausse le résultat comme l'actif.
+          - type: "intertitre"
+            texte: "4 · Inventorier les stocks"
+          - type: "paragraphe"
+            texte: |-
+                Obligatoire pour les commerçants et les industriels. Le stock de clôture entre directement dans le calcul du résultat : un inventaire approximatif produit un bénéfice approximatif.
+          - type: "intertitre"
+            texte: "5 · Vérifier les dettes et les créances"
+          - type: "paragraphe"
+            texte: |-
+                Ce que l'entreprise doit, ce qu'on lui doit, et l'ancienneté de chaque poste. C'est aussi le moment de traiter les créances devenues irrécouvrables plutôt que de les traîner d'exercice en exercice.
+          - type: "intertitre"
+            texte: "6 · Mettre à jour contrats et documents administratifs"
+          - type: "paragraphe"
+            texte: |-
+                Baux, contrats de travail, assurances, autorisations d'exercer, attestation de non-redevance. Ce sont les pièces qu'on vous réclamera au moment le moins commode si elles ont expiré.
+          - type: "intertitre"
+            texte: "7 · Préparer les états financiers annuels"
+          - type: "paragraphe"
+            texte: |-
+                Bilan et compte de résultat se déduisent des six points précédents. S'ils résistent, c'est que l'un d'eux a été bâclé.
+          - type: "intertitre"
+            texte: "8 · Anticiper la DSF"
+          - type: "paragraphe"
+            texte: |-
+                La Déclaration Statistique et Fiscale n'est pas un document qu'on fabrique la veille de l'échéance : c'est la mise en forme de tout ce qui précède. Le délai dont vous disposez pour la déposer sans pénalité dépend de votre régime — vérifiez le vôtre dès janvier, et non en découvrant la pénalité.
+          - type: "encadre"
+            titre: "Anticipez, organisez, sécurisez"
+            texte: |-
+                Ces huit points prennent quelques jours en janvier. Repoussés à la veille de l'échéance, ils prennent des semaines, coûtent des pénalités, et produisent une déclaration que personne n'ose défendre en cas de contrôle.
+    - slug: "dossier-propre-decision-rapide"
+      rubrique: "lundiComptable"
+      titre: "Dossier propre, décision rapide : ce que votre banquier lit vraiment"
+      accroche: |-
+          Une comptabilité bien tenue est souvent la clé d'un prêt bancaire accordé. Ce n'est pas votre projet que la banque examine en premier — ce sont vos comptes.
+      resume: |-
+          Ce qui fait accepter ou refuser un dossier de financement tient rarement à l'idée. Il tient à la qualité des états financiers présentés, et à ce qu'ils disent de la maîtrise du dirigeant.
+      date: "2025-08-11"
+      image: "/images/pages/adherent-b.jpg"
+      minutes: 3
+      mots_cles:
+          - "financement"
+          - "prêt bancaire"
+          - "états financiers"
+          - "crédibilité"
+      source: "pub-58"
+      appel:
+        texte: "Faire tenir ma comptabilité"
+        href: "/devenir-adherent"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Un chef d'entreprise prépare longuement son projet, ses devis, son marché — et présente à la banque une comptabilité rassemblée en trois jours. Le dossier est refusé, et il en conclut que son projet n'a pas convaincu. Ce n'est presque jamais le cas.
+          - type: "intertitre"
+            texte: "Ce que la banque regarde d'abord"
+          - type: "liste"
+            points:
+                - |-
+                    Des états financiers cohérents d'un exercice à l'autre : une variation inexpliquée pèse plus lourd qu'un mauvais chiffre assumé.
+                - |-
+                    Une trésorerie qui se suit : des mouvements bancaires qui concordent avec la comptabilité, sans allers-retours avec le compte personnel du dirigeant.
+                - |-
+                    Une situation fiscale à jour : déclarations déposées, attestation de non-redevance valide.
+                - |-
+                    Un dirigeant capable d'expliquer ses propres chiffres. C'est le signal le plus fort, et il ne se fabrique pas la veille du rendez-vous.
+          - type: "encadre"
+            titre: "Le raccourci qui n'en est pas un"
+            texte: |-
+                Reconstituer une comptabilité pour un dossier de financement coûte plus cher que de l'avoir tenue, et produit toujours un document que le dirigeant ne sait pas défendre en entretien.
+          - type: "paragraphe"
+            texte: |-
+                Une comptabilité tenue en continu n'est pas une contrainte administrative : c'est ce qui rend votre entreprise finançable. Le jour où l'occasion se présente — un marché, un local, une machine — le dossier est déjà prêt.
+    - slug: "commencer-dabord-regulariser-apres"
+      rubrique: "mercrediJuridique"
+      titre: "« Je commence d'abord, je régularise après » : ce que cela coûte vraiment"
+      accroche: |-
+          Jean, 32 ans, veut ouvrir son commerce à Douala et régulariser plus tard. Notre juriste lui explique pourquoi c'est le calcul le plus cher.
+      resume: |-
+          Cas pratique du Mercredi juridique : un porteur de projet qui démarre seul, avec un capital limité, et qui pense pouvoir formaliser son activité une fois qu'elle tournera. Quelle forme choisir, quelles démarches sont obligatoires, et ce que le report entraîne.
+      date: "2026-01-14"
+      image: "/images/services/conseil.jpg"
+      minutes: 5
+      mots_cles:
+          - "formalisation"
+          - "forme juridique"
+          - "commerce général"
+          - "obligations"
+          - "RCCM"
+      source: "pub-20"
+      appel:
+        texte: "Faire créer mon entreprise"
+        href: "/creer-mon-entreprise"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Jean a 32 ans. Il souhaite lancer une activité de commerce général à Douala. Il démarre seul, avec un capital limité, et il compte « commencer d'abord, régulariser après ». Ses trois questions sont celles de presque tous les porteurs de projets qui poussent notre porte.
+          - type: "intertitre"
+            texte: "Quelle forme juridique choisir ?"
+          - type: "paragraphe"
+            texte: |-
+                Seul et avec un capital limité, deux voies s'ouvrent à Jean : l'établissement, plus léger à créer mais qui ne sépare pas son patrimoine personnel de celui de l'activité, et la SARL unipersonnelle, qui opère cette séparation. Le critère décisif n'est pas le coût de création : c'est le risque que porte l'activité. Un commerce général qui prend des marchandises à crédit engage des sommes qu'un patrimoine personnel n'a pas vocation à couvrir.
+          - type: "intertitre"
+            texte: "Quelles démarches sont obligatoires ?"
+          - type: "liste"
+            points:
+                - "L'immatriculation au registre du commerce et du crédit mobilier (RCCM)."
+                - "L'attestation d'immatriculation et le numéro de contribuable auprès de la DGI."
+                - "L'affiliation à la CNPS, pour l'entreprise comme pour son personnel."
+                - |-
+                    L'inscription dans le fichier national des contribuables, effective après la première déclaration.
+                - "Les autorisations propres à l'activité exercée, quand elle en requiert."
+          - type: "intertitre"
+            texte: "Ce que le report coûte réellement"
+          - type: "paragraphe"
+            texte: |-
+                Une activité non formalisée n'est pas une activité en sursis : c'est une activité sans droits. Jean ne peut pas facturer à une société qui exige un numéro de contribuable, donc il se ferme le marché des entreprises. Il ne peut pas ouvrir de compte professionnel, donc il mélange sa trésorerie et la sienne. Il ne peut répondre à aucun appel d'offres. Et le jour où il régularise, l'administration ne repart pas de la date de régularisation : elle regarde en arrière.
+          - type: "encadre"
+            titre: "La réponse du juriste"
+            texte: |-
+                Formaliser d'emblée coûte quelques centaines de milliers de francs. Régulariser après deux ans d'activité coûte cela, plus les redressements, plus les pénalités, plus les marchés perdus entre-temps. Le calcul est le même pour tout le monde, et il donne toujours le même résultat.
+    - slug: "erreurs-courantes-creation-entreprise"
+      rubrique: "mercrediJuridique"
+      titre: "Quatre erreurs qui font échouer une création d'entreprise"
+      accroche: |-
+          Trop de projets s'arrêtent la première année, non par manque de clients, mais par quatre erreurs commises avant même d'ouvrir.
+      resume: |-
+          Statut inadapté, absence de business plan, dossier juridique ou fiscal bancal, organisation comptable inexistante : les quatre pièges que nous voyons revenir le plus souvent, et comment les éviter.
+      date: "2025-07-16"
+      image: "/images/heros/mains-levees.jpg"
+      minutes: 4
+      mots_cles:
+          - "création d'entreprise"
+          - "erreurs"
+          - "business plan"
+          - "statut"
+          - "comptabilité"
+      source: "pub-76"
+      appel:
+        texte: "Faire le point sur mon projet"
+        href: "/contact"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Trop de porteurs de projets échouent dès le départ, non parce que leur idée était mauvaise, mais parce qu'ils n'ont pas été accompagnés dans leur démarche de création ou de formalisation. Quatre erreurs reviennent, presque toujours les mêmes.
+          - type: "intertitre"
+            texte: "1 · Un statut inadapté"
+          - type: "paragraphe"
+            texte: |-
+                Le statut se choisit souvent par imitation — « mon voisin a fait une SARL » — ou par recherche du moins cher. Or il détermine la responsabilité, la fiscalité, l'entrée éventuelle d'associés et la transmission. En changer plus tard est possible, mais coûteux.
+          - type: "intertitre"
+            texte: "2 · L'absence de business plan solide"
+          - type: "paragraphe"
+            texte: |-
+                Un business plan n'est pas un document pour la banque : c'est le chiffrage de votre propre projet. Combien coûte un mois d'activité avant le premier encaissement ? À partir de quel volume l'affaire est-elle à l'équilibre ? Sans ces deux chiffres, on navigue à vue.
+          - type: "intertitre"
+            texte: "3 · Des problèmes juridiques ou fiscaux laissés en suspens"
+          - type: "paragraphe"
+            texte: |-
+                Statuts incomplets, autorisation d'exercer manquante, régime d'imposition mal identifié, déclarations non déposées dès le premier trimestre : autant de dossiers qui se rouvrent au moment le plus défavorable, en général celui d'un contrôle ou d'un appel d'offres.
+          - type: "intertitre"
+            texte: "4 · Une organisation comptable inexistante"
+          - type: "paragraphe"
+            texte: |-
+                Les factures dans un carton et la trésorerie dans le compte personnel du gérant : c'est le point de départ le plus fréquent, et celui qui rend toute reconstitution douloureuse. Une organisation comptable minimale dès le premier jour coûte moins cher qu'une remise en ordre au bout de deux ans.
+          - type: "encadre"
+            titre: "Nous sommes présents là où vous êtes"
+            texte: |-
+                Douala, Yaoundé et Bafoussam : nos équipes accompagnent le projet étape par étape, de l'idée à la concrétisation.
+    - slug: "pack-formalisation-sarl"
+      rubrique: "annonces"
+      titre: "Pack formalisation SARL : votre société créée pour 275 000 FCFA"
+      accroche: |-
+          Votre SARL immatriculée, vos statuts rédigés, votre numéro de contribuable obtenu — pour 275 000 FCFA, tout compris.
+      resume: |-
+          Le pack formalisation SARL couvre l'intégralité du dossier de création et les documents qui vous sont remis à l'issue : statuts, RCCM, attestations et numéros CNPS.
+      date: "2025-04-08"
+      image: "/images/services/creation-entreprise.jpg"
+      minutes: 2
+      mots_cles:
+          - "offre"
+          - "SARL"
+          - "formalisation"
+          - "création"
+          - "tarif"
+      source: "pub-94"
+      appel:
+        texte: "Demander le pack SARL"
+        href: "/contact"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Le CGA Broad Range Consulting prend en charge la formalisation complète de votre SARL. Un seul interlocuteur, un seul montant, et un dossier suivi jusqu'à la remise des documents.
+          - type: "intertitre"
+            texte: "Ce qui vous est remis"
+          - type: "liste"
+            points:
+                - "Deux exemplaires de vos statuts sociaux rédigés, gratuitement, et timbrés."
+                - "Le registre du commerce et du crédit mobilier (RCCM)."
+                - "L'attestation d'immatriculation."
+                - "L'attestation de création d'entreprise."
+                - "L'attestation d'immatriculation fiscale."
+                - "Les numéros CNPS de la société et de son personnel."
+                - |-
+                    L'insertion directe dans le fichier national des contribuables après votre première déclaration.
+          - type: "encadre"
+            titre: "275 000 FCFA"
+            texte: |-
+                Montant du pack formalisation SARL. N'attendez plus : contactez notre cabinet professionnel et évitez toutes les tracasseries.
+    - slug: "pack-formalisation-etablissement"
+      rubrique: "annonces"
+      titre: "Pack formalisation Établissement : 175 000 FCFA"
+      accroche: |-
+          Vous exercez seul et vous voulez être en règle sans monter de société ? L'établissement se formalise pour 175 000 FCFA.
+      resume: |-
+          Pour l'entrepreneur individuel, le pack formalisation Établissement couvre le dossier complet et la remise des documents officiels.
+      date: "2025-04-26"
+      image: "/images/services/prestations-ponctuelles.jpg"
+      minutes: 2
+      mots_cles:
+          - "offre"
+          - "établissement"
+          - "ETS"
+          - "formalisation"
+          - "tarif"
+      source: "pub-88"
+      appel:
+        texte: "Comparer avec une SARL"
+        href: "/estimation"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                L'établissement reste la voie la plus directe pour l'entrepreneur qui exerce seul et veut être en règle rapidement. Notre pack en couvre la formalisation complète.
+          - type: "intertitre"
+            texte: "Ce qui vous est remis"
+          - type: "liste"
+            points:
+                - "Le registre du commerce et du crédit mobilier (RCCM)."
+                - "L'attestation d'immatriculation."
+                - "L'attestation de création d'entreprise."
+                - "L'attestation d'immatriculation fiscale."
+                - "Les numéros CNPS de la structure et de son personnel."
+                - |-
+                    L'insertion directe dans le fichier national des contribuables après votre première déclaration d'impôts d'établissement.
+          - type: "encadre"
+            titre: "175 000 FCFA"
+            texte: |-
+                Montant du pack formalisation Établissement. Si votre activité engage des sommes importantes, parlons plutôt d'une SARL unipersonnelle : elle sépare votre patrimoine personnel de celui de l'activité.
+    - slug: "adherer-au-cga-broad-range"
+      rubrique: "annonces"
+      titre: "Adhérer au CGA : ce que le cabinet prend en charge à votre place"
+      accroche: |-
+          Tenue des comptes, gestion des impôts, planification financière : confiez ce qui vous éloigne de votre métier.
+      resume: |-
+          Le centre de gestion agréé Broad Range Consulting, agréé n° 00000048/MINFI/DGI du 28 janvier 2020, couvre six domaines pour ses adhérents, de la création d'entreprise au contentieux fiscal.
+      date: "2025-11-06"
+      image: "/images/heros/reunion-equipe.jpg"
+      minutes: 4
+      mots_cles:
+          - "adhésion"
+          - "CGA"
+          - "comptabilité"
+          - "fiscalité"
+          - "audit"
+          - "services à la carte"
+      source: "pub-63, pub-113, pub-55, pub-72"
+      appel:
+        texte: "Découvrir les formules d'adhésion"
+        href: "/devenir-adherent"
+      corps:
+          - type: "paragraphe"
+            texte: |-
+                Une gestion comptable et fiscale rigoureuse est la condition de la sérénité d'un chef d'entreprise. Le CGA Broad Range Consulting accompagne au quotidien les dirigeants et les porteurs de projets qui veulent s'en décharger sans en perdre le contrôle.
+          - type: "intertitre"
+            texte: "Nos six domaines de compétences"
+          - type: "liste"
+            points:
+                - "Création d'entreprise"
+                - "Gestion d'entreprise"
+                - "Assistance juridique"
+                - "Assistance administrative"
+                - "Assistance comptable et fiscale"
+                - "Contentieux fiscal"
+          - type: "intertitre"
+            texte: "Ce que l'adhésion change au quotidien"
+          - type: "liste"
+            points:
+                - "Vos échéances vous sont annoncées à l'avance, et non découvertes la veille."
+                - "Vos déclarations sont vérifiées avant d'être déposées."
+                - "Vos pièces sont classées, datées et justifiées le jour où un contrôle arrive."
+                - "Vos décisions de gestion s'appuient sur des chiffres à jour."
+          - type: "intertitre"
+            texte: "L'avantage propre au centre agréé"
+          - type: "paragraphe"
+            texte: |-
+                Un CGA n'est pas seulement un cabinet : c'est un regroupement de professionnels adossé à l'administration fiscale. L'adhérent bénéficie à ce titre d'une assistance permanente d'un inspecteur des impôts dans le suivi de ses obligations, et de l'accès aux programmes de formation à la fiscalité organisés par le centre. C'est ce que l'adhésion apporte et qu'aucune prestation ponctuelle ne remplace.
+          - type: "intertitre"
+            texte: "Ou à la carte, si vous préférez"
+          - type: "paragraphe"
+            texte: |-
+                L'adhésion n'est pas la seule porte. Plusieurs prestations se souscrivent séparément, pour une entreprise qui veut commencer par un point précis.
+          - type: "liste"
+            points:
+                - "La Déclaration Statistique et Fiscale, montée et déposée dans les délais."
+                - "L'audit de l'entreprise : un état de sa santé financière et opérationnelle."
+                - "La tenue de la comptabilité, par des professionnels."
+                - "Le conseil stratégique, sur une décision ou un projet précis."
+          - type: "encadre"
+            titre: "Un centre agréé"
+            texte: |-
+                Agrément n° 00000048/MINFI/DGI du 28 janvier 2020. Présents à Douala (Akwa et Bercy), Yaoundé (Elig-Essono) et Bafoussam (quartier Haoussa).

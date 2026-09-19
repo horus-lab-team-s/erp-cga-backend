@@ -1,0 +1,38 @@
+# Ce qu'un score de charge commande, en jours de travail par mois.
+#
+# Ces valeurs quittent le code parce qu'elles varient : le centre les ajustera après
+# quelques mois d'usage réel, et un ajustement de grille ne doit pas demander une
+# livraison. C'est le principe n° 1 appliqué à une valeur qui n'est pas légale mais qui
+# change pour les mêmes raisons.
+#
+# La dernière tranche n'a pas de plafond, pour qu'aucun dossier ne reste sans classement :
+# un dossier hors grille serait un dossier qu'on ne sait ni facturer ni planifier.
+
+statut: A_VALIDER
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1. Paliers et charges journalières estimés à partir
+    de la conception, à confronter au relevé de temps réel du centre.
+  source: Grille de charge du centre, à transmettre
+
+tranches:
+  - code: LEGER
+    libelle: Léger
+    minimum: 0
+    maximum: 20
+    jours_par_mois: "0.5"
+  - code: STANDARD
+    libelle: Standard
+    minimum: 21
+    maximum: 45
+    jours_par_mois: "1"
+  - code: SOUTENU
+    libelle: Soutenu
+    minimum: 46
+    maximum: 75
+    jours_par_mois: "2.5"
+  - code: LOURD
+    libelle: Lourd
+    minimum: 76
+    maximum: null
+    jours_par_mois: "5"

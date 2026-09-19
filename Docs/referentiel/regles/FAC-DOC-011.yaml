@@ -1,0 +1,36 @@
+code: FAC-DOC-011
+libelle: Désignation de la prestation suffisamment précise
+categorie: CONTENU_LIGNES
+version: "2026.1"
+applicable_du: 2019-01-01
+applicable_au: null
+severite: AVERTISSEMENT
+statut: A_VALIDER
+
+fondement:
+  texte: >-
+    CGI art. 150 (5) — la facture doit permettre d'identifier la nature du bien livré
+    ou du service rendu. Une désignation générique ne satisfait pas cette exigence.
+  source: Document de cadrage § 4.3, catégorie 4 ; dossier de design § 13.6
+
+portee:
+  type_document: [FACTURE_ACHAT, FACTURE_VENTE]
+
+# predicat VRAI = conforme. FAUX = constat émis.
+# Conforme si AUCUNE ligne ne porte une désignation générique.
+predicat:
+  "!":
+    some:
+      - { var: lignes }
+      - regex: [{ var: designation }, { param: REGEX_DESIGNATION_IMPRECISE }]
+
+consequence:
+  verification_requise: true
+
+message: >-
+  Une ou plusieurs lignes portent une désignation qui ne permet pas d'identifier la
+  nature du bien ou de la prestation.
+
+remediation: >-
+  Demander un détail écrit de la prestation et le joindre à la pièce. Le constat est
+  conservé au dossier : il documente le risque en cas de contrôle.

@@ -89,7 +89,7 @@ REVISEUR = "a.bouba@cga-brcg.cm"
 OUVERT = Exercice(libelle="2026", ouverture=date(2026, 1, 1), cloture=date(2026, 12, 31))
 JUILLET = (date(2026, 7, 1), date(2026, 7, 31))
 INSTANT = datetime(2026, 8, 5, 9, 0)
-REFERENTIEL = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+REFERENTIEL = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
 
 
 @pytest.fixture(autouse=True)

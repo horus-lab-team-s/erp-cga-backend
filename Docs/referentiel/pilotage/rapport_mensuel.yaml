@@ -1,0 +1,26 @@
+# Le rapport mensuel de la direction (pas 106).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CE FICHIER RÈGLE
+#
+#   agrement    le numéro d'agrément du centre, tel qu'il figure sur la décision
+#               MINFI/DGI. ⚠️ À RENSEIGNER par le cabinet : un numéro plausible et
+#               faux sur un document de contrôle serait pire qu'une mention vide.
+#   engagement  la phrase d'engagement de sincérité portée en tête du rapport.
+#   sections    les sections incluses, dans l'ordre du document, parmi :
+#               RISQUE, CHARGE, DEROGATIONS, QUALITE_DES_REGLES, DECISIONS.
+#
+# Chaque section reprend exactement la lecture de l'écran correspondant, figée au
+# moment de la génération. Une clé mal orthographiée fait échouer le chargement.
+# ─────────────────────────────────────────────────────────────────────────────
+
+agrement: "Agrément MINFI/DGI : numéro à renseigner"
+engagement: >-
+  Le Centre de gestion agréé s'engage sur la sincérité des informations présentées dans
+  ce rapport, établies à partir des données de la plateforme à la date indiquée.
+sections:
+  - RISQUE
+  - CHARGE
+  - DEROGATIONS
+  - QUALITE_DES_REGLES
+  - DECISIONS

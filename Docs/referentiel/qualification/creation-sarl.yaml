@@ -1,0 +1,94 @@
+service: creation-sarl
+version: "1"
+
+questions:
+  - code: forme_juridique
+    libelle: Forme juridique retenue
+    type: ENUM
+    valeurs: [SARL, SARL_UNIPERSONNELLE, SA, SAS, GIE, ETABLISSEMENT]
+    rang: 0
+    obligatoire: true
+    aide: >-
+      Ce que le client veut créer. En cas d'hésitation entre SARL et SARL unipersonnelle, le nombre d'associés tranche.
+
+  - code: associes
+    libelle: Nombre d'associés
+    type: ENTIER
+    rang: 1
+    obligatoire: true
+    aide: >-
+      Un seul associé impose la forme unipersonnelle. Au-delà de cinq, les statuts demandent plus de travail.
+
+  - code: capital_social
+    libelle: Capital social envisagé
+    type: DECIMAL
+    unite: FCFA
+    rang: 2
+    obligatoire: true
+
+  - code: apports_en_nature
+    libelle: Y a-t-il des apports en nature ?
+    type: BOOLEEN
+    rang: 3
+    obligatoire: true
+    aide: >-
+      Un apport en nature peut exiger un commissaire aux apports, ce qui change le calendrier et le coût.
+
+  - code: chiffre_affaires_prevu
+    libelle: Chiffre d'affaires prévisionnel, en tranche
+    type: ENUM
+    valeurs: [MOINS_10M, DE_10M_A_50M, DE_50M_A_250M, PLUS_250M]
+    rang: 4
+    obligatoire: true
+    aide: >-
+      En tranche et non en montant : un prévisionnel au franc près est une fausse précision, et le régime fiscal se décide par seuils.
+
+  - code: salaries_prevus
+    libelle: Salariés prévus la première année
+    type: ENTIER
+    rang: 5
+    obligatoire: true
+
+  - code: region_siege
+    libelle: Région du siège social
+    type: ENUM
+    valeurs:
+      - LITTORAL
+      - CENTRE
+      - OUEST
+      - NORD_OUEST
+      - SUD_OUEST
+      - NORD
+      - EXTREME_NORD
+      - ADAMAOUA
+      - EST
+      - SUD
+    rang: 6
+    obligatoire: true
+    aide: >-
+      Détermine le centre des impôts compétent, et l'agence du centre qui suivra le dossier.
+
+  - code: activite
+    libelle: Activité principale, selon la nomenclature
+    type: TEXTE
+    rang: 7
+    obligatoire: true
+
+  - code: statuts_apportes
+    libelle: Le client apporte-t-il des statuts déjà rédigés ?
+    type: BOOLEEN
+    rang: 8
+
+  - code: pages_statuts
+    libelle: Nombre de pages des statuts apportés
+    type: ENTIER
+    rang: 9
+    aide: >-
+      Sans objet si le centre les rédige. Sert à estimer le temps de relecture.
+
+  - code: pieces_deja_reunies
+    libelle: Pièces déjà réunies par le client
+    type: LISTE
+    rang: 10
+    aide: >-
+      Séparées par des virgules. Ce qui est déjà là réduit le va-et-vient.

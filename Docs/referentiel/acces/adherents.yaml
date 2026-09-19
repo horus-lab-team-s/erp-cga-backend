@@ -1,0 +1,13 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Rendre l'accès à un adhérent, par son chargé de clientèle (pas 116)
+#
+# Maquette « Espace adhérent CGA », vue A, note 5 : « réinitialisation par le chargé de
+# clientèle, jamais en autonomie ». Le lien part toujours à l'adresse déjà au dossier.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Combien de liens un même compte peut recevoir par jour par ce geste.
+renvois_par_jour: 2
+
+# La longueur minimale de la vérification écrite par le chargé de clientèle
+# (« rappelé au numéro du dossier », « venu au cabinet avec sa CNI »).
+verification_minimum: 15

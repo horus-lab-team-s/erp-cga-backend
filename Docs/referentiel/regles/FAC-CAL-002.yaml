@@ -1,0 +1,32 @@
+code: FAC-CAL-002
+libelle: Somme des lignes égale au total hors taxes
+categorie: COHERENCE_ARITHMETIQUE
+version: "2026.1"
+applicable_du: 2019-01-01
+applicable_au: null
+severite: MAJEUR
+statut: A_VALIDER
+
+fondement:
+  texte: >-
+    CGI art. 150 (5) — la facture doit porter le détail des opérations et un total
+    cohérent. Un écart entre le détail et le total prive la facture de sa force
+    probante.
+  source: Document de cadrage § 4.3, catégorie 5 ; dossier de design § 13.6
+
+portee:
+  type_document: [FACTURE_ACHAT, FACTURE_VENTE]
+
+# predicat VRAI = conforme. FAUX = constat émis.
+# Le FCFA ne comporte pas de décimale : l'égalité est stricte, sans tolérance.
+predicat:
+  "==": [{ var: montants.somme_lignes_ht }, { var: montants.total_ht }]
+
+consequence:
+  rectification_requise: true
+
+message: >-
+  La somme des lignes de la facture s'écarte du total hors taxes indiqué.
+
+remediation: >-
+  Demander au fournisseur une facture rectificative avant comptabilisation.

@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# « Mon entreprise » : la fiche du dossier dans les mots de l'adhérent (pas 114)
+#
+# Maquette « Espace adhérent CGA », vue E. L'adhérent ne modifie rien lui-même : il
+# signale un changement, le cabinet instruit.
+#
+# ⚠️ STATUT : A_VALIDER. Les explications des régimes sont une PROPOSITION : la
+# nomenclature des régimes elle-même est à confirmer (question Q12). Le fiscaliste
+# relit, puis passe le statut à VALIDE en se nommant (valide_par).
+# ─────────────────────────────────────────────────────────────────────────────
+
+statut: A_VALIDER
+valide_par: null
+
+# Combien de signalements récents l'adhérent revoit sur sa fiche.
+signalements_montres: 5
+
+formes:
+  ETS: "Établissement"
+  SARLU: "Société à responsabilité limitée unipersonnelle"
+  SARL: "Société à responsabilité limitée"
+  SAS: "Société par actions simplifiée"
+  SA: "Société anonyme"
+  SCI: "Société civile immobilière"
+  GIE: "Groupement d'intérêt économique"
+  ASSOCIATION: "Association"
+  PERSONNE_PHYSIQUE: "Entreprise individuelle"
+
+centres:
+  CDI: "Centre divisionnaire des impôts"
+  CIME: "Centre des impôts des moyennes entreprises"
+  DGE: "Direction des grandes entreprises"
+
+regimes:
+  - regime: IGS
+    titre: "Impôt général synthétique"
+    explication: "Un impôt unique, réglé chaque trimestre, remplace la TVA et l'impôt sur les bénéfices, tant que vos ventes restent sous le plafond de ce régime."
+  - regime: REEL
+    titre: "Régime du réel"
+    explication: "Vous facturez la TVA à vos clients et la reversez chaque mois, en récupérant celle de vos achats professionnels ; l'impôt sur les bénéfices se calcule sur vos comptes de l'année."
+
+natures:
+  - nature: ADRESSE
+    libelle: "Adresse"
+    aide: "Une nouvelle adresse peut changer votre centre des impôts, donc vos dates limites : le cabinet vérifie."
+  - nature: DIRIGEANT
+    libelle: "Gérant ou dirigeant"
+    aide: "Le cabinet vous demandera le procès-verbal de nomination."
+  - nature: ACTIVITE
+    libelle: "Activité"
+    aide: "Une nouvelle activité peut changer vos impôts : le cabinet vous rappelle avant toute démarche."
+  - nature: TELEPHONE
+    libelle: "Numéro de téléphone"
+    aide: "Écrivez le nouveau numéro : le cabinet met votre dossier à jour."
+  - nature: AUTRE
+    libelle: "Autre changement"
+    aide: "Décrivez le changement : le cabinet vous contacte."

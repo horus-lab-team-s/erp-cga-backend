@@ -42,7 +42,7 @@ CINQ VERDICTS
 - Les champs que le backend rend et que le frontend ignore : ce n'est pas un défaut.
 - Les **corps de requête** : la validation `extra="forbid"` du backend les refuse déjà.
 
-USAGE (depuis `Backend_erp_cga`)
+USAGE (depuis la racine de `erp-cga-backend`)
 
     CGA_PERSISTANCE=memoire python -m outils.contrat_des_ecrans          # verdict
     CGA_PERSISTANCE=memoire python -m outils.contrat_des_ecrans --detail # et chaque appel
@@ -52,25 +52,39 @@ USAGE (depuis `Backend_erp_cga`)
 from __future__ import annotations
 
 import json
-import pathlib
 import re
 import subprocess
 import sys
 from typing import Any
 
-RACINE_FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "Frontend_erp_cga"
+# ⚠️ Depuis la scission, l'interface vit dans un autre dépôt. Le chemin se règle par
+# `CGA_RACINE_CONSOLE` ; à défaut on cherche le dépôt frère. Voir
+# `couverture_des_ecrans._racine_de_la_console`, qui porte l'explication complète.
+from outils.couverture_des_ecrans import racines_des_interfaces
+
+RACINES_FRONTEND = racines_des_interfaces()
+#: La première, pour les outils qui n'en veulent qu'une. La console vient en tête.
+RACINE_FRONTEND = RACINES_FRONTEND[0]
 
 
 def appels_du_frontend() -> list[dict[str, Any]]:
     """Le relevé du compilateur TypeScript, tel que le script Node le rend."""
-    sortie = subprocess.run(
-        ["node", "outils/types-des-appels.mjs"],
-        cwd=RACINE_FRONTEND,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return json.loads(sortie.stdout)
+    releves: list[dict[str, Any]] = []
+    for racine in RACINES_FRONTEND:
+        # ⚠️ Le script de relevé vit dans chaque dépôt d'interface. Celui qui ne l'a pas
+        # est ignoré plutôt que de faire échouer la mesure : une vitrine sans outillage
+        # n'est pas une faute, mais la console sans le sien le serait.
+        if not (racine / "outils" / "types-des-appels.mjs").is_file():
+            continue
+        sortie = subprocess.run(
+            ["node", "outils/types-des-appels.mjs"],
+            cwd=racine,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        releves.extend(json.loads(sortie.stdout))
+    return releves
 
 
 def schema_openapi() -> dict[str, Any]:

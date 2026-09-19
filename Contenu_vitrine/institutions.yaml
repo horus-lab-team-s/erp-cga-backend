@@ -1,0 +1,37 @@
+# Contenu de la vitrine publique — modifiable sans recompilation.
+#
+# Servi par le backend (contexte L · Vitrine) et lu par le site à la construction
+# des pages. Une correction ici est en ligne au redémarrage du backend, sans qu'un
+# développeur intervienne.
+#
+# Les institutions dans le cadre desquelles le cabinet exerce.
+#
+# ⚠️ Ce ne sont PAS des partenaires commerciaux. Afficher le logo d'une entreprise
+# privée sous le mot « partenaire » affirmerait une relation contractuelle. Ces
+# quatre-là sont les institutions avec lesquelles un centre de gestion agréé traite
+# par nature, et le dire est un fait vérifiable.
+#
+# Le jour où de vrais partenaires seront ajoutés, avec leur autorisation écrite, le
+# libellé de la section du site devra changer en même temps.
+
+institutions:
+    - cle: "dgi"
+      nom: "Direction Générale des Impôts"
+      logo: "/images/partenaires/dgi.png"
+      site: "https://www.impots.cm"
+      rognage_bas: null
+    - cle: "cnps"
+      nom: "Caisse Nationale de Prévoyance Sociale"
+      logo: "/images/partenaires/cnps.png"
+      site: "https://www.cnps.cm"
+      rognage_bas: 26
+    - cle: "onecca"
+      nom: "Ordre National des Experts-Comptables du Cameroun"
+      logo: "/images/partenaires/onecca.png"
+      site: "https://www.onecca.cm"
+      rognage_bas: null
+    - cle: "ohada"
+      nom: "OHADA"
+      logo: "/images/partenaires/ohada.png"
+      site: "https://www.ohada.org"
+      rognage_bas: null

@@ -1,0 +1,20 @@
+code: AFF-CMP-001
+libelle: Compétence exigée par le service non détenue
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Un responsable ne peut pas conduire une prestation pour laquelle il n'est pas habilité. La création d'entreprise et la tenue comptable supposent des habilitations distinctes, que le centre suit dans l'annuaire des collaborateurs.
+  source: Organisation interne du centre, note de service à transmettre
+
+# VRAI = le responsable convient : soit le service n'exige rien, soit il détient
+# la compétence exigée. FAUX = il ne peut pas prendre ce dossier.
+predicat:
+  or:
+    - "==": [{ var: competence_requise }, ""]
+    - in: [{ var: competence_requise }, { var: competences }]
+
+redhibitoire: true
+
+statut: A_VALIDER

@@ -1,0 +1,66 @@
+# Le catalogue des mesures de direction sur un dossier à risque (pas 100).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CE FICHIER EST UNE DÉCISION DE LA DIRECTION, PAS UN RÉGLAGE TECHNIQUE
+#
+# La vue risque d'un dossier se termine par ce que la direction peut décider. Ces
+# mesures ne sont pas écrites dans le code : elles sont écrites ici. Ajouter une
+# mesure, c'est ajouter un bloc ; la retirer ferme le geste, sans effacer les
+# décisions déjà prises (elles gardent leur libellé du jour où elles ont été prises).
+#
+# LES CHAMPS D'UNE MESURE
+#
+#   code              stable, en MAJUSCULES : il entre au journal d'audit et dans
+#                     l'identifiant des décisions. Ne jamais le renommer ; changer
+#                     le libellé suffit.
+#   libelle           ce que lit la direction sur le bouton.
+#   description       ce que la mesure engage, affiché sous le bouton.
+#   niveaux           FAIBLE, MODERE, ELEVE : les niveaux de risque pour lesquels
+#                     la mesure est proposée ET permise. Ailleurs, elle est refusée.
+#   echeance_requise  vrai si la mesure n'a de sens qu'avec une date butoir.
+#
+# L'ordre du fichier est l'ordre de l'écran : de la plus légère à la plus lourde.
+#
+# UNE CLÉ MAL ORTHOGRAPHIÉE FAIT ÉCHOUER LE CHARGEMENT
+#
+# `echeance_requis: true` ignoré en silence laisserait décider une régularisation
+# sans date. Sans ce fichier, aucune mesure ne peut être décidée ; la vue risque
+# reste lisible.
+#
+# ⚠️ Valeurs de départ proposées d'après la maquette « Pilotage direction CGA »,
+# vue B. À arrêter par la direction du cabinet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Longueur minimale du motif, en caractères, à la prise et à la clôture. Au moins 20.
+motif_minimum: 30
+
+mesures:
+
+  - code: RENFORCER_SUIVI
+    libelle: Renforcer le suivi du dossier
+    description: >-
+      Le dossier passe en revue hebdomadaire avec le collaborateur qui le porte,
+      jusqu'à la clôture de la mesure.
+    niveaux: [MODERE, ELEVE]
+
+  - code: EXIGER_REGULARISATION
+    libelle: Exiger une régularisation datée
+    description: >-
+      L'adhérent est invité par écrit à régulariser les pièces et déclarations en
+      souffrance avant la date fixée. Passé ce délai, la mesure apparaît échue.
+    niveaux: [MODERE, ELEVE]
+    echeance_requise: true
+
+  - code: CONVOQUER_CADRAGE
+    libelle: Convoquer un rendez-vous de cadrage
+    description: >-
+      La direction reçoit le dirigeant pour reprendre les engagements réciproques
+      de la lettre de mission.
+    niveaux: [ELEVE]
+
+  - code: ENVISAGER_FIN_ADHESION
+    libelle: Envisager la fin d'adhésion
+    description: >-
+      Le dossier est inscrit au prochain comité de direction. Rien n'est notifié à
+      l'adhérent à ce stade : la décision finale se prend en comité.
+    niveaux: [ELEVE]

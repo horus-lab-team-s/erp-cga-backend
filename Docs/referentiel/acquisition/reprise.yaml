@@ -1,0 +1,43 @@
+# Au bout de combien de temps la machine reprend la main sur un dossier affecté.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ REPRENDRE N'EST PAS SIGNALER
+#
+# La veille (`veille.yaml`) dit qu'un dossier dort. La reprise **agit** : elle
+# désigne quelqu'un d'autre. C'est le seul geste que la plateforme s'autorise à
+# faire sans qu'un humain le demande, et il mérite d'être justifié.
+#
+# Il l'est par ce qu'il coûte de ne pas le faire. Un prospect rappelé le
+# lendemain est presque toujours perdu, et il ne le dit jamais : il ne se
+# plaint pas, il ne répond plus. Le retard ne produit aucun signal, sauf celui-ci.
+#
+# Et le geste est réversible et borné : le dossier reste ouvert, le responsable
+# précédent n'est pas sanctionné, et la limite de trois reprises appartient au
+# domaine. Au-delà, c'est un arbitrage humain qu'il faut, pas un tour de plus.
+#
+# LE DÉLAI EST PLUS COURT QUE CELUI DE LA VEILLE, ET C'EST VOULU
+#
+# 24 heures ici, 48 heures pour l'alerte sur le même état. La reprise remet
+# l'ancienneté à zéro : un dossier n'atteint donc les 48 heures que si la reprise
+# **n'a pas pu aboutir** — plus aucun candidat, ou limite atteinte.
+#
+# ⚠️ C'est ce qui donne son sens à l'alerte. « Personne n'a rappelé » serait du
+# bruit ; « la machine a essayé de passer la main et n'a pas pu » est une
+# information sur laquelle un responsable de pôle peut agir.
+#
+# METTRE `actif` À FAUX SUFFIT À TOUT ARRÊTER
+#
+# Sans redéploiement. Un cabinet qui veut d'abord observer pendant un mois, ou
+# qui juge que ses collaborateurs doivent garder leurs dossiers, coupe le geste
+# et garde la veille.
+# ─────────────────────────────────────────────────────────────────────────────
+
+actif: true
+
+# Vingt-quatre heures ouvrées seraient plus justes, et c'est délibérément
+# **pas** ce qui est écrit : la plateforme n'a pas de calendrier ouvré, et en
+# inventer un ici le mettrait à un endroit où personne n'irait le chercher.
+# Un dossier déposé le vendredi soir est donc repris le samedi soir, ce qui ne
+# fait de mal à personne puisque la reprise ne réveille pas le nouveau
+# responsable : elle dépose un fait qu'il lira lundi.
+apres_heures: 24

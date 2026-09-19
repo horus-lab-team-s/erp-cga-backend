@@ -1,0 +1,21 @@
+# Le dépôt d'une déclaration de TVA (pas 109).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CE FICHIER DÉCIDE
+#
+# « Le comptable transmet, il ne dépose pas : le dépôt appartient au réviseur,
+# après contrôle » (maquette « Parcours comptable », vue D).
+#
+#   revue_du_mois_exigee   ce que la revue du mois doit être avant le dépôt :
+#                          AUCUNE      rien n'est exigé ;
+#                          TRANSMISE   le mois a été transmis au réviseur (ou validé) ;
+#                          VALIDEE     le réviseur a validé le mois.
+#   niveau_si_manquante    BLOQUANT (le dépôt est refusé) ou RESERVE (il s'assume).
+#
+# Sans ce fichier, les mêmes valeurs. ⚠️ À arrêter par le réviseur et la direction :
+# exiger VALIDEE retarde le dépôt jusqu'au second regard, ce qui peut coûter une
+# échéance ; TRANSMISE garantit au moins que le mois est clos et verrouillé.
+# ─────────────────────────────────────────────────────────────────────────────
+
+revue_du_mois_exigee: TRANSMISE
+niveau_si_manquante: BLOQUANT

@@ -1,0 +1,18 @@
+code: CHG-RET-001
+libelle: Exercices en retard à rattraper
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1, critère « rattrapage ». Un exercice en retard se traite en plus du courant, jamais à la place.
+  source: Grille de charge du centre, à transmettre
+
+# Un exercice en retard se traite en plus du courant, jamais à la place.
+# VRAI = dossier ordinaire. FAUX = le critère est atteint, les points s'ajoutent.
+predicat:
+  "==": [{ var: exercices_en_retard }, 0]
+
+points: 15
+
+statut: A_VALIDER

@@ -1,0 +1,15 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# La file d'anomalies du réviseur (pas 117)
+#
+# Maquette « Parcours réviseur CGA », vue A : tout le portefeuille, par gravité et par
+# enjeu fiscal, pas dossier par dossier.
+#
+# ⚠️ Un constat qui dort est un risque : au-delà du seuil, il est signalé et remonte
+# d'un cran dans le tri, sans que sa gravité affichée change.
+# ⚠️ Les constats bloquants ne se retirent pas de la file : le chargement le refuse.
+# ─────────────────────────────────────────────────────────────────────────────
+
+seuil_anciennete_jours: 15
+
+# L'information n'y figure pas : elle n'appelle aucune décision du réviseur.
+gravites_traitees: [BLOQUANT, MAJEUR, AVERTISSEMENT]

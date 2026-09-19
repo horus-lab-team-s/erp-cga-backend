@@ -55,7 +55,7 @@ COMPTABLE_AUTRE = "c.ndongo@cga-brcg.cm"
 CHARGEE_DE_CLIENTELE = "p.moukouri@cga-brcg.cm"
 REVISEUR = "a.bouba@cga-brcg.cm"
 LE = datetime(2026, 8, 10, 9)
-REFERENTIEL = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+REFERENTIEL = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
 
 
 @pytest.fixture(autouse=True)

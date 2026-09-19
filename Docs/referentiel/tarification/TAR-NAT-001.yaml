@@ -1,0 +1,17 @@
+code: TAR-NAT-001
+libelle: Apports en nature
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Un apport en nature peut exiger un commissaire aux apports, et impose dans tous les cas une évaluation à documenter.
+  source: Barème d'honoraires du centre, à transmettre
+
+# VRAI = cas ordinaire, aucun ajustement. FAUX = le critère est atteint.
+predicat:
+  "==": [{ var: apports_en_nature }, false]
+
+montant: 75000
+
+statut: A_VALIDER

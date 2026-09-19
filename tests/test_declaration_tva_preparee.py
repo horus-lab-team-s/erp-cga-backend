@@ -60,7 +60,7 @@ from app.contextes.transverse.api import MOT_DE_PASSE_DEMO, reinitialiser_atelie
 from app.main import creer_application
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
-REFERENTIEL = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+REFERENTIEL = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
 LE = datetime(2026, 8, 10, 9)
 JUILLET = (date(2026, 7, 1), date(2026, 7, 31))
 

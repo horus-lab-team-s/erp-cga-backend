@@ -143,7 +143,7 @@ class TestLesAbonnementsSontDeclares:
         assert politique.abonnements
         code = "\n".join(
             f.read_text(encoding="utf-8")
-            for f in (RACINE_DEPOT / "Backend_erp_cga" / "app").rglob("*.py")
+            for f in (RACINE_DEPOT / "app").rglob("*.py")
         )
         orphelines = [a.action for a in politique.abonnements if f'"{a.action}"' not in code]
         assert not orphelines

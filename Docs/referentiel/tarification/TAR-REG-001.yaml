@@ -1,0 +1,17 @@
+code: TAR-REG-001
+libelle: Siège hors du Littoral
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Le centre est établi à Douala. Un siège dans une autre région suppose des déplacements ou une correspondance avec un centre des impôts que le cabinet ne pratique pas au quotidien.
+  source: Barème d'honoraires du centre, à transmettre
+
+# VRAI = cas ordinaire, aucun ajustement. FAUX = le critère est atteint.
+predicat:
+  "==": [{ var: region_siege }, "LITTORAL"]
+
+taux: 0.15
+
+statut: A_VALIDER

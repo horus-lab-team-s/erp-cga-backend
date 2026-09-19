@@ -260,7 +260,7 @@ class TestLaSondeDuReferentielElargieAuxBaremes:
 
     @staticmethod
     def _poser_les_parametres(dossier: Path) -> None:
-        source = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+        source = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
         (dossier / "parametres.yaml").write_text(
             (source / "parametres.yaml").read_text(encoding="utf-8"), encoding="utf-8"
         )

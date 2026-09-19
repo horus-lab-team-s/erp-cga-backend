@@ -1,0 +1,44 @@
+# La charge des collaborateurs et les réaffectations proposées (pas 105).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CE FICHIER NE MESURE PERSONNE
+#
+# La charge décrit la répartition du travail entre collaborateurs, pour la
+# rééquilibrer. Ce n'est pas une mesure de performance : la plateforme ne sait
+# pas qui a traité une pièce, elle sait sur quels dossiers elle a été traitée.
+#
+# LES POINTS D'UN DOSSIER
+#
+#   points_par_dossier            tout dossier porté, même calme
+#   points_par_piece_en_attente   chaque pièce reçue non traitée
+#   points_par_echeance_du_mois   chaque obligation non déposée échéant ce mois
+#   points_par_retard             chaque obligation échue non déposée
+#
+# LA CHARGE
+#
+#   charge (%) = points portés × 100 / capacité du rôle
+#
+# Un rôle absent de `capacite_par_role` n'a pas de charge en pourcentage, et rien
+# ne lui est proposé.
+#
+# LES RÉAFFECTATIONS PROPOSÉES
+#
+# Au-delà de `seuil_de_saturation`, la plateforme cherche des dossiers qu'un
+# collègue du même rôle peut reprendre sans dépasser `seuil_cible`. Elle propose ;
+# la direction valide. `seuil_cible` ne peut pas dépasser `seuil_de_saturation`.
+#
+# Une clé mal orthographiée fait échouer le chargement.
+# ⚠️ Valeurs de départ, à arrêter par la direction du cabinet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+capacite_par_role:
+  COMPTABLE: 150
+  CHARGE_CLIENTELE: 400
+
+points_par_dossier: 10
+points_par_piece_en_attente: 1
+points_par_echeance_du_mois: 3
+points_par_retard: 1
+
+seuil_de_saturation: 90
+seuil_cible: 85

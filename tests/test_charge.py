@@ -36,7 +36,7 @@ D = Decimal
 AUJOURD_HUI = date(2026, 9, 9)
 
 
-RACINE_CHARGE = Path(__file__).resolve().parents[2] / "Docs" / "referentiel" / "charge"
+RACINE_CHARGE = Path(__file__).resolve().parents[1] / "Docs" / "referentiel" / "charge"
 
 
 @pytest.fixture(scope="session")

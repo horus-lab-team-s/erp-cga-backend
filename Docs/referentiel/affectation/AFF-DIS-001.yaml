@@ -1,0 +1,17 @@
+code: AFF-DIS-001
+libelle: Responsable indisponible
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Un responsable en congé, en mission longue ou sorti des effectifs ne prend pas de nouveau dossier. Lui en affecter un produirait une demande sans contact pendant toute son absence, et la réaffectation automatique n'interviendrait qu'après le délai de veille.
+  source: Organisation interne du centre, note de service à transmettre
+
+# VRAI = disponible. FAUX = ne prend pas de dossier aujourd'hui.
+predicat:
+  "==": [{ var: disponible }, true]
+
+redhibitoire: true
+
+statut: A_VALIDER

@@ -1,0 +1,31 @@
+code: AFF-PRX-001
+libelle: Agence différente de la région déclarée
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Un client préfère traiter avec l'agence de sa ville, et un responsable local sait ce qu'il en coûte de se rendre au centre des impôts du coin. La proximité est une préférence forte, jamais une obligation : une région sans agence doit rester servie.
+  source: Organisation interne du centre, note de service à transmettre
+
+# ⚠️ VRAI = même agence, donc rien à signaler. FAUX = éloignement, la pénalité
+# s'ajoute. La formulation surprend : elle suit la convention des trois domaines.
+#
+# ⚠️ UNE RÉGION NON DÉCLARÉE NE SIGNALE RIEN (pas 64).
+#
+# Ce critère pénalisait tout le monde également quand le visiteur n'avait rien dit,
+# avec ce commentaire : « l'effet est nul sur le classement, et c'est voulu ». Le
+# classement était bien intact. Mais la réserve s'écrivait dans le motif de CHAQUE
+# affectation venue du site, qui ne collecte aucune région : « réserves : Agence
+# différente de la région déclarée ». La console d'acquisition l'aurait affiché à
+# chaque dossier, et un responsable aurait lu qu'on avait pesé une région que
+# personne n'a déclarée. On ne devine toujours pas où habite quelqu'un qui n'a rien
+# dit ; on ne prétend plus non plus qu'il habite ailleurs.
+predicat:
+  or:
+    - "==": [{ var: region_demande }, ""]
+    - "==": [{ var: meme_agence }, true]
+
+penalite: 30
+
+statut: A_VALIDER

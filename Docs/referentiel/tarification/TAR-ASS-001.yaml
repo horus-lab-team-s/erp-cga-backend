@@ -1,0 +1,17 @@
+code: TAR-ASS-001
+libelle: Plus de trois associés
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Chaque associé supplémentaire ajoute une pièce d'identité à collecter, une signature à recueillir et une ligne aux statuts. Au delà de trois, le temps de coordination devient sensible.
+  source: Barème d'honoraires du centre, à transmettre
+
+# VRAI = cas ordinaire, aucun ajustement. FAUX = le critère est atteint.
+predicat:
+  "<=": [{ var: associes }, 3]
+
+montant: 40000
+
+statut: A_VALIDER

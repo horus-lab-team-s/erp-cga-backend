@@ -25,7 +25,7 @@ from app.contextes.tenants.domaine.slug import (
     valider,
 )
 
-RACINE_TENANTS = Path(__file__).resolve().parents[2] / "Docs" / "referentiel" / "tenants"
+RACINE_TENANTS = Path(__file__).resolve().parents[1] / "Docs" / "referentiel" / "tenants"
 
 
 @pytest.fixture(scope="session")

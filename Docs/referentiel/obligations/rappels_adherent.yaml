@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Les rappels d'échéance de l'adhérent (pas 115)
+#
+# Maquette « Espace adhérent CGA », vue F : « Rappels avant les échéances · 7 jours et
+# 2 jours avant ». L'adhérent choisit ses moments parmi les jalons possibles ; un
+# travail périodique envoie le rappel dû, par courriel et dans son espace, une seule
+# fois par échéance et par jalon.
+#
+# ⚠️ Un jalon est un seuil, pas une date : le rappel « 7 jours avant » part dès que
+# l'échéance est à 7 jours ou moins. Un travail arrêté le bon jour rattrape le
+# lendemain au lieu de perdre le rappel.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Les moments proposés, en jours avant l'échéance.
+jalons_possibles: [7, 3, 2, 1]
+
+# Ce qui vaut pour un adhérent qui n'a jamais rien réglé.
+actifs_par_defaut: true
+jalons_par_defaut: [7, 2]
+
+# Le rythme du travail périodique, en minutes.
+cadence_minutes: 60
+
+# Pourquoi « Recevoir aussi par WhatsApp » est grisé.
+motif_whatsapp: "Le compte d'envoi WhatsApp du cabinet n'est pas encore ouvert."

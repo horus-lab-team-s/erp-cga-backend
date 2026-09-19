@@ -1,0 +1,18 @@
+code: CHG-REG-001
+libelle: Régime du réel normal
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1, critère « régime ». Le réel normal impose des déclarations mensuelles et des états complets, là où le simplifié se contente d'un rythme trimestriel.
+  source: Grille de charge du centre, à transmettre
+
+# Le réel normal impose des déclarations mensuelles et des états complets.
+# VRAI = dossier ordinaire. FAUX = le critère est atteint, les points s'ajoutent.
+predicat:
+  "!=": [{ var: regime_fiscal }, "REEL_NORMAL"]
+
+points: 12
+
+statut: A_VALIDER

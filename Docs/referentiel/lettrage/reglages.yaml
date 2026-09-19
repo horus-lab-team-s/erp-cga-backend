@@ -1,0 +1,23 @@
+# Le lettrage des comptes de tiers (pas 108).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CES VALEURS DÉCIDENT
+#
+# Lettrer apparie, sur un compte fournisseur, client ou personnel, les mouvements
+# qui se soldent (la facture et son règlement). Ce qui reste non lettré est ce qui
+# est réellement ouvert.
+#
+#   ecart_tolere       l'écart admis entre débit et crédit d'un lettrage, en FCFA.
+#                      0 : la sélection doit se solder exactement. Un écart admis
+#                      est un reste dû qu'on accepte de ne plus voir : ne le relever
+#                      que pour des arrondis, et en connaissance de cause.
+#   meme_tiers_exige   toutes les lignes qui portent un tiers portent le même.
+#                      true : lettrer la facture d'ALPHA avec le règlement de BÊTA
+#                      est refusé.
+#
+# Sans ce fichier, les mêmes valeurs. Une clé mal orthographiée fait échouer le
+# chargement. ⚠️ Valeurs de départ, à arrêter par le réviseur du cabinet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ecart_tolere: 0
+meme_tiers_exige: true

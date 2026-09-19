@@ -1,0 +1,124 @@
+# Référentiel normatif — barèmes progressifs
+#
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │  AVERTISSEMENT                                                             │
+# │                                                                            │
+# │  Aucune valeur de ce fichier n'a été validée sur le Code Général des       │
+# │  Impôts. Toutes proviennent de sources secondaires. Elles sont au statut   │
+# │  A_VALIDER.                                                                │
+# │                                                                            │
+# │  ⚠️ Un barème faux ne se voit pas. Un taux erroné sur une facture se        │
+# │  remarque ; un impôt sur salaire calculé sur un barème périmé sort un      │
+# │  bulletin plausible, signé, remis au salarié, et le redressement arrive    │
+# │  trois ans plus tard sur toute la masse salariale.                         │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# Format d'une version :
+#   tranches        liste de { plancher, plafond, taux } — plafond exclu,
+#                   `plafond: null` pour la dernière tranche
+#   applicable_du   date d'entrée en vigueur
+#   applicable_au   null = toujours en vigueur
+#   statut          A_VALIDER | VALIDE | ABROGE
+#   fondement       texte + source, OBLIGATOIRE
+#
+# Les tranches doivent être contiguës, commencer à zéro et finir ouvertes.
+# `VersionBareme` le vérifie à la construction : une erreur de saisie fait
+# échouer le démarrage plutôt que de sortir un bulletin faux.
+
+version_referentiel: "2026.1"
+mis_a_jour_le: 2026-08-17
+
+baremes:
+
+  - code: IRPP_SALAIRES
+    libelle: >-
+      Barème progressif de l'impôt sur le revenu des personnes physiques,
+      catégorie traitements et salaires — assiette annuelle
+    categorie: PAIE
+    versions:
+      - tranches:
+          - plancher: 0
+            plafond: 2000000
+            taux: 10
+          - plancher: 2000000
+            plafond: 3000000
+            taux: 15
+          - plancher: 3000000
+            plafond: 5000000
+            taux: 25
+          - plancher: 5000000
+            plafond: null
+            taux: 35
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            CGI art. 69 — barème de l'IRPP applicable au revenu net catégoriel des
+            traitements, salaires, pensions et rentes viagères
+          source: Document de cadrage ; sources secondaires concordantes
+        note: >-
+          ⚠️ TROIS RÉSERVES, toutes à lever par le fiscaliste avant toute paie réelle.
+          1. Le barème est **annuel** : l'appliquer à un salaire mensuel donnerait un
+             impôt dix fois trop élevé. Le calcul mensualise, voir `application/paie.py`.
+          2. Les centimes additionnels communaux (10 %) s'ajoutent **après** ce barème
+             et ne sont pas inclus dans ces taux — voir CAC_TAUX.
+          3. L'assiette est le revenu **net** après abattement pour frais
+             professionnels et abattement forfaitaire : ce ne sont pas les tranches
+             qui portent l'abattement mais le calcul qui les précède.
+
+  - code: TDL_SALAIRES
+    libelle: >-
+      Taxe de développement local retenue sur salaires — barème par tranche de
+      salaire de base mensuel
+    categorie: PAIE
+    versions:
+      - tranches:
+          - plancher: 0
+            plafond: 62000
+            taux: 0
+          - plancher: 62000
+            plafond: 75000
+            taux: 0.4
+          - plancher: 75000
+            plafond: 100000
+            taux: 0.5
+          - plancher: 100000
+            plafond: 125000
+            taux: 0.6
+          - plancher: 125000
+            plafond: 150000
+            taux: 0.8
+          - plancher: 150000
+            plafond: 200000
+            taux: 1.0
+          - plancher: 200000
+            plafond: 250000
+            taux: 1.2
+          - plancher: 250000
+            plafond: 300000
+            taux: 1.4
+          - plancher: 300000
+            plafond: 500000
+            taux: 1.6
+          - plancher: 500000
+            plafond: null
+            taux: 2.0
+        applicable_du: 2012-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            Loi n° 2009/019 portant fiscalité locale — taxe de développement local
+            retenue à la source sur les salaires
+          source: Sources secondaires
+        note: >-
+          ⚠️ RÉSERVE MAJEURE, ET DE NATURE DIFFÉRENTE DES AUTRES.
+          La TDL est en réalité un barème **par paliers à montant fixe** — un montant
+          mensuel forfaitaire par tranche de salaire, non un pourcentage. Elle est
+          modélisée ici en taux faute de structure « montant fixe par tranche », ce
+          qui donne un ordre de grandeur et **non le montant exact**.
+          Deux issues possibles, à trancher par le fiscaliste : soit les montants
+          réels s'expriment correctement en taux et ce barème se corrige, soit il
+          faut ajouter au référentiel un type de tranche à montant fixe. Tant que
+          cette réserve n'est pas levée, la TDL du bulletin est indicative.

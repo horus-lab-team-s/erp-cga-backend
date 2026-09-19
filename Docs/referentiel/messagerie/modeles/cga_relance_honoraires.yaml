@@ -1,0 +1,11 @@
+nom: cga_relance_honoraires
+libelle: Relance d'honoraires
+langue: fr
+categorie: UTILITAIRE
+statut: EN_ATTENTE
+usage: >-
+  Sur un honoraire échu, avec une gradation dans le ton portée par le paramètre {{4}} plutôt que par quatre modèles distincts.
+corps: |-
+  Bonjour {{1}}, la facture n° {{2}} d'un montant de {{3}} FCFA est échue.
+  {{4}}
+  Si le règlement est déjà parti, merci de nous l'indiquer par retour.

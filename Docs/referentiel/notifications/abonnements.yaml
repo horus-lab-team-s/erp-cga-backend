@@ -1,0 +1,329 @@
+# Les abonnements aux notifications (pas 94).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# UNE NOTIFICATION EST UNE LECTURE DU JOURNAL D'AUDIT
+#
+# Aucun geste n'écrit de notification. Chaque geste qui compte écrit déjà au journal
+# d'audit (qui, quoi, sur quel objet). Un abonnement dit : pour cette action du
+# journal, qui est concerné, et comment l'annoncer. Ajouter une notification, c'est
+# ajouter un abonnement ici, sans toucher au code du geste.
+#
+# LES DESTINATAIRES, TROIS RÈGLES QUI SE CUMULENT
+#
+#   permissions  la personne détient l'une d'elles
+#   dossier      le champ de l'entrée qui porte le NIU : la personne doit voir ce
+#                dossier. Une entrée sans ce champ n'est reçue par personne.
+#   compte       le champ de l'entrée qui porte un identifiant de compte : seule
+#                cette personne reçoit.
+#
+# Un abonnement sans `permissions` ni `compte` est refusé au chargement : il
+# notifierait tout le cabinet. On ne reçoit jamais l'avis de son propre geste.
+#
+# LES CONDITIONS
+#
+# `si: {champ: valeur}` restreint un abonnement aux entrées dont les champs valent
+# exactement ces valeurs. Une même action s'annonce ainsi selon son issue. Pour une
+# entrée, c'est le PREMIER abonnement qui correspond, dans l'ordre de ce fichier.
+#
+# LES GABARITS
+#
+# `{champ}` est lu dans les données de l'entrée (`apres`), `{objet_id}` dans son
+# objet. Un champ absent s'affiche « ? ». ⚠️ Le motif d'une entrée n'est jamais
+# accessible : c'est souvent une note interne, et les notifications sont lues par
+# des personnes qui n'ont pas accès au journal d'audit.
+#
+# Une action abonnée qu'aucun code n'écrit ne notifierait jamais : un test le
+# vérifie, ainsi que chaque champ employé par un gabarit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Au-delà, une notification non lue est de l'archive, consultable au journal.
+fenetre_jours: 30
+
+abonnements:
+
+  # ── Conformité : le second regard ne doit pas attendre qu'on tombe dessus ──
+  - action: conformite.ecart_propose
+    si: {statut: EN_ATTENTE}
+    destinataires:
+      permissions: [ECARTER_CONSTAT, MODIFIER_REGLE]
+      dossier: dossier
+    titre: "Écart à trancher sur {piece}"
+    texte: "La règle {regle} ({severite}) est proposée à l'écart et attend un second regard. Le constat compte jusque-là."
+    lien: "/pieces/{piece}"
+
+  - action: conformite.ecart_propose
+    si: {statut: EFFECTIF}
+    destinataires:
+      # Pas 103 : les comptables du dossier aussi (SAISIR_ECRITURE) : un écart effectif change
+      # la proposition d'écriture de la pièce, et la maquette veut qu'ils en soient prévenus.
+      permissions: [ECARTER_CONSTAT, SAISIR_ECRITURE]
+      dossier: dossier
+    titre: "Constat écarté sur {piece}"
+    texte: "La règle {regle} ({severite}) a été écartée sans second regard, comme la politique le permet."
+    lien: "/pieces/{piece}"
+
+  - action: conformite.ecart_confirme
+    destinataires:
+      permissions: [ECARTER_CONSTAT]
+      dossier: dossier
+    titre: "Écart confirmé sur {piece}"
+    texte: "Le constat {regle} ne compte plus : la proposition d'écriture en tient compte."
+    lien: "/pieces/{piece}"
+
+  - action: conformite.ecart_refuse
+    destinataires:
+      permissions: [ECARTER_CONSTAT]
+      dossier: dossier
+    titre: "Écart refusé sur {piece}"
+    texte: "Le constat {regle} continue de compter."
+    lien: "/pieces/{piece}"
+
+  - action: conformite.ecart_leve
+    destinataires:
+      permissions: [ECARTER_CONSTAT, SAISIR_ECRITURE]
+      dossier: dossier
+    titre: "Écart levé sur {piece}"
+    texte: "Le constat {regle} compte de nouveau. Une écriture proposée avant la levée est à reprendre."
+    lien: "/pieces/{piece}"
+
+  # ── Obligations : l'adhérent apprend que sa déclaration est partie ──
+  - action: obligation.deposee
+    destinataires:
+      permissions: [LIRE_DOSSIER]
+      dossier: dossier
+    titre: "Déclaration {obligation} déposée"
+    texte: "Accusé de réception {accuse}, pour le dossier {dossier}."
+    lien: "/obligations"
+
+  # ── Accès : celui qui reçoit un accès ou un dossier le sait ──
+  - action: habilitation.accordee
+    destinataires:
+      compte: compte
+    titre: "Un accès vous a été accordé"
+    texte: "Rôle {role}, à compter du {debut}."
+    lien: "/tableau-de-bord"
+
+  - action: dossier.affecte
+    destinataires:
+      compte: compte
+    titre: "Le dossier {niu} vous est confié"
+    texte: "Il figure désormais dans votre portefeuille."
+    lien: "/portefeuille/{niu}"
+
+  # ── Souscription et paiements : ce qui attend l'administration ──
+  - action: souscription.verification_requise
+    destinataires:
+      permissions: [GERER_COMPTES]
+    titre: "Souscription {objet_id} payée, identité à vérifier"
+    texte: "L'accès au dossier {niu} ne s'ouvre qu'après vérification de l'identité du souscripteur."
+    lien: "/souscriptions"
+
+  - action: paiement.montant_incoherent
+    destinataires:
+      permissions: [GERER_COMPTES]
+    titre: "Paiement {objet_id} rejeté"
+    texte: "{recu} FCFA reçus pour {attendu} FCFA attendus : à régulariser avec le client."
+    lien: "/souscriptions"
+
+  - action: paiement.non_affecte
+    destinataires:
+      permissions: [GERER_COMPTES]
+    titre: "Paiement reçu sans référence connue"
+    texte: "Montant {montant} FCFA, référence du prestataire {reference_externe} : à rapprocher à la main."
+    lien: "/souscriptions"
+
+  # ── Référentiel : une proposition attend qui a qualité pour la valider (pas 95) ──
+  - action: referentiel.version_proposee
+    si: {nature: LOI}
+    destinataires:
+      permissions: [MODIFIER_PARAMETRE, DEPOSER_DECLARATION]
+    titre: "Nouvelle valeur proposée pour {code}"
+    texte: "{valeur} à compter du {applicable_du}. Sans effet tant qu'une autre personne qualifiée ne l'a pas validée."
+    lien: "/referentiel"
+
+  - action: referentiel.version_proposee
+    si: {nature: POLITIQUE_CABINET}
+    destinataires:
+      permissions: [ARRETER_POLITIQUE]
+    titre: "Réglage proposé pour {code}"
+    texte: "{valeur} à compter du {applicable_du}. À arrêter par la direction."
+    lien: "/referentiel"
+
+  - action: referentiel.proposition_validee
+    destinataires:
+      permissions: [MODIFIER_PARAMETRE, ARRETER_POLITIQUE, DEPOSER_DECLARATION]
+    titre: "{code} : nouvelle valeur validée"
+    texte: "{valeur} à compter du {applicable_du}, appliquée aux calculs du cabinet."
+    lien: "/referentiel"
+
+  - action: referentiel.version_validee
+    destinataires:
+      permissions: [MODIFIER_PARAMETRE, ARRETER_POLITIQUE]
+    titre: "{code} : version du {applicable_du} validée"
+    texte: "Elle n'est plus « à valider » dans les calculs du cabinet."
+    lien: "/referentiel"
+
+  # ── Règles de conformité construites à l'écran (pas 97) ──
+  - action: conformite.regle_proposee
+    destinataires:
+      permissions: [MODIFIER_REGLE, DEPOSER_DECLARATION]
+    titre: "Règle à valider : {libelle}"
+    texte: "Sévérité {severite}. À l'essai, elle réagit sur {reagit} des {eprouvees} factures éprouvées. Sans effet tant qu'une autre personne ne l'a pas validée."
+    lien: "/referentiel"
+
+  - action: conformite.regle_validee
+    destinataires:
+      permissions: [MODIFIER_REGLE, DEPOSER_DECLARATION, CONTROLER_CONFORMITE]
+    titre: "Nouvelle règle en vigueur : {libelle}"
+    texte: "Elle contrôle les factures du cabinet dès maintenant (règle {regle})."
+    lien: "/referentiel"
+
+  # ── Retraits (pas 98) : qui calcule avec la valeur ou la règle doit savoir qu'elle cesse ──
+  - action: referentiel.decision_retiree
+    destinataires:
+      permissions: [MODIFIER_PARAMETRE, ARRETER_POLITIQUE, DEPOSER_DECLARATION]
+    titre: "{code} : décision du cabinet retirée"
+    texte: "À compter du {fin_d_effet}, la valeur du référentiel commun reprend."
+    lien: "/referentiel"
+
+  - action: conformite.regle_retiree
+    destinataires:
+      permissions: [MODIFIER_REGLE, DEPOSER_DECLARATION, CONTROLER_CONFORMITE]
+    titre: "Règle retirée : {libelle}"
+    texte: "À compter du {fin_d_effet}, elle ne contrôle plus les factures du cabinet (règle {regle})."
+    lien: "/referentiel"
+
+  # ── Qualité des règles (pas 99) : le réviseur signale, le fiscaliste corrige ──
+  - action: conformite.regle_signalee
+    destinataires:
+      permissions: [MODIFIER_REGLE]
+    titre: "Règle signalée : {regle}"
+    texte: "{par} la signale comme à revoir ({libelle}). Le motif est au journal ; la corriger au constructeur, puis l'éprouver."
+    lien: "/conformite/qualite"
+
+  # ── Pilotage (pas 100) : une mesure de direction se suit par ceux qui portent le dossier ──
+  # Ni l'adhérent ni l'inspecteur : les permissions retenues sont celles du travail sur le
+  # dossier. Le score et le motif restent hors de la notification (le motif n'est jamais
+  # accessible à un gabarit) ; le lien mène à la fiche, où la décision est lisible en entier.
+  - action: pilotage.decision_prise
+    destinataires:
+      permissions: [SAISIR_ECRITURE, RELANCER_ADHERENT]
+      dossier: dossier
+    titre: "Mesure de direction : {libelle}"
+    texte: "{par} a décidé cette mesure sur le dossier {dossier}. Elle est en cours jusqu'à sa clôture."
+    lien: "/portefeuille/{dossier}"
+
+  - action: pilotage.decision_close
+    destinataires:
+      permissions: [SAISIR_ECRITURE, RELANCER_ADHERENT]
+      dossier: dossier
+    titre: "Mesure close : {libelle}"
+    texte: "{par} a clos cette mesure sur le dossier {dossier}."
+    lien: "/portefeuille/{dossier}"
+
+  # ── Rapprochement bancaire (pas 101) : un mouvement sans pièce se demande à l'adhérent ──
+  # Le comptable qui rapproche ne relance pas lui-même : la demande arrive à qui relance.
+  - action: comptabilite.piece_bancaire_demandee
+    destinataires:
+      permissions: [RELANCER_ADHERENT]
+      dossier: dossier
+    titre: "Pièce à demander : {libelle}"
+    texte: "{par} ne trouve aucun justificatif pour ce mouvement bancaire du {date} ({montant} FCFA). À demander à l'adhérent avant toute écriture."
+    lien: "/comptabilite/rapprochement/{identifiant}?dossier={dossier}"
+
+  # ── Revue d'un mois transmis (pas 102) : les passages de relais entre comptable et réviseur ──
+  - action: comptabilite.mois_transmis
+    destinataires:
+      permissions: [REVISER_DOSSIER]
+      dossier: dossier
+    titre: "Mois à réviser : {dossier}"
+    texte: "{par} transmet la période {periode}. L'échantillon des écritures atypiques est prêt."
+    lien: "/comptabilite/revues/{identifiant}?dossier={dossier}"
+
+  # Pas 111 : la relance des pièces du mois, composée par le comptable, arrive dans l'espace de
+  # l'adhérent. Une entrée par compte adhérent : c'est ce qui permet de savoir s'il l'a lue.
+  - action: pilotage.relance_a_l_adherent
+    destinataires:
+      compte: compte
+    titre: "Pièces manquantes pour {mois}"
+    texte: "{nombre} pièce(s) attendue(s) avant le {date_limite}, faute de quoi votre déclaration sera établie sans elles."
+    lien: "/mon-espace"
+
+  # Pas 112 : l'adhérent répond à une demande depuis son espace. Ceux qui relancent les pièces du
+  # dossier le lisent : c'est ce qui décide de la relance suivante (ne pas relancer celui qui a dit
+  # « la semaine prochaine » il y a deux jours, classer ce qu'il n'a pas).
+  - action: collecte.demande_repondue
+    destinataires:
+      permissions: [RELANCER_PIECES]
+      dossier: dossier
+    titre: "Réponse de l'adhérent : {piece}"
+    texte: "{par} ({dossier}) : {texte}"
+    lien: "/pieces/relancer?dossier={dossier}"
+
+  # Pas 113 : l'adhérent envoie la quittance d'une échéance. Ceux qui consignent les dépôts du
+  # dossier la lisent, et la joignent à l'accusé : la preuve seule ne déclare rien.
+  - action: obligations.preuve_de_paiement_recue
+    destinataires:
+      permissions: [DEPOSER_DECLARATION]
+      dossier: dossier
+    titre: "Preuve de paiement reçue : {libelle}, {periode}"
+    texte: "{par} ({dossier}) envoie la pièce {piece}. La vérifier, puis consigner le dépôt avec elle en pièce jointe."
+    lien: "/obligations?dossier={dossier}"
+
+  # Pas 114 : l'adhérent signale un changement de son entreprise. Le chargé de clientèle du dossier
+  # instruit : rien ne change au dossier tant qu'il ne l'a pas fait.
+  - action: portefeuille.changement_signale
+    destinataires:
+      permissions: [RELANCER_ADHERENT]
+      dossier: dossier
+    titre: "Changement signalé : {changement}, {denomination}"
+    texte: "À instruire, puis mettre le dossier à jour. {par} ({dossier}) : « {message} »"
+    lien: "/portefeuille/{dossier}"
+
+  # Pas 115 : le rappel d'échéance réglé par l'adhérent arrive aussi dans son espace.
+  - action: obligations.rappel_d_echeance
+    destinataires:
+      compte: compte
+    titre: "{titre} : à régler avant le {echeance}"
+    texte: "{periode}, dans {jours} jour(s). Une fois réglée, envoyez la quittance depuis vos échéances."
+    lien: "/mon-espace/echeances"
+
+  # Pas 110 : le comptable signale une écriture au réviseur, depuis sa fiche, à tout moment.
+  - action: comptabilite.ecriture_signalee
+    destinataires:
+      permissions: [REVISER_DOSSIER]
+      dossier: dossier
+    titre: "Écriture signalée : {ecriture}"
+    texte: "{par} signale l'écriture {ecriture} du dossier {dossier} : « {message} »"
+    lien: "/comptabilite/ecritures?dossier={dossier}&exercice={exercice}&journal={journal}&numero={numero}"
+
+  - action: comptabilite.mois_renvoye
+    destinataires:
+      compte: comptable
+    titre: "Mois renvoyé avec {remarques_ouvertes} remarque(s) : {dossier}"
+    texte: "{par} renvoie la période {periode}. Répondre à chaque remarque, puis retransmettre."
+    lien: "/comptabilite/revues/{identifiant}?dossier={dossier}"
+
+  - action: comptabilite.mois_valide
+    destinataires:
+      compte: comptable
+    titre: "Mois validé : {dossier}"
+    texte: "{par} a validé la période {periode}."
+    lien: "/comptabilite/revues/{identifiant}?dossier={dossier}"
+
+  # ── Réaffectation d'un dossier (pas 105) : trois faits, trois publics ──
+  # `dossier.affecte` (celui qui reçoit) est déjà annoncé plus haut.
+  - action: dossier.retire
+    destinataires:
+      compte: compte
+    titre: "Le dossier {niu} ne vous est plus confié"
+    texte: "La direction le confie à un collègue à compter d'aujourd'hui. Vos écritures passées restent à votre nom."
+    lien: "/portefeuille"
+
+  - action: dossier.reaffecte
+    destinataires:
+      permissions: [RELANCER_ADHERENT]
+      dossier: dossier
+    titre: "Nouvel interlocuteur comptable : {dossier}"
+    texte: "Le dossier change de comptable à compter d'aujourd'hui. L'adhérent n'est pas prévenu par la plateforme."
+    lien: "/portefeuille/{dossier}"

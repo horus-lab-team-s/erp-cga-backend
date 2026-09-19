@@ -45,7 +45,7 @@ from app.contextes.transverse.api import MOT_DE_PASSE_DEMO, reinitialiser_atelie
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
 
-REFERENTIEL = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+REFERENTIEL = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
 JOUR = date(2026, 8, 20)
 
 

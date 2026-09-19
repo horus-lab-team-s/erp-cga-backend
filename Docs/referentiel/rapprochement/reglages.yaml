@@ -1,0 +1,21 @@
+# Les réglages du rapprochement bancaire (pas 101).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CES FENÊTRES DÉCIDENT
+#
+# Le moteur ne propose une écriture pour une ligne du relevé que si le MONTANT et le
+# SENS sont identiques (condition, jamais négociable) et si les dates sont assez
+# proches :
+#
+#   fenetre_jours          au-delà, l'écriture n'est même pas proposée ;
+#   fenetre_proche_jours   en deçà, la proximité des dates compte comme un argument,
+#                          et une écriture seule dans cette fenêtre est rapprochée
+#                          automatiquement.
+#
+# Élargir la fenêtre retrouve les chèques encaissés tard, et multiplie les
+# propositions à trier. Sans ce fichier, les mêmes valeurs s'appliquent.
+# Une clé mal orthographiée fait échouer le chargement.
+# ─────────────────────────────────────────────────────────────────────────────
+
+fenetre_jours: 15
+fenetre_proche_jours: 5

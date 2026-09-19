@@ -27,7 +27,7 @@ from collections import defaultdict
 
 from app.infrastructure.config import RACINE_DEPOT
 
-CONTEXTES = RACINE_DEPOT / "Backend_erp_cga" / "app" / "contextes"
+CONTEXTES = RACINE_DEPOT / "app" / "contextes"
 
 #: ⚠️ Figés, donc sans état à partager : le catalogue des types d'obligation est
 #: écrit dans le code. Le construire deux fois ne fait diverger personne.

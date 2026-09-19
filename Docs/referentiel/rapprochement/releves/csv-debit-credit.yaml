@@ -1,0 +1,21 @@
+# Un export de relevé en CSV à deux colonnes de montant, « Débit » et « Crédit »,
+# tenues du point de vue de la BANQUE : le crédit est un versement reçu par
+# l'entreprise, le débit une sortie. Forme la plus courante des banques locales.
+#
+# ⚠️ Profil générique de départ : le confronter à un export réel de chaque banque
+# du cabinet, et en déposer un par banque si leurs colonnes diffèrent. Le moteur ne
+# connaît aucune banque ; il lit ce que ce fichier décrit.
+#
+# Colonnes numérotées à partir de 1, comme dans un tableur :
+#   Date ; Libellé ; Débit ; Crédit
+code: csv-debit-credit
+libelle: "CSV : date, libellé, débit, crédit (point de vue de la banque)"
+separateur: ";"
+encodage: utf-8-sig
+lignes_d_entete: 1
+format_date: "%d/%m/%Y"
+colonne_date: 1
+colonne_libelle: 2
+colonne_debit_banque: 3
+colonne_credit_banque: 4
+separateur_decimal: ","

@@ -1,0 +1,20 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Les réponses toutes faites de l'adhérent à une demande du cabinet (pas 112)
+#
+# Maquette « Espace adhérent CGA », vue C, « Demande du cabinet » : « trois réponses
+# toutes faites couvrent 90 % des cas et évitent la frappe au clavier sur un téléphone
+# d'entrée de gamme ». La première, « Envoyer le relevé », est le dépôt de la pièce ;
+# les deux autres sont ici. Le message libre n'est pas réglé : c'est le champ de saisie.
+#
+# ⚠️ Une réponse ne ferme jamais la demande : le cabinet décide ensuite.
+# ⚠️ Retirer une réponse du fichier ne la supprime pas : elle reprend son libellé par défaut.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Ce que « la semaine prochaine » veut dire : le cabinet lit le jour annoncé (réponse + N).
+jours_si_plus_tard: 7
+
+reponses:
+  - nature: PLUS_TARD
+    libelle: "Je l'aurai la semaine prochaine"
+  - nature: INTROUVABLE
+    libelle: "Je n'ai pas ce document"

@@ -1,0 +1,57 @@
+code: FAC-ACH-007
+libelle: Règlement autre qu'en espèces au-delà du seuil légal
+categorie: DEDUCTIBILITE
+version: "2026.1"
+applicable_du: 2019-01-01
+applicable_au: null
+severite: MAJEUR
+statut: VALIDE
+valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+valide_le: 2026-08-18
+
+fondement:
+  texte: >-
+    CGI art. 143 : « Pour les opérations taxables d'une valeur au moins égale à cent
+    mille (100 000) F CFA, le droit à déduction n'est autorisé qu'à condition que les
+    dites opérations n'aient pas été payées en espèces. » Aucun remboursement de crédit
+    n'est par ailleurs admis sur factures payées en espèces.
+  source: >-
+    DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir », impots.cm,
+    consultée le 18/08/2026 (citation littérale du texte). Le seuil lui-même est porté
+    par SEUIL_ESPECES_DEDUCTIBILITE_TVA, corrigé le même jour de 500 000 à 100 000 FCFA.
+
+# ⚠️ LA BORNE EST STRICTE, ET LE PRÉDICAT LE DIT DÉJÀ
+#
+# Le texte vise les opérations « d'une valeur AU MOINS ÉGALE à cent mille » : à
+# exactement 100 000 FCFA, la déduction est refusée. Le prédicat ci-dessous est
+# écrit « < seuil » et non « <= seuil », ce qui traduit exactement cela. La
+# nuance n'est pas théorique : 100 000 rond est précisément le montant que
+# choisit un fournisseur qui cherche la limite.
+
+portee:
+  type_document: [FACTURE_ACHAT]
+  # La règle ne concerne que les adhérents assujettis. Un adhérent au régime
+  # synthétique ne récupère JAMAIS la TVA : elle est un coût définitif, incorporé
+  # au prix d'achat, que le règlement soit en espèces ou non. Lui annoncer une
+  # « TVA non déductible » énoncerait un préjudice inexistant — et une règle
+  # écartée à chaque fois finit par être ignorée le jour où elle a raison.
+  regimes_destinataire: [REEL]
+
+# predicat VRAI = conforme. FAUX = constat émis.
+# Conforme si le règlement n'est pas en espèces, OU si le montant reste sous le seuil.
+predicat:
+  or:
+    - "!=": [{ var: reglement.mode }, "ESPECES"]
+    - "<": [{ var: montants.total_ttc }, { param: SEUIL_ESPECES_DEDUCTIBILITE_TVA }]
+
+consequence:
+  tva_deductible: false
+  poste_reintegration: TAB_PASSAGE.TVA_NON_DEDUCTIBLE
+
+message: >-
+  Le règlement en espèces de cette facture dépasse le seuil légal. La TVA figurant sur
+  cette facture n'est pas déductible.
+
+remediation: >-
+  Obtenir du fournisseur une preuve de règlement bancaire ou par monnaie électronique,
+  ou comptabiliser la TVA en charge non déductible.

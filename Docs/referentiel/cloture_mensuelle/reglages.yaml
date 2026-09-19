@@ -1,0 +1,54 @@
+# La clôture mensuelle d'un dossier (pas 107).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CES VALEURS DÉCIDENT
+#
+# Avant de transmettre un mois au réviseur, le comptable voit des points de
+# contrôle, tous calculés sur les faits. Chaque point est :
+#
+#   actif      calculé et affiché (false : ni l'un ni l'autre) ;
+#   bloquant   non traité, il interdit la transmission (false : il s'affiche
+#              seulement, comme un avertissement).
+#
+# Les points connus (un code inconnu fait échouer le chargement) :
+#
+#   PIECES_A_COMPTABILISER  les pièces datées du mois, ni comptabilisées ni archivées
+#   BROUILLONS              les écritures du mois en brouillon (toujours bloquant)
+#   RAPPROCHEMENT           un rapprochement arrêté couvre la fin du mois, par banque
+#   TRESORERIE              aucun compte de caisse négatif en fin de journée
+#   EQUILIBRE               la balance du mois est équilibrée
+#   NUMEROTATION            les journaux de l'exercice sont sans trou ni doublon
+#   PIECES_ATTENDUES        les demandes de pièces encore ouvertes auprès de l'adhérent
+#   ECARTS_EN_SUSPENS       les écarts de constat proposés sur une pièce du mois,
+#                           qui attendent encore le second regard
+#
+# Un point absent de la liste garde sa valeur par défaut.
+#
+# LE VERROU
+#
+# Un mois est verrouillé (plus aucune saisie, correction, validation ni
+# contre-passation datée du mois) tant qu'une revue le couvre dans l'un des
+# `statuts_qui_verrouillent`. Seuls TRANSMISE et VALIDEE sont admis : un mois
+# renvoyé par le réviseur doit rester corrigeable. Retirer VALIDEE rouvrirait un
+# mois validé à l'écriture ; c'est un choix de cabinet, pas une commodité.
+#
+# ⚠️ Valeurs de départ, à arrêter par le réviseur et la direction du cabinet. La
+# maquette laisse ouverte la question « le réviseur seul, ou la direction ? » :
+# ces valeurs suivent l'hypothèse de la maquette, le réviseur.
+# ─────────────────────────────────────────────────────────────────────────────
+
+points:
+  PIECES_A_COMPTABILISER: { actif: true, bloquant: true }
+  BROUILLONS: { actif: true, bloquant: true }
+  RAPPROCHEMENT: { actif: true, bloquant: true }
+  TRESORERIE: { actif: true, bloquant: true }
+  EQUILIBRE: { actif: true, bloquant: true }
+  NUMEROTATION: { actif: true, bloquant: true }
+  PIECES_ATTENDUES: { actif: true, bloquant: false }
+  ECARTS_EN_SUSPENS: { actif: true, bloquant: true }
+
+statuts_qui_verrouillent: [TRANSMISE, VALIDEE]
+
+# SYSCOHADA : 57 caisse ; 60 achats.
+racines_de_caisse: ["57"]
+racines_d_achats: ["60"]

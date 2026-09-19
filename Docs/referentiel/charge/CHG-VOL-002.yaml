@@ -1,0 +1,18 @@
+code: CHG-VOL-002
+libelle: Volume de pièces mensuel supérieur à 200
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1, critère « volume ». Seuil constaté sur les dossiers du portefeuille : au delà de deux cents pièces, la saisie cesse d'être une tâche d'appoint.
+  source: Grille de charge du centre, à transmettre
+
+# Au delà de deux cents pièces, la saisie cesse d'être une tâche d'appoint.
+# VRAI = dossier ordinaire. FAUX = le critère est atteint, les points s'ajoutent.
+predicat:
+  "<=": [{ var: pieces_par_mois }, 200]
+
+points: 18
+
+statut: A_VALIDER

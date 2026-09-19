@@ -1,0 +1,71 @@
+# Sage 100 Comptabilité — import d'écritures par fichier texte.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CE PROFIL EST UNE HYPOTHÈSE DE TRAVAIL, PAS UNE SPÉCIFICATION
+#
+# Il reproduit la forme la plus répandue d'import d'écritures chez les
+# progiciels francophones : une ligne de fichier par ligne d'écriture, en-tête
+# répété, séparateur point-virgule, colonnes débit et crédit distinctes.
+#
+# **Il n'a pas été confronté à une installation réelle du client.** Le jour où
+# le centre fournira un fichier d'exemple produit par son propre Sage, c'est ce
+# fichier qui fera foi, et ce profil sera corrigé pour lui ressembler — pas
+# l'inverse.
+#
+# C'est le sens même du mécanisme : corriger un profil ne demande aucun
+# déploiement.
+#
+# LES TROIS CHOIX QUI COÛTENT UN FICHIER ENTIER
+#
+# `encodage: cp1252` — la plupart des importeurs francophones hérités attendent
+# cet encodage. Livrer de l'UTF-8 abîme **tous** les libellés accentués, et le
+# client s'en aperçoit après avoir importé.
+#
+# `fin_de_ligne: crlf` — les progiciels Windows hérités coupent mal sur un
+# simple saut de ligne. C'est le seul des trois pièges qui se signale tout de
+# suite, donc le moins dangereux.
+#
+# `decimale: ","` — avec un point, un importeur réglé sur la virgule lit
+# `1234.56` comme `123456`. La balance est alors fausse d'un facteur cent.
+# ─────────────────────────────────────────────────────────────────────────────
+
+code: sage-ligne100
+libelle: Sage 100 Comptabilité — import d'écritures
+remarque: >-
+  Forme la plus répandue chez les progiciels francophones. Non confrontée à une
+  installation réelle du client : fournir un fichier d'exemple issu de son Sage
+  permettra de corriger ce profil sans déploiement.
+
+separateur: ";"
+encodage: cp1252
+fin_de_ligne: crlf
+decimale: ","
+format_date: "%d/%m/%Y"
+entete: true
+forme_du_sens: COLONNES_SEPAREES
+
+colonnes:
+  - champ: journal
+    intitule: Journal
+  - champ: date_operation
+    intitule: Date
+  - champ: numero
+    intitule: NoPiece
+  # ⚠️ Complété à gauche par des zéros sur huit positions. Certaines
+  # installations exigent une longueur fixe : livrer « 401 » là où le plan
+  # attend « 40100000 » produit un import accepté et des comptes inconnus,
+  # ce qui est pire qu'un refus.
+  - champ: compte
+    intitule: Compte
+    largeur: 8
+    remplissage: "0"
+  - champ: libelle_ligne
+    intitule: Libelle
+  - champ: debit
+    intitule: Debit
+  - champ: credit
+    intitule: Credit
+  - champ: tiers
+    intitule: Tiers
+  - champ: reference_externe
+    intitule: RefPiece

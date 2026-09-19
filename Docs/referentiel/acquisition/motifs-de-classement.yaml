@@ -1,0 +1,75 @@
+# Pourquoi un dossier commercial quitte le parcours sans être payé.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ UN VOCABULAIRE, ET NON DU TEXTE LIBRE
+#
+# « pas intéressé », « Pas intéressé », « pas interessé » et « ne répond pas au
+# tel » sont quatre lignes distinctes dans un tableau, et une seule réalité. Un
+# motif saisi librement se compte à la main, donc ne se compte pas.
+#
+# Ce que le centre veut savoir au bout de six mois est précisément ce que ce
+# fichier rend calculable : combien de prospects sont perdus faute d'avoir été
+# rappelés, et combien sur le prix. Les deux appellent des décisions opposées,
+# et un champ libre ne permet jamais de les distinguer.
+#
+# LE CODE EST L'IDENTITÉ, LE LIBELLÉ EST L'AFFICHAGE
+#
+# C'est le code qui est écrit au dossier. Le libellé peut être réécrit sans
+# toucher aux dossiers déjà classés ; le code, non. Un code retiré de ce fichier
+# laisse les dossiers qui le portent lisibles : rien ne relit ce fichier pour
+# afficher un dossier ancien.
+#
+# AJOUTER UN MOTIF NE DEMANDE AUCUN DÉPLOIEMENT
+#
+# C'est le sens de la démarche : le moteur ne connaît pas la liste, il la lit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+motifs:
+  # ⚠️ Le plus important des huit. C'est le seul dont la cause est **chez le
+  # cabinet**, et le seul sur lequel une décision d'organisation change quelque
+  # chose. Le distinguer de « injoignable » est tout l'intérêt du vocabulaire :
+  # dans un cas le prospect n'a pas pu être atteint, dans l'autre personne n'a
+  # essayé.
+  - code: jamais-rappele
+    libelle: Le prospect n'a jamais été rappelé
+    precision_requise: false
+
+  - code: injoignable
+    libelle: Injoignable après plusieurs tentatives
+    precision_requise: false
+
+  - code: sans-reponse
+    libelle: Contacté, resté sans réponse
+    precision_requise: false
+
+  - code: prix
+    libelle: Prix jugé trop élevé
+    precision_requise: false
+
+  - code: concurrent
+    libelle: Parti chez un confrère
+    precision_requise: false
+
+  - code: hors-perimetre
+    libelle: Demande hors du périmètre du centre
+    precision_requise: false
+
+  - code: projet-abandonne
+    libelle: Le projet du prospect est abandonné ou reporté
+    precision_requise: false
+
+  - code: doublon
+    libelle: Doublon d'un autre dossier
+    # ⚠️ La précision est exigée, et elle porte la référence de l'autre dossier.
+    # Sans elle, « doublon » est la seule catégorie dont on ne peut rien faire :
+    # on sait qu'il y en a un autre, on ne sait pas lequel.
+    precision_requise: true
+
+  # ⚠️ Volontairement dernier, et volontairement avec précision obligatoire. Une
+  # rubrique « autre » sans texte devient la rubrique majoritaire en six mois,
+  # et le vocabulaire ne sert plus à rien. Exiger d'écrire pourquoi coûte assez
+  # pour qu'on choisisse d'abord dans la liste, et assez peu pour ne bloquer
+  # personne.
+  - code: autre
+    libelle: Autre motif
+    precision_requise: true

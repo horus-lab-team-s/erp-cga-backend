@@ -1,0 +1,64 @@
+# Les pièces qui manquent au mois d'un dossier, et la relance qui les demande (pas 111).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CES VALEURS DÉCIDENT
+#
+# « L'attente est déduite, pas saisie » (maquette « Parcours comptable », vue F).
+#
+#   origines                 les origines d'attente relevées :
+#                            DEMANDE_OUVERTE        une demande déjà émise
+#                            RELEVE_BANCAIRE        banque mouvementée, relevé non importé
+#                            MOUVEMENT_SANS_PIECE   ligne de relevé ni rapprochée ni justifiée
+#                            SERIE_HABITUELLE       émetteur habituel absent du mois
+#                            OBLIGATION_DU_MOIS     obligation qui appelle une pièce (ci-dessous)
+#                            ANOMALIE_BLOQUANTE     pièce bloquée, sans rectificative demandée
+#   mois_observes            série habituelle : combien de mois précédents regarder
+#   presence_minimum         et dans combien il faut avoir vu l'émetteur
+#   pieces_par_obligation    code d'obligation → la pièce que l'adhérent doit fournir
+#   obligation_de_reference  la date limite annoncée se cale sur son échéance…
+#   jours_avant_echeance     …moins ce nombre de jours
+#   canaux                   APPLICATION, COURRIEL, WHATSAPP : actif, coché d'office, motif
+#   modeles                  les messages ; la conclusion doit annoncer {date_limite}
+#
+# Placeholders des modèles : {mois}, {date_limite}. La liste des pièces cochées et la
+# signature sont insérées par la plateforme.
+#
+# ⚠️ Valeurs de départ, à arrêter par le cabinet. WhatsApp reste inactif tant que le
+# compte de la plateforme d'envoi n'est pas ouvert (messagerie/canaux.yaml).
+# ─────────────────────────────────────────────────────────────────────────────
+
+origines:
+  - DEMANDE_OUVERTE
+  - RELEVE_BANCAIRE
+  - MOUVEMENT_SANS_PIECE
+  - SERIE_HABITUELLE
+  - OBLIGATION_DU_MOIS
+  - ANOMALIE_BLOQUANTE
+
+mois_observes: 3
+presence_minimum: 3
+
+pieces_par_obligation: {}
+
+obligation_de_reference: TVA
+jours_avant_echeance: 3
+
+# Sous la signature du collaborateur qui relance.
+cabinet: "CGA Broad Range Consulting Group"
+
+canaux:
+  - { canal: APPLICATION, actif: true, par_defaut: true }
+  - { canal: COURRIEL, actif: true, par_defaut: true }
+  - canal: WHATSAPP
+    actif: false
+    motif: "Compte de la plateforme d'envoi non ouvert (voir messagerie/canaux.yaml)."
+
+modeles:
+  - code: amiable-pieces-du-mois
+    libelle: "Relance amiable, pièces du mois"
+    introduction: "Pour terminer votre mois de {mois}, il nous manque encore :"
+    conclusion: "Vous pouvez les déposer depuis votre espace, en photo. Sans ces pièces avant le {date_limite}, votre déclaration sera établie sans elles."
+  - code: ferme-avant-echeance
+    libelle: "Relance ferme, avant l'échéance"
+    introduction: "Malgré nos précédentes demandes, il manque toujours pour {mois} :"
+    conclusion: "Sans ces pièces avant le {date_limite}, votre déclaration sera établie sans elles, et la TVA correspondante ne sera pas déduite."

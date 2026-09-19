@@ -1,0 +1,46 @@
+# Les lignes de la déclaration de TVA (pas 109).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CE FICHIER DÉCIDE
+#
+# La plateforme calcule des grandeurs à partir des journaux ; ce fichier dit sous
+# quel code et quel libellé chacune figure sur le formulaire. Les grandeurs
+# connues (une grandeur inconnue fait échouer le chargement) :
+#
+#   VENTES_TAXABLES             base : ventes (70) des écritures portant de la TVA collectée
+#   VENTES_EXONEREES            base : ventes (70) des écritures sans TVA collectée
+#   TVA_COLLECTEE               443 au crédit
+#   DEDUCTIBLE_BIENS            4451 au débit ; base : classes 6 et 2 de ces écritures
+#   DEDUCTIBLE_SERVICES         4454 au débit
+#   DEDUCTIBLE_IMMOBILISATIONS  4452 au débit
+#   DEDUCTIBLE_AUTRES           les autres 445 au débit
+#   TVA_REJETEE                 la TVA écartée par le contrôle de conformité
+#   CREDIT_REPORTE              le crédit laissé par la période précédente
+#
+# Une grandeur absente du fichier n'est pas affichée. Un code ou une grandeur
+# en double est refusé.
+#
+# ⚠️ Les codes L01 à L30 sont ceux de la maquette « Parcours comptable ». Ils
+# sont À CONFIRMER avec le formulaire de déclaration de la DGI en vigueur, par
+# le fiscaliste du cabinet, avant d'être présentés comme les cases officielles.
+# ─────────────────────────────────────────────────────────────────────────────
+
+lignes:
+  - { code: L01, grandeur: VENTES_TAXABLES, libelle: "Ventes taxables au taux général" }
+  - { code: L04, grandeur: VENTES_EXONEREES, libelle: "Ventes exonérées" }
+  - { code: L10, grandeur: TVA_COLLECTEE, libelle: "TVA collectée" }
+  - { code: L20, grandeur: DEDUCTIBLE_BIENS, libelle: "TVA déductible sur achats de biens" }
+  - { code: L21, grandeur: DEDUCTIBLE_SERVICES, libelle: "TVA déductible sur services" }
+  - { code: L22, grandeur: DEDUCTIBLE_IMMOBILISATIONS, libelle: "TVA déductible sur immobilisations" }
+  - { code: L23, grandeur: DEDUCTIBLE_AUTRES, libelle: "TVA déductible, autres comptes" }
+  - { code: L24, grandeur: TVA_REJETEE, libelle: "TVA rejetée par le contrôle de conformité" }
+  - { code: L30, grandeur: CREDIT_REPORTE, libelle: "Crédit de TVA reporté du mois précédent" }
+
+# SYSCOHADA.
+comptes_de_ventes: ["70"]
+comptes_de_base_deductible: ["6", "2"]
+tva_collectee: ["443"]
+tva_deductible: ["445"]
+deductible_biens: ["4451"]
+deductible_immobilisations: ["4452"]
+deductible_services: ["4454"]

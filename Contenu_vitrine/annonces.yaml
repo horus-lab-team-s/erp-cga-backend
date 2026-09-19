@@ -1,0 +1,24 @@
+# Contenu de la vitrine publique — modifiable sans recompilation.
+#
+# Servi par le backend (contexte L · Vitrine) et lu par le site à la construction
+# des pages. Une correction ici est en ligne au redémarrage du backend, sans qu'un
+# développeur intervienne.
+#
+# Les annonces du bandeau de site.
+#
+# Une seule s'affiche à la fois : la première encore valide à la date du jour, dans
+# l'ordre de ce fichier. L'ordre est donc l'ordre de priorité.
+#
+# ⚠️ Changer le texte d'une annonce SANS changer sa clé la laisse fermée chez les
+# visiteurs qui l'avaient déjà fermée : ils ne verront jamais le nouveau message.
+# Nouveau message, nouvelle clé.
+
+annonces:
+    - cle: "pack-sarl-275-2026"
+      etiquette: "Offre"
+      texte: |-
+          Votre SARL immatriculée, statuts et attestations compris, pour 275 000 FCFA — sans notaire et sans file d'attente.
+      lien: "/blog/pack-formalisation-sarl"
+      libelle_lien: "Voir l'offre"
+      du: "2026-01-01"
+      au: "2026-12-31"

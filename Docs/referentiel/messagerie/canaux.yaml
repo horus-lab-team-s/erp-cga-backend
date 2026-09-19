@@ -1,0 +1,49 @@
+# Les canaux de contact que le centre exploite, et dans quel ordre il s'y replie.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE FICHIER EST LA GARANTIE QUE LE PARCOURS NE DÉPEND D'AUCUNE PLATEFORME
+#
+# La messagerie instantanée est un confort, pas une infrastructure. Tant que
+# `APPEL` est actif, le parcours entier fonctionne : dépôt de la demande,
+# affectation, prise de contact, qualification, proforma, paiement.
+#
+# Un téléphone n'a pas d'API. Pas de compte à vérifier, pas de modèle à faire
+# approuver, pas de palier de messagerie, pas de fenêtre de service.
+#
+# ⚠️ NE PAS CONFONDRE AVEC LA FENÊTRE DE SERVICE
+#
+# Ce fichier porte ce que **le centre décide** : quels canaux il exploite. La
+# fenêtre de vingt-quatre heures, elle, lui est imposée par la plateforme et vit
+# dans le code avec sa citation. Voir Docs/architecture/13-parcours-d-acquisition.md.
+#
+# LE RANG
+#
+# Plus petit = essayé plus tôt. L'ordre est celui du centre, pas une hiérarchie
+# technique : il peut vouloir appeler d'abord, ou écrire d'abord, selon ses
+# effectifs du moment. La préférence exprimée par le client passe toujours avant,
+# quand elle est honorable.
+#
+# UN CANAL INACTIF DOIT DIRE POURQUOI
+#
+# Le motif est affiché au responsable. « La messagerie n'est pas encore ouverte »
+# se comprend ; « canal indisponible » fait ouvrir un incident pour une décision
+# volontaire.
+# ─────────────────────────────────────────────────────────────────────────────
+
+canaux:
+  - canal: APPEL
+    actif: true
+    rang: 0
+
+  - canal: COURRIEL
+    actif: true
+    rang: 1
+
+  # Inactif tant que le compte de la plateforme n'est pas ouvert et qu'aucun
+  # modèle n'est approuvé. Le jour où ce sera fait : `actif: true`, et rien
+  # d'autre ne bouge dans le système.
+  - canal: WHATSAPP
+    actif: false
+    rang: 2
+    motif: >-
+      Compte de la plateforme d'envoi non ouvert, aucun modèle approuvé. Les sept modèles sont rédigés et attendent leur soumission ; voir Docs/referentiel/messagerie/modeles/.

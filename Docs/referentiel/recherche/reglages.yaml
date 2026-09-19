@@ -1,0 +1,23 @@
+# Les réglages de la recherche globale (pas 93).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# DEUX NOMBRES, ET CE QU'ILS COÛTENT
+#
+# La recherche est fédérée : chaque service qui a quelque chose à trouver
+# (dossiers, pièces, comptes, demandes) répond sous son propre préfixe, avec son
+# propre périmètre. Ces deux réglages valent pour toutes les sources, et c'est
+# voulu : une recherche qui exigerait trois lettres ici et une seule là rendrait
+# un écran incohérent.
+#
+# Sans ce fichier, les valeurs ci-dessous s'appliquent aussi : ce sont les défauts
+# du code. Une clé mal orthographiée fait échouer le chargement plutôt que d'être
+# ignorée.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Caractères significatifs minimaux (espaces et ponctuation exclus), entre 2 et 10.
+# Descendre à 2 fait rendre « SA » dans la moitié des raisons sociales.
+longueur_minimale: 3
+
+# Résultats rendus par source, entre 1 et 50. Au-delà, l'écran dit qu'il y en a
+# davantage et invite à préciser : une liste de cinquante dossiers ne se lit pas.
+resultats_par_source: 10

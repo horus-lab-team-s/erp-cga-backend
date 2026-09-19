@@ -52,7 +52,7 @@ from app.contextes.souscription.domaine.dossier_commercial import (
 from app.infrastructure.depots_orchestration import BoiteDEnvoiMemoire
 
 T0 = datetime(2026, 9, 1, 9, 0)
-REFERENTIEL = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+REFERENTIEL = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
 
 #: ⚠️ **La grille réelle du centre**, et non des règles forgées pour le test.
 #: Une grille inventée éprouverait le mécanisme sans rien dire de ce que la

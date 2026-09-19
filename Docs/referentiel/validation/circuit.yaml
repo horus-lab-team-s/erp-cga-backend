@@ -1,0 +1,59 @@
+# Le circuit de validation du référentiel (pas 95).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CE FICHIER OUVRE
+#
+# Depuis le pas 95, un cabinet décide sur le référentiel depuis l'écran, avec effet
+# immédiat pour lui seul : valider une version livrée « à valider », proposer une
+# nouvelle version datée, puis la faire valider. Ce fichier dit QUI peut le faire,
+# selon la nature du paramètre. Les décisions ne réécrivent jamais parametres.yaml :
+# elles forment la surcouche du cabinet.
+#
+# SANS CE FICHIER, PERSONNE NE DÉCIDE RIEN
+#
+# Le référentiel reste alors en lecture seule, comme avant le pas 95. Une nature
+# absente d'ici est fermée. Une clé mal orthographiée fait échouer le chargement.
+# Une permission mal orthographiée ne donne le droit à personne (un test le signale).
+#
+# LES DEUX NATURES, ET POURQUOI DEUX CIRCUITS
+#
+#   LOI                un texte fixe la valeur (CGI, loi de finances, CNPS). Celui
+#                      qui la valide engage sa responsabilité professionnelle.
+#   POLITIQUE_CABINET  aucun texte ne la fixe (poids du score, délais internes).
+#                      C'est une décision de la direction.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Longueur minimale du motif de chaque décision : le texte visé, ou la décision.
+motif_minimum: 20
+
+par_nature:
+  LOI:
+    # Le fiscaliste propose la nouvelle valeur, sur le texte qu'il cite.
+    proposer: [MODIFIER_PARAMETRE]
+    # Un autre fiscaliste, ou le réviseur, seul à déposer les déclarations calculées avec
+    # ce taux (DEPOSER_DECLARATION). ⚠️ Pas CLOTURER_EXERCICE : la direction la détient
+    # aussi, et la direction n'a pas qualité pour attester une valeur fixée par un texte.
+    valider: [MODIFIER_PARAMETRE, DEPOSER_DECLARATION]
+    # Celui qui propose un taux légal ne le valide pas seul.
+    quatre_yeux: true
+
+  POLITIQUE_CABINET:
+    # Le fiscaliste peut proposer un réglage (un délai, une expression), la direction aussi.
+    proposer: [MODIFIER_PARAMETRE, ARRETER_POLITIQUE]
+    # Seule la direction arrête une valeur que la direction a qualité pour décider.
+    valider: [ARRETER_POLITIQUE]
+    # La direction qui propose et arrête un poids de pilotage décide seule : c'est son rôle.
+    quatre_yeux: false
+
+# Pas 97 : les règles de conformité construites à l'écran, sans syntaxe.
+#
+# ⚠️ Une règle porte davantage qu'un paramètre : elle porte une interprétation du texte,
+# et une règle mal pensée accuse des factures conformes chez tous les adhérents du
+# cabinet. Elle est donc éprouvée sur les factures avant d'être proposée, et validée par
+# une autre personne que celle qui l'a construite.
+regles:
+  # Le fiscaliste construit la règle : c'est lui qui traduit le texte en contrôle.
+  proposer: [MODIFIER_REGLE]
+  # Un autre fiscaliste, ou le réviseur, qui répond des déclarations et des rejets de TVA.
+  valider: [MODIFIER_REGLE, DEPOSER_DECLARATION]
+  quatre_yeux: true

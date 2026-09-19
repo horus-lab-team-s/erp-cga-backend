@@ -1,0 +1,12 @@
+nom: cga_prise_de_contact
+libelle: Prise de contact
+langue: fr
+categorie: UTILITAIRE
+statut: EN_ATTENTE
+usage: >-
+  Étape 3, quand le prospect n'a encore rien écrit. C'est le premier message de toute relation, et le seul qui puisse partir sur un fil vide.
+corps: |-
+  Bonjour {{1}}, je suis {{2}} du centre de gestion BRCG. Vous avez laissé une
+  demande sur notre site au sujet de : {{3}}.
+  Je vous rappelle aujourd'hui. Dites-moi simplement si vous préférez un appel ou
+  un échange écrit, et à quelle heure vous êtes disponible.

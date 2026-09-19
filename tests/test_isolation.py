@@ -52,6 +52,7 @@ from sqlalchemy import (
     String,
     Table,
     create_engine,
+    make_url,
     text,
 )
 
@@ -209,7 +210,10 @@ class TestAucuneTableNeFuit:
                     _semer(connexion, table, locataire)
 
         applicatif = create_engine(
-            URL_BASE_TEST.replace("cga:cga@", f"{ROLE_APPLICATIF}:{MOT_DE_PASSE}@"),
+            # ⚠️ Même correction que le pas 84 : par remplacement de texte, une URL
+            # sans mot de passe laissait ce « rôle applicatif » se connecter sous le
+            # compte de départ, superutilisateur, qui contourne tout cloisonnement.
+            make_url(URL_BASE_TEST).set(username=ROLE_APPLICATIF, password=MOT_DE_PASSE),
             pool_pre_ping=True,
         )
         # Voir l'en-tête : ce constat ne rattrape pas un faux vert — les cas

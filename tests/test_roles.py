@@ -17,7 +17,7 @@ démarrage en production.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import Column, MetaData, String, Table, create_engine, text
+from sqlalchemy import Column, MetaData, String, Table, create_engine, make_url, text
 
 from app.infrastructure.roles import EtatDuCloisonnement, diagnostiquer
 from app.infrastructure.securite_lignes import (
@@ -38,8 +38,23 @@ ROLE_CONTOURNANT = "diag_contournant"
 TABLE = "diag_cloisonnee"
 
 
-def _url(role: str) -> str:
-    return URL_BASE_TEST.replace("cga:cga@", f"{role}:{MOT_DE_PASSE}@")
+def _url(role: str):
+    """L'URL de la base de test, mais connectée sous `role`.
+
+    ⚠️ **Ce calcul se faisait par remplacement de texte, et c'était un défaut.**
+    Le pas 84 l'avait corrigé dans `test_securite_lignes.py` sans voir qu'il y en
+    avait deux autres copies, ici et dans `test_isolation.py`. Avec l'URL que rend
+    `outils/postgres-local.sh start` (« cga@ », sans mot de passe), le motif
+    « cga:cga@ » ne se trouve pas : le remplacement ne remplace rien, chaque rôle
+    se connecte en réalité sous le compte de départ, et si celui-ci est
+    superutilisateur le diagnostic répond « contourné » pour tous les cas.
+
+    Quarante tests tombaient alors d'un coup, en accusant le cloisonnement d'être
+    cassé alors que c'était la manière de se connecter qui l'était. On pose
+    l'utilisateur et le mot de passe sur l'URL **analysée**, quelle que soit sa
+    forme.
+    """
+    return make_url(URL_BASE_TEST).set(username=role, password=MOT_DE_PASSE)
 
 
 @pytest.fixture(scope="module")

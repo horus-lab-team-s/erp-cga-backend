@@ -1,0 +1,18 @@
+code: CHG-BAN-001
+libelle: Plusieurs comptes bancaires à rapprocher
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Grille de charge interne, révision 1, critère « trésorerie ». Chaque compte supplémentaire est un rapprochement de plus, tous les mois.
+  source: Grille de charge du centre, à transmettre
+
+# Chaque compte supplémentaire est un rapprochement de plus, tous les mois.
+# VRAI = dossier ordinaire. FAUX = le critère est atteint, les points s'ajoutent.
+predicat:
+  "<": [{ var: comptes_bancaires }, 2]
+
+points: 6
+
+statut: A_VALIDER

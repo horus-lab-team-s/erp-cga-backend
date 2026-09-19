@@ -1,0 +1,17 @@
+# Un export à une seule colonne de montant signé : positif pour un versement reçu,
+# négatif pour une sortie. Forme fréquente des relevés de Mobile Money.
+#
+# ⚠️ Profil générique de départ, à confronter à un export réel.
+#
+#   Date ; Libellé ; Montant
+code: csv-montant-signe
+libelle: "CSV : date, libellé, montant signé (positif = reçu)"
+separateur: ";"
+encodage: utf-8-sig
+lignes_d_entete: 1
+format_date: "%d/%m/%Y"
+colonne_date: 1
+colonne_libelle: 2
+colonne_montant: 3
+montant_positif_encaisse: true
+separateur_decimal: ","

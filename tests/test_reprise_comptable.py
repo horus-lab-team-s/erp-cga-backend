@@ -451,7 +451,7 @@ ESPACES_DE_MILLIERS = (" ", " ", " ")
 
 def test_les_trois_espaces_du_cas_precedent_sont_bien_distinctes():
     assert len(set(ESPACES_DE_MILLIERS)) == 3
-    source = (RACINE_DEPOT / "Backend_erp_cga" / "tests" / "test_reprise_comptable.py").read_text()
+    source = (RACINE_DEPOT / "tests" / "test_reprise_comptable.py").read_text()
     for espace in ESPACES_DE_MILLIERS:
         assert f"2{espace}840{espace}000,00" in source, (
             f"l'espace {hex(ord(espace))} a disparu du cas des milliers : "

@@ -1,0 +1,17 @@
+code: TAR-CAP-001
+libelle: Capital social élevé
+applicable_du: 2026-01-01
+applicable_au: null
+
+fondement:
+  texte: >-
+    Un capital supérieur à cinq millions déclenche des formalités d'enregistrement plus lourdes et un contrôle plus attentif du greffe.
+  source: Barème d'honoraires du centre, à transmettre
+
+# VRAI = cas ordinaire, aucun ajustement. FAUX = le critère est atteint.
+predicat:
+  "<": [{ var: capital_social }, 5000000]
+
+taux: 0.20
+
+statut: A_VALIDER

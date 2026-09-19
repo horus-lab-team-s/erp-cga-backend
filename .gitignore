@@ -1,0 +1,20 @@
+# ⚠️ Ce dépôt n'hérite plus des règles de la racine du monodépôt : il les porte lui-même.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# ⚠️ Les justificatifs déposés. Ce sont les pièces comptables des adhérents :
+# elles ne sont pas du code, elles n'ont rien à faire dans un dépôt, et une copie
+# poussée sur un serveur d'hébergement serait une fuite de données du cabinet.
+Fichiers_deposes/
+
+.env
+.env.local
+
+.DS_Store
+*.log

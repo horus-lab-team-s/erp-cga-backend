@@ -1,0 +1,51 @@
+# La relance graduée d'une proforma sans réponse, et le délai d'impayé.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CHAQUE NOMBRE ICI COÛTE DE L'ARGENT, ET PEUT COÛTER LE CANAL
+#
+# Hors fenêtre de service, une relance part en modèle utilitaire, donc facturée.
+# Une relance automatique mal réglée coûte à chaque déclenchement.
+#
+# Pire : un numéro qui envoie beaucoup de messages non lus voit sa note baisser
+# puis ses quotas se réduire, sur une fenêtre glissante de sept jours. Relancer
+# trop détruit le canal lui-même, et le canal conditionne aussi l'appel, puisque
+# les deux dépendent du même palier de messagerie.
+#
+# Serrer ces délais paraît toujours une bonne idée le jour où l'on regarde le
+# taux de transformation. C'en est une mauvaise le mois suivant.
+#
+# LE RANG EST L'IDENTITÉ DU PALIER
+#
+# C'est lui qui est inscrit au suivi de chaque proforma, et non le délai, qui
+# peut changer entre deux relances. Les rangs vont de 1 en 1, sans trou.
+#
+# LE TON EST UNE VARIABLE, PAS UN MODÈLE
+#
+# Trois modèles quasi identiques se font approuver trois fois, se corrigent trois
+# fois, et divergent au premier oubli. Un seul modèle, une variable de ton.
+# ─────────────────────────────────────────────────────────────────────────────
+
+paliers:
+  - rang: 1
+    apres_jours: 3
+    modele: cga_relance_proforma
+    ton: courtois
+
+  - rang: 2
+    apres_jours: 7
+    modele: cga_relance_proforma
+    ton: rappel
+
+  # ⚠️ Le dernier. Après lui, le système se tait et la proforma sort de la file :
+  # le silence d'un client après trois relances est une information, continuer à
+  # écrire n'en est pas une.
+  - rang: 3
+    apres_jours: 14
+    modele: cga_relance_proforma
+    ton: ferme
+
+# Une proforma acceptée mais non réglée au delà de ce délai retourne en
+# conversation. Ce n'est pas une relance de plus : le client s'est engagé, et
+# c'est un humain qui rappelle. Continuer à lui envoyer des modèles ne produit
+# rien qu'une facture de messagerie.
+impaye_apres_jours: 30

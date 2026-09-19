@@ -1,0 +1,11 @@
+nom: cga_envoi_proforma
+libelle: Envoi de proforma
+langue: fr
+categorie: UTILITAIRE
+statut: EN_ATTENTE
+usage: >-
+  Étape 7, quand la fenêtre s'est refermée depuis le dernier échange. Dans la fenêtre, le lien part en message libre et ne coûte rien.
+corps: |-
+  Bonjour {{1}}, votre proforma n° {{2}} est prête, pour un montant de {{3}} FCFA.
+  Vous pouvez la consulter ici : {{4}}
+  Répondez à ce message si vous souhaitez en discuter avant de valider.

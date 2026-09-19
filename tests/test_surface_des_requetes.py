@@ -280,7 +280,7 @@ class TestAucunChampDuSystemeDansUnCorpsDeRequete:
 
         from app.infrastructure.config import RACINE_DEPOT
 
-        racine = RACINE_DEPOT / "Backend_erp_cga" / "app"
+        racine = RACINE_DEPOT / "app"
         for fichier in racine.rglob("*.py"):
             arbre = ast.parse(fichier.read_text(encoding="utf-8"))
             for noeud in ast.walk(arbre):

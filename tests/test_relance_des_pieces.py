@@ -58,7 +58,7 @@ from app.partage.locataire import etabli
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
 JUILLET = (date(2026, 7, 1), date(2026, 7, 31))
-REFERENTIEL = Path(__file__).resolve().parents[2] / "Docs" / "referentiel"
+REFERENTIEL = Path(__file__).resolve().parents[1] / "Docs" / "referentiel"
 
 
 def _piece(identifiant, emetteur, jour, montant="1000"):

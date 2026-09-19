@@ -1,0 +1,11 @@
+nom: cga_lien_activation
+libelle: Lien d'activation
+langue: fr
+categorie: AUTHENTIFICATION
+statut: EN_ATTENTE
+usage: >-
+  Après l'ouverture du tenant, étape 9. Catégorie distincte : facturée même fenêtre ouverte, et soumise à des règles propres.
+corps: |-
+  Bonjour {{1}}, votre espace {{2}} est ouvert.
+  Voici votre lien d'activation, valable {{3}} heures : {{4}}
+  Ne le communiquez à personne.

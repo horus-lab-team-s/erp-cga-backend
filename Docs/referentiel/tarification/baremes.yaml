@@ -1,0 +1,43 @@
+# La base et l'amplitude, par service.
+#
+# ⚠️ Les montants sont des valeurs de travail. Le barème réel du centre n'a pas
+# été transmis ; voir l'annexe D du document de conception, où ce manque figure
+# comme le plus proche de la vague 1.
+#
+# LA VERSION N'EST PAS DÉCORATIVE
+#
+# Elle est recopiée dans chaque proposition tarifaire. Sans elle, personne ne
+# peut réexpliquer un montant six mois plus tard, et le client conteste.
+#
+# Règle : toute modification d'une base ou d'une amplitude s'accompagne d'un
+# incrément de version, ou d'une nouvelle période de validité.
+
+baremes:
+  - service: creation-sarl
+    version: "2026.1"
+    base: 250000
+    applicable_du: 2026-01-01
+    applicable_au: null
+    # Vingt pour cent en dessous, cinquante au dessus.
+    baisse_maximale: 0.20
+    hausse_maximale: 0.50
+    statut: A_VALIDER
+    fondement:
+      texte: >-
+        Offre commerciale du centre, création de société à responsabilité limitée. Valeur de travail, à confirmer par la direction.
+      source: Barème d'honoraires du centre, à transmettre
+
+  - service: tenue-comptable
+    version: "2026.1"
+    base: 150000
+    applicable_du: 2026-01-01
+    applicable_au: null
+    # Amplitude plus serrée : un abonnement mensuel se compare d'un client à
+    # l'autre, et un écart visible se sait vite.
+    baisse_maximale: 0.15
+    hausse_maximale: 0.40
+    statut: A_VALIDER
+    fondement:
+      texte: >-
+        Offre commerciale du centre, tenue comptable au forfait mensuel. Valeur de travail, à confirmer par la direction.
+      source: Barème d'honoraires du centre, à transmettre

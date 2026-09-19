@@ -47,7 +47,7 @@ from app.infrastructure.config import RACINE_DEPOT
 from app.partage.copie import transiter
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
-RACINE_APP = RACINE_DEPOT / "Backend_erp_cga" / "app"
+RACINE_APP = RACINE_DEPOT / "app"
 
 
 def _sans_piece() -> EcritureComptable:

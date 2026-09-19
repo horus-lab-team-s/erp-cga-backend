@@ -1,0 +1,1452 @@
+# Référentiel normatif — paramètres fiscaux, sociaux et de gestion, datés
+#
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │  ÉTAT AU 18 AOÛT 2026 : 50 PARAMÈTRES VALIDÉS, 9 EN ATTENTE                │
+# │                                                                            │
+# │  Les valeurs validées ont été confrontées une à une aux textes : Code      │
+# │  Général des Impôts, lois de finances, textes CNPS, actes uniformes        │
+# │  OHADA. Le champ `source` de chaque version dit ce qui a été RÉELLEMENT    │
+# │  consulté — pas le texte qu'on aurait aimé lire, la page qu'on a ouverte.  │
+# │  Cette distinction est ce qui rend la validation vérifiable par un tiers.  │
+# │                                                                            │
+# │  Les 9 paramètres restés A_VALIDER n'ont pas été confirmés. Ils ne sont    │
+# │  pas oubliés : ils sont marqués. Un rapport qui s'en sert le signale.      │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# DEUX NATURES, DEUX AUTORITÉS — ET C'EST LA DISTINCTION QUI MANQUAIT
+#
+#   nature: LOI                un texte fixe la valeur. Se valide en la confrontant
+#                              à l'article visé. Engage un professionnel.
+#   nature: POLITIQUE_CABINET  aucun texte ne la fixe. Se valide par une décision
+#                              de la direction. La valeur est choisie, pas constatée.
+#
+# Les poids du score de risque attendaient jusqu'ici la signature d'un fiscaliste,
+# qui n'avait aucune qualité pour les attester : rien dans le CGI ne dit combien
+# vaut un retard déclaratif dans une note interne. Ils attendaient une signature
+# que personne ne pouvait donner. Le défaut du champ est LOI, délibérément : un
+# paramètre dont on oublie de déclarer la nature est traité comme engageant.
+#
+# ⚠️ UNE CORRECTION MAJEURE, LE 18 AOÛT 2026
+#
+# `SEUIL_ESPECES_DEDUCTIBILITE_TVA` portait 500 000 FCFA. Le CGI art. 143 dit
+# 100 000. Cinq fois trop permissif : une facture de 300 000 FCFA réglée en
+# espèces passait comme ouvrant droit à déduction. L'erreur ne gênait personne à
+# la saisie et se serait découverte au contrôle, en rappel de TVA — c'est le pire
+# des deux sens.
+#
+# Format d'une version :
+#   valeur          scalaire ou chaîne
+#   applicable_du   date d'entrée en vigueur (bornes : [du, au[ — au exclu)
+#   applicable_au   null = toujours en vigueur
+#   statut          A_VALIDER | VALIDE | ABROGE
+#   fondement       texte visé + source consultée, OBLIGATOIRE
+#   valide_par      la personne ou l'entité qui engage sa responsabilité
+#   valide_le       la date de cette validation
+#   note            précision, divergence de sources, réserve
+#
+# Le modèle REFUSE une version VALIDE sans `valide_par` ni `valide_le` : une
+# validation engage quelqu'un de nommé, jamais l'éditeur du fichier.
+#
+# Un paramètre sans version applicable à la date demandée lève une erreur.
+# Il ne rend jamais de valeur par défaut : une valeur légale silencieusement
+# absente est un bug fiscal.
+
+version_referentiel: "2026.2"
+mis_a_jour_le: 2026-08-18
+
+parametres:
+
+  # ── TVA ────────────────────────────────────────────────────────────────────
+
+  - code: TVA_TAUX_GENERAL
+    libelle: Taux général de la TVA, centimes additionnels communaux inclus
+    categorie: TVA
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 19.25
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI, livre premier, titre II : taux de 17,5 % majoré de 10 % de centimes
+              additionnels communaux assis sur la TVA, soit 19,25 %
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026
+        note: >-
+            La décomposition est confirmée : le CAC est bien une majoration de 10 %
+            assise sur la TVA, et non une taxe distincte. La réserve que portait cette
+            note est levée.
+
+  - code: TVA_TAUX_BASE_HORS_CAC
+    libelle: Taux de TVA hors centimes additionnels communaux
+    categorie: TVA
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 17.5
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI, livre premier, titre II : taux nominal de la TVA, hors CAC
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026
+
+  - code: CAC_TAUX
+    libelle: Taux des centimes additionnels communaux
+    categorie: TVA
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 10
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Majoration de 10 % assise sur la TVA et sur l'IS
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026 ; DGI, fiche technique « Impôt sur les
+              sociétés », impots.cm, consultée le 18/08/2026
+
+  - code: SEUIL_ASSUJETTISSEMENT_TVA
+    libelle: Chiffre d'affaires annuel au-delà duquel l'assujettissement à la TVA est dû
+    categorie: TVA
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 50000000
+        # Borne : « supérieur à 50 000 000 » : cette valeur même n'assujettit pas.
+        borne: EXCLUSE
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI : est assujetti à la TVA quiconque réalise un chiffre d'affaires
+              annuel hors taxes supérieur à 50 000 000 FCFA. Le seuil commande aussi le
+              passage au régime du réel
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026
+        note: À confirmer, notamment au regard de la refonte des régimes par la LF 2025.
+
+  # ── Déductibilité ──────────────────────────────────────────────────────────
+
+  - code: SEUIL_ESPECES_DEDUCTIBILITE_TVA
+    libelle: >-
+      Montant à partir duquel un règlement en espèces exclut la déduction de la TVA
+    categorie: DEDUCTIBILITE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 100000
+        # Borne : « au moins égale à cent mille » : cette valeur même est visée.
+        borne: INCLUSE
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 143 : « Pour les opérations taxables d'une valeur au moins égale
+              à cent mille (100 000) F CFA, le droit à déduction n'est autorisé qu'à
+              condition que les dites opérations n'aient pas été payées en espèces. »
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026 (citation littérale du texte)
+        note: >-
+            ⚠️ CORRECTION DU 18/08/2026. La valeur portée jusqu'ici était 500 000
+            FCFA, soit cinq fois le seuil légal. Une facture de 300 000 FCFA réglée en
+            espèces passait donc comme ouvrant droit à déduction, alors que le texte
+            l'exclut. Le sens de l'erreur était le plus coûteux des deux : il ne
+            gênait personne à la saisie et se serait découvert au contrôle, en rappel
+            de TVA. La borne est STRICTE : à exactement 100 000 FCFA, la déduction est
+            refusée, ce que le prédicat de FAC-ACH-007 traduit par « < seuil ».
+
+  - code: DELAI_DROIT_DEDUCTION_EXERCICES
+    libelle: >-
+      Nombre d'exercices suivant celui de l'exigibilité pendant lesquels le droit à
+      déduction reste exerçable
+    categorie: DEDUCTIBILITE
+    unite: EXERCICES
+    nature: LOI
+    versions:
+      - valeur: 2
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 143 : le droit à déduction s'exerce jusqu'à la fin du deuxième
+              exercice suivant celui au cours duquel la TVA est devenue exigible
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026
+  # ── Régimes ────────────────────────────────────────────────────────────────
+
+  - code: SEUIL_COMPTABILITE_OBLIGATOIRE
+    libelle: >-
+      Chiffre d'affaires à partir duquel la tenue d'une comptabilité est légalement
+      obligatoire
+    categorie: REGIME
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 10000000
+        # Borne : « dès 10 M » : cette valeur même oblige.
+        borne: INCLUSE
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            LF 2026 — obligation de tenir une comptabilité dès 10 M FCFA de chiffre
+            d'affaires, référence explicite au SMT OHADA, DSF obligatoire
+          source: Document de cadrage § 2.2
+
+  - code: IGS_PERIODE_PROBATOIRE_EXERCICES
+    libelle: >-
+      Nombre d'exercices de période probatoire avant retour éventuel à l'IGS après
+      reclassement pour dépassement de seuil
+    categorie: REGIME
+    unite: EXERCICES
+    nature: LOI
+    versions:
+      - valeur: 2
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: LF 2026 — mécanisme de reclassement automatique et période probatoire
+          source: Document de cadrage § 2.2
+
+
+  # ── Impôt sur les sociétés ─────────────────────────────────────────────────
+  #
+  # Le taux de l'IS n'était pas paramétré : c'était la question Q4 du dossier des
+  # questions ouvertes. Il l'est désormais, et il est double — le régime commande
+  # le taux. Les deux valeurs s'entendent HORS centimes additionnels ; `CAC_TAUX`
+  # les majore de 10 %, ce qui porte la charge effective à 33 % et 27,5 %.
+
+  - code: TAUX_IS_REEL_NORMAL
+    libelle: >-
+      Taux de l'impôt sur les sociétés au régime du réel normal, hors CAC
+    categorie: IS
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 30
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI : taux de l'impôt sur les sociétés applicable aux entreprises relevant
+            du régime du réel normal. Majoré de 10 % de centimes additionnels
+            communaux, soit une charge effective de 33 %
+          source: >-
+            DGI, fiche technique « Impôt sur les sociétés », impots.cm, consultée le
+            18/08/2026
+
+  - code: TAUX_IS_SIMPLIFIE
+    libelle: >-
+      Taux de l'impôt sur les sociétés au régime simplifié d'imposition, hors
+      CAC
+    categorie: IS
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 25
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI : taux de l'impôt sur les sociétés applicable aux entreprises relevant
+            du régime simplifié. Majoré de 10 % de centimes additionnels communaux,
+            soit une charge effective de 27,5 %
+          source: >-
+            DGI, fiche technique « Impôt sur les sociétés », impots.cm, consultée le
+            18/08/2026
+        note: >-
+          Le taux dépend du régime, et le régime dépend du chiffre d'affaires : voir
+          SEUIL_ASSUJETTISSEMENT_TVA, qui commande la bascule au réel. Un adhérent
+          qui franchit le seuil en cours d'exercice change de taux, et c'est le
+          genre de bascule qu'un abattement CGA de 50 % rend d'autant plus sensible.
+  - code: ABATTEMENT_CGA_BENEFICE
+    libelle: Abattement sur le bénéfice déclaré ouvert par l'adhésion à un CGA
+    categorie: AVANTAGE_CGA
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 50
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 118 et 119 : l'adhérent d'un centre de gestion agréé bénéficie
+              d'un abattement de 50 % sur son bénéfice fiscal, base de l'IS ou de l'IRPP
+          source: >-
+              CGI art. 118 et 119 ; arrêté n° 0009/MINFI/SG/DGI du 15 janvier 2020,
+              consulté le 18/08/2026 via la documentation publique des CGA agréés
+        note: >-
+          Conditions d'application à préciser : plafond éventuel, régimes concernés,
+          délai de carence après adhésion.
+
+  - code: PRECOMPTE_REDUCTION_ADHERENT_CGA
+    libelle: Réduction du taux de précompte sur achats pour un adhérent CGA
+    categorie: AVANTAGE_CGA
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 50
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 119 : abattement de 50 % sur la base de calcul du précompte sur
+              achats, lorsque les achats sont effectués auprès de producteurs ou de
+              distributeurs en gros agréés
+          source: >-
+              CGI art. 118 et 119 ; arrêté n° 0009/MINFI/SG/DGI du 15 janvier 2020,
+              consulté le 18/08/2026 via la documentation publique des CGA agréés
+
+  - code: SEUIL_ADHESION_CGA
+    libelle: >-
+      Chiffre d'affaires annuel au-delà duquel une entreprise ne peut plus
+      adhérer à un centre de gestion agréé
+    categorie: AVANTAGE_CGA
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 100000000
+        # Borne : « n'excède pas 100 000 000 » : cette valeur même reste éligible.
+        borne: EXCLUSE
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI art. 118 : le centre de gestion agréé assiste les petites et moyennes
+            entreprises dont le chiffre d'affaires annuel n'excède pas 100 000 000
+            FCFA
+          source: >-
+            CGI art. 118 et 119 ; arrêté n° 0009/MINFI/SG/DGI du 15 janvier 2020,
+            consulté le 18/08/2026 via la documentation publique des CGA agréés
+        note: >-
+          C'est le critère d'éligibilité du métier même du cabinet, et il n'était
+          pas paramétré. Il commande l'admission d'un prospect : au-delà, l'adhésion
+          ne produit aucun avantage fiscal et la promettre serait une faute
+          commerciale autant que professionnelle.
+  # ── Délais déclaratifs ─────────────────────────────────────────────────────
+
+        note: >-
+            La liste des fournisseurs ouvrant droit à l'abattement est fixée par
+            arrêté du MINFI. Le taux est acquis ; l'éligibilité du fournisseur, elle,
+            se vérifie dossier par dossier et n'est pas automatisable en l'état.
+
+  - code: TVA_JOUR_LIMITE_DEPOT
+    libelle: Jour du mois suivant avant lequel la déclaration de TVA doit être déposée
+    categorie: ECHEANCE
+    unite: JOUR_DU_MOIS
+    nature: LOI
+    versions:
+      - valeur: 15
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 143 : la déclaration est déposée au plus tard le 15 du mois
+              suivant celui au cours duquel les opérations ont été réalisées
+          source: >-
+              DGI, fiche « La Taxe sur la Valeur Ajoutée : ce que vous devez savoir »,
+              impots.cm, consultée le 18/08/2026
+        note: >-
+          Le jour est un paramètre, mais la date d'échéance reste CALCULÉE à partir du
+          type d'obligation et du centre de rattachement. Ne jamais figer une date.
+
+  - code: CNPS_JOUR_LIMITE_PAIEMENT
+    libelle: Jour du mois suivant avant lequel les cotisations CNPS doivent être payées
+    categorie: ECHEANCE
+    unite: JOUR_DU_MOIS
+    nature: LOI
+    versions:
+      - valeur: 15
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: Déclaration DIPE mensuelle, paiement au plus tard le 15 du mois suivant
+          source: Document de cadrage § 2.3
+
+  - code: DSF_DELAI_JOURS_APRES_CLOTURE
+    libelle: >-
+      Délai en jours après la clôture de l'exercice pour le dépôt de la Déclaration
+      Statistique et Fiscale
+    categorie: ECHEANCE
+    unite: JOURS
+    nature: LOI
+    versions:
+      - valeur: 75
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            15 mars pour un exercice clos au 31 décembre, soit 75 jours après clôture
+          source: Document de cadrage § 2.3
+        note: >-
+            ⚠️ LE MODÈLE EST FAUX, PAS SEULEMENT LA VALEUR. La date limite de dépôt de
+            la DSF est confirmée au 15 mars pour un exercice clos le 31 décembre. Or
+            le texte fixe une DATE, quand ce paramètre exprime un DÉLAI : 31 décembre
+            + 75 jours tombe le 16 mars en année ordinaire et le 15 mars en année
+            bissextile. Un jour d'écart, une année sur quatre, du bon côté par hasard.
+            `EcheanceReglementaire` porte déjà `jour_civil` et `mois_civil` : c'est
+            par là que la DSF doit passer, et ce paramètre doit disparaître plutôt
+            qu'être corrigé à 74. S'y ajoute l'échelonnement par centre — CDI, CIME,
+            DGE — dont les valeurs restent à obtenir. Maintenu A_VALIDER pour cette
+            raison.
+  # ── Pénalités ──────────────────────────────────────────────────────────────
+
+  - code: PENALITE_RETARD_TAUX_FIXE
+    libelle: Pénalité fixe pour dépôt ou paiement tardif, en pourcentage du montant dû
+    categorie: PENALITE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 25
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. L95 et L96 : majoration des droits en cas d'insuffisance de
+              déclaration, s'ajoutant à l'intérêt de retard
+          source: >-
+              DGI, Charte du contribuable mise à jour au 1er janvier 2026, impots.cm,
+              consultée le 18/08/2026
+
+  - code: PENALITE_RETARD_TAUX_MENSUEL
+    libelle: Majoration par mois de retard, en pourcentage du montant dû
+    categorie: PENALITE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 1.5
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. L106 : intérêt de retard de 1,5 % du montant de l'impôt dû par
+              mois de retard, en cas de paiement différé ou tardif
+          source: >-
+              DGI, Charte du contribuable mise à jour au 1er janvier 2026, impots.cm,
+              consultée le 18/08/2026
+  # ── Formats d'identifiant ──────────────────────────────────────────────────
+
+  - code: FORMAT_NIU
+    libelle: Expression régulière du numéro d'identifiant unique
+    categorie: FORMAT
+    unite: REGEX
+    nature: LOI
+    versions:
+      - valeur: '^[A-Z][0-9]{12}[A-Z]$'
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            Une lettre, douze caractères — exemples P019876543210K, M081234567890P
+          source: Dossier de design § 4 et § 13.3
+        note: >-
+          Le § 4 énonce « une lettre, douze caractères » mais les exemples comptent
+          quatorze caractères : une lettre, douze chiffres, une lettre. Le format retenu
+          suit les exemples, qui sont cohérents entre eux sur les six entreprises du
+          jeu de démonstration. À confirmer auprès de la DGI.
+
+  - code: FORMAT_RCCM
+    libelle: Expression régulière du numéro du registre du commerce et du crédit mobilier
+    categorie: FORMAT
+    unite: REGEX
+    nature: LOI
+    versions:
+      - valeur: '^RC/[A-Z]{3}/[0-9]{4}/[A-Z]/[0-9]{4}$'
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: Format greffe — exemple RC/DLA/2019/A/1842
+          source: Dossier de design § 4 et § 13.3
+
+  - code: REGEX_DESIGNATION_IMPRECISE
+    libelle: >-
+      Expression régulière des désignations de ligne jugées trop imprécises pour
+      identifier la nature du bien ou de la prestation
+    categorie: FORMAT
+    unite: REGEX
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: '(?i)^\s*(divers|travaux\s+divers|prestations?|fournitures?|services?|articles?|marchandises?)\s*$'
+        applicable_du: 2019-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Liste des désignations jugées trop imprécises pour établir la nature de la
+              dépense. Choix du cabinet, révisable sans texte
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026
+        note: >-
+          Liste de calibrage, à enrichir par le fiscaliste au vu des factures réelles.
+          La règle FAC-DOC-011 est écartée à 42 % dans le jeu de démonstration.
+
+  # ── Vraisemblance ──────────────────────────────────────────────────────────
+
+  - code: DOUBLON_FENETRE_JOURS
+    libelle: >-
+      Fenêtre en jours dans laquelle deux factures de même fournisseur et même montant
+      sont signalées comme doublon possible
+    categorie: VRAISEMBLANCE
+    unite: JOURS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 15
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Fenêtre de rapprochement pour la détection des pièces en double. Arbitrage
+              entre doublons manqués et faux positifs
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026
+        note: >-
+          Paramètre de calibrage, pas une valeur légale. La règle FAC-VRA-005 est
+          écartée à 68 % dans le jeu de démonstration : elle est trop bruyante et cette
+          fenêtre est le premier levier de recalibrage.
+
+  # ── Création d'entreprise ──────────────────────────────────────────────────
+  #
+  # Ces paramètres commandent la constitution des sociétés. Ils relèvent du droit
+  # OHADA (Acte uniforme sur les sociétés commerciales et le GIE) et non du CGI :
+  # le fiscaliste devra donc les faire confirmer sur un autre texte que les
+  # précédents, et c'est précisément pourquoi ils portent leur fondement.
+
+  - code: CAPITAL_MINIMUM_SA
+    libelle: Capital social minimum d'une société anonyme
+    categorie: CREATION
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 10000000
+        # Borne : un capital minimum est atteint quand le capital lui est égal.
+        borne: INCLUSE
+        applicable_du: 2014-05-05
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Acte uniforme OHADA relatif au droit des sociétés commerciales et du GIE :
+              capital social minimum de la société anonyme
+          source: >-
+              Acte uniforme OHADA relatif au droit des sociétés commerciales et du GIE ;
+              loi camerounaise n° 2016/014 du 14 décembre 2016, consultée le 18/08/2026
+              via ohada.org
+        note: >-
+          Le montant est réputé stable depuis la révision de 2014. À confirmer, ainsi
+          que l'existence d'un régime particulier pour la SA faisant appel public à
+          l'épargne, dont le minimum est plus élevé et qui n'est pas modélisé ici.
+
+  - code: CAPITAL_MINIMUM_SARL
+    libelle: Capital social minimum d'une société à responsabilité limitée
+    categorie: CREATION
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 100000
+        # Borne : un capital minimum est atteint quand le capital lui est égal.
+        borne: INCLUSE
+        applicable_du: 2014-05-05
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Loi n° 2016/014 du 14 décembre 2016 : capital social minimum de la SARL
+              ramené à 100 000 FCFA au Cameroun
+          source: >-
+              Acte uniforme OHADA relatif au droit des sociétés commerciales et du GIE ;
+              loi camerounaise n° 2016/014 du 14 décembre 2016, consultée le 18/08/2026
+              via ohada.org
+        note: >-
+            L'acte notarié est facultatif lorsque la SARL est unipersonnelle ou que
+            son capital n'excède pas 1 000 000 FCFA ; le chef du CFCE authentifie
+            alors les statuts. Ce second seuil n'est pas encore paramétré : il
+            commande un embranchement du tunnel de création.
+
+
+  - code: SEUIL_ACTE_NOTARIE_SARL
+    libelle: >-
+      Capital au-delà duquel la constitution d'une SARL exige un acte notarié
+    categorie: CREATION
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 1000000
+        # Borne : « capital n'excède pas 1 000 000 » : à cette valeur même, le notaire
+        # reste facultatif. Une première annotation l'avait supposée incluse ; le texte
+        # dit l'inverse, et c'est précisément l'erreur que la borne existe pour éviter.
+        borne: EXCLUSE
+        applicable_du: 2017-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            Loi n° 2016/014 du 14 décembre 2016 : le recours au notaire est facultatif
+            lorsque la SARL est unipersonnelle ou que son capital n'excède pas 1 000
+            000 FCFA ; le chef du CFCE authentifie alors les statuts
+          source: >-
+            Acte uniforme OHADA relatif au droit des sociétés commerciales et du GIE ;
+            loi camerounaise n° 2016/014 du 14 décembre 2016, consultée le 18/08/2026
+            via ohada.org
+        note: >-
+          Ce seuil commande un embranchement du tunnel de création : au-dessous, le
+          dossier passe par le CFCE seul ; au-dessus, il faut un notaire, donc un
+          délai et un coût que le devis doit annoncer. L'embranchement n'est pas
+          encore câblé dans le contexte I.
+  - code: CFCE_DELAI_ANNONCE_JOURS
+    libelle: >-
+      Délai annoncé par le Centre de formalités de création d'entreprise entre le dépôt
+      d'un dossier complet et la délivrance des identifiants
+    categorie: CREATION
+    unite: JOURS
+    nature: LOI
+    versions:
+      - valeur: 3
+        applicable_du: 2020-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: Délai de 72 heures annoncé par le guichet unique du CFCE
+          source: Communication institutionnelle CFCE ; dossier de design § 13
+        note: >-
+          Délai annoncé, pas délai légal opposable. Sert uniquement à déclencher une
+          relance : un dossier déposé depuis plus longtemps remonte dans le pipeline.
+
+  - code: CREATION_DELAI_ALERTE_JOURS
+    libelle: >-
+      Ancienneté au-delà de laquelle un dossier de création immobile à une même étape est
+      signalé au chargé de formalités
+    categorie: CREATION
+    unite: JOURS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 15
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Délai au-delà duquel un dossier de création sans mouvement est signalé au
+              chargé de clientèle. Règle de suivi interne
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026
+        note: >-
+          Paramètre de calibrage. Un dossier de création qui dort est un client qui
+          part : c'est le seul indicateur du pipeline qui déclenche une action.
+
+  # ── Paie et cotisations sociales ───────────────────────────────────────────
+  #
+  # ⚠️ Ces paramètres relèvent du Code du travail, du Code de la prévoyance
+  # sociale et du CGI selon les cas — trois textes, trois administrations. Le
+  # fondement de chacun dit lequel, parce qu'un fiscaliste qui les valide devra
+  # ouvrir trois codes différents et qu'il doit savoir lequel pour lequel.
+  #
+  # Un taux de cotisation faux ne se voit pas : le bulletin reste plausible, le
+  # salarié le signe, et l'écart se découvre au contrôle CNPS, sur trois ans de
+  # masse salariale et pour tous les salariés à la fois.
+
+  - code: CNPS_PVID_TAUX_SALARIE
+    libelle: Cotisation pension vieillesse, invalidité, décès — part salariale
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 4.2
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Branche des pensions de vieillesse, d'invalidité et de décès : taux global
+              de 8,4 %, réparti à parts égales entre le travailleur (4,2 %) et
+              l'employeur (4,2 %)
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+        note: Assis sur le salaire cotisable, dans la limite du plafond mensuel.
+
+  - code: CNPS_PVID_TAUX_EMPLOYEUR
+    libelle: Cotisation pension vieillesse, invalidité, décès — part patronale
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 4.2
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Branche PVID : part patronale du taux global de 8,4 %
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+
+  - code: CNPS_PLAFOND_MENSUEL
+    libelle: Plafond mensuel du salaire cotisable aux prestations CNPS
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 750000
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Plafond mensuel du salaire cotisable, applicable aux branches des
+              prestations familiales et PVID
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+        note: >-
+            ⚠️ Le plafond ne s'applique PAS à la branche des accidents du travail et
+            maladies professionnelles, qui cotise sur le salaire réel. Cette asymétrie
+            est invisible tant qu'aucun salarié ne dépasse le plafond, et c'est elle
+            que vérifie le parcours de recette `flux_social.py`.
+
+  - code: CNPS_PRESTATIONS_FAMILIALES_TAUX
+    libelle: Cotisation prestations familiales — part patronale, régime général
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 7.0
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Branche des prestations familiales, régime général : 7 %, intégralement à
+              la charge de l'employeur
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+        note: >-
+            Le taux varie par régime : 5,65 % au régime agricole, 3,70 % à
+            l'enseignement privé, 7 % au régime domestique. Seul le régime général est
+            paramétré ; un adhérent relevant d'un autre régime sera cotisé au mauvais
+            taux et rien ne le signalera. À ouvrir en paramètres distincts avant de
+            servir un tel adhérent.
+
+  - code: CNPS_ACCIDENTS_TRAVAIL_TAUX_GROUPE_A
+    libelle: Cotisation accidents du travail — groupe A, risque faible
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 1.75
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Branche des risques professionnels, groupe A (risque faible) : 1,75 %, à
+              la charge exclusive de l'employeur
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+        note: Bureaux, commerce, services sans manutention lourde.
+
+  - code: CNPS_ACCIDENTS_TRAVAIL_TAUX_GROUPE_B
+    libelle: Cotisation accidents du travail — groupe B, risque moyen
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 2.5
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Branche des risques professionnels, groupe B (risque moyen) : 2,50 %
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+        note: Industrie légère, transport, agroalimentaire.
+
+  - code: CNPS_ACCIDENTS_TRAVAIL_TAUX_GROUPE_C
+    libelle: Cotisation accidents du travail — groupe C, risque élevé
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 5.0
+        applicable_du: 2016-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Branche des risques professionnels, groupe C (risque élevé) : 5,00 %
+          source: >-
+              CNPS, « Obligations de l'employeur », cnps.cm, consultée le 18/08/2026 ;
+              Code de la prévoyance sociale
+        note: >-
+          Bâtiment, extraction, exploitation forestière. Le groupe est **notifié par
+          la CNPS** à chaque employeur : il ne se déduit pas de l'activité déclarée,
+          et le saisir de travers coûte le triple ou le tiers de la cotisation.
+
+  - code: CFC_TAUX_SALARIE
+    libelle: Contribution au Crédit foncier du Cameroun — part salariale
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 1.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Contribution au Crédit foncier du Cameroun, part salariale, retenue à la
+              source par l'employeur
+          source: >-
+              Camerlex, « La contribution au crédit foncier », consultée le 18/08/2026 ;
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: CFC_TAUX_EMPLOYEUR
+    libelle: Contribution au Crédit foncier du Cameroun — part patronale
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 1.5
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Contribution au Crédit foncier du Cameroun, part patronale
+          source: >-
+              Camerlex, « La contribution au crédit foncier », consultée le 18/08/2026 ;
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+        note: >-
+            Des sources secondaires divergent et annoncent 1 % côté employeur. La
+            valeur de 1,5 % est retenue comme la plus fréquemment attestée. À
+            reconfronter au texte instituant la contribution avant le premier bulletin
+            réel : un demi-point sur la masse salariale annuelle d'un adhérent n'est
+            pas une approximation acceptable.
+
+  - code: FNE_TAUX_EMPLOYEUR
+    libelle: Contribution au Fonds national de l'emploi — part patronale
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 1.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Contribution au Fonds national de l'emploi, à la charge de l'employeur
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: IRPP_ABATTEMENT_FRAIS_PROFESSIONNELS
+    libelle: Abattement forfaitaire pour frais professionnels sur le revenu salarial
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 30.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 29 : abattement forfaitaire de 30 % pour frais professionnels,
+              appliqué au salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+        note: >-
+            ⚠️ CET ABATTEMENT EST PLAFONNÉ depuis la loi de finances 2024. Voir
+            `IRPP_ABATTEMENT_FRAIS_PLAFOND_ANNUEL`. Appliquer ce taux sans le plafond
+            sous-impose tout salarié dont le brut annuel dépasse 16 000 000 FCFA — les
+            deux paramètres se lisent ensemble ou pas du tout.
+
+
+  - code: IRPP_ABATTEMENT_FRAIS_PLAFOND_ANNUEL
+    libelle: >-
+      Plafond annuel de l'abattement de 30 % pour frais professionnels
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 4800000
+        applicable_du: 2024-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI art. 29 modifié par la loi de finances 2024 : l'abattement forfaitaire
+            de 30 % pour frais professionnels est plafonné à 4 800 000 FCFA par an, de
+            sorte qu'il cesse de croître au-delà de 16 000 000 FCFA de revenu brut
+          source: >-
+            DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+        note: >-
+          ⚠️ Ce plafond n'existait pas au référentiel. Sans lui, l'abattement
+          continue de croître indéfiniment et tout salarié dont le brut annuel
+          dépasse 16 000 000 FCFA est sous-imposé. L'écart grandit avec le salaire,
+          donc il porte précisément sur les dossiers où un contrôle est le plus
+          probable. Applicable au 1er janvier 2024 : un bulletin de 2023 recalculé
+          ne doit pas s'en voir appliquer, et la borne de version l'en empêche.
+  - code: IRPP_ABATTEMENT_FORFAITAIRE_ANNUEL
+    libelle: Abattement forfaitaire annuel sur le revenu net salarial
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 500000
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 29 : abattement forfaitaire annuel de 500 000 FCFA, s'ajoutant à
+              l'abattement de 30 % pour frais professionnels
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+        note: >-
+          Annuel. Le calcul mensuel en retient un douzième — la mensualisation est
+          une convention de retenue à la source, pas une règle d'assiette.
+
+  - code: DIPE_JOUR_LIMITE_DEPOT
+    libelle: Jour limite de dépôt de la déclaration mensuelle des personnels employés
+    categorie: ECHEANCE
+    unite: JOUR_DU_MOIS
+    nature: LOI
+    versions:
+      - valeur: 15
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: Déclaration DIPE due au plus tard le 15 du mois suivant la période
+          source: Sources secondaires
+        note: Même jour limite que la cotisation CNPS — voir CNPS_JOUR_LIMITE_PAIEMENT.
+
+  # ── Avantages en nature, barème forfaitaire ────────────────────────────────
+  #
+  # Le CGI évalue forfaitairement les avantages en nature en pourcentage du
+  # salaire brut taxable. Le forfait s'applique **même si le coût réel est
+  # différent** : c'est ce qui rend le calcul possible sans facture, et c'est
+  # aussi ce qui surprend les employeurs qui logent un cadre à moindre coût.
+
+  - code: AVANTAGE_NATURE_LOGEMENT
+    libelle: Évaluation forfaitaire de l'avantage en nature logement
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 15.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 33 : évaluation forfaitaire de l'avantage en nature « logement »,
+              en pourcentage du salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_ELECTRICITE
+    libelle: Évaluation forfaitaire de l'avantage en nature électricité
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 4.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 33 : évaluation forfaitaire de l'avantage en nature « électricité
+              », en pourcentage du salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_EAU
+    libelle: Évaluation forfaitaire de l'avantage en nature eau
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 2.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 33 : évaluation forfaitaire de l'avantage en nature « eau », en
+              pourcentage du salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_DOMESTIQUE
+    libelle: Évaluation forfaitaire de l'avantage en nature domestique, par personne
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 5.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 33 : évaluation forfaitaire de l'avantage en nature « domesticité
+              », en pourcentage du salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+        note: Par domestique. Deux gardiens valent deux fois ce taux.
+
+  - code: AVANTAGE_NATURE_VEHICULE
+    libelle: Évaluation forfaitaire de l'avantage en nature véhicule
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 10.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 33 : évaluation forfaitaire de l'avantage en nature « véhicule »,
+              en pourcentage du salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_NOURRITURE
+    libelle: Évaluation forfaitaire de l'avantage en nature nourriture
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 10.0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              CGI art. 33 : évaluation forfaitaire de l'avantage en nature « nourriture
+              », en pourcentage du salaire brut taxable
+          source: >-
+              DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  # Ajoutés par la loi de finances 2024. Leur date d'effet au 1er janvier 2024
+  # n'est pas décorative : elle empêche un barème de 2024 de s'appliquer à un
+  # bulletin de 2023 qu'on recalculerait aujourd'hui.
+
+  - code: AVANTAGE_NATURE_TELEPHONE
+    libelle: >-
+      Forfait d'avantage en nature : téléphone
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 5.0
+        applicable_du: 2024-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI art. 33, liste étendue par la loi de finances 2024 : évaluation
+            forfaitaire de l'avantage en nature « téléphone », en pourcentage du
+            salaire brut taxable
+          source: >-
+            DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_CARBURANT
+    libelle: >-
+      Forfait d'avantage en nature : carburant
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 10.0
+        applicable_du: 2024-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI art. 33, liste étendue par la loi de finances 2024 : évaluation
+            forfaitaire de l'avantage en nature « carburant », en pourcentage du
+            salaire brut taxable
+          source: >-
+            DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_GARDIENNAGE
+    libelle: >-
+      Forfait d'avantage en nature : gardiennage
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 5.0
+        applicable_du: 2024-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI art. 33, liste étendue par la loi de finances 2024 : évaluation
+            forfaitaire de l'avantage en nature « gardiennage », en pourcentage du
+            salaire brut taxable
+          source: >-
+            DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+
+  - code: AVANTAGE_NATURE_INTERNET
+    libelle: >-
+      Forfait d'avantage en nature : internet
+    categorie: PAIE
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 5.0
+        applicable_du: 2024-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+            CGI art. 33, liste étendue par la loi de finances 2024 : évaluation
+            forfaitaire de l'avantage en nature « internet », en pourcentage du
+            salaire brut taxable
+          source: >-
+            DGI, fiche « Tout savoir sur l'IRPP », impots.cm, consultée le 18/08/2026
+  # ── Clôture et liasse fiscale ──────────────────────────────────────────────
+
+  - code: SEUIL_SYSTEME_NORMAL
+    libelle: >-
+      Chiffre d'affaires à partir duquel la liasse relève du Système Normal
+      SYSCOHADA plutôt que du Système Minimal de Trésorerie
+    categorie: CLOTURE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 60000000
+        # Borne : le système minimal est réservé à qui « reste sous » le seuil : cette valeur même relève du normal.
+        borne: INCLUSE
+        applicable_du: 2018-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              AUDCIF art. 13 : le système minimal de trésorerie est réservé aux entités
+              dont le chiffre d'affaires annuel hors taxes reste sous 60 000 000 FCFA
+              pour le négoce, 40 000 000 pour l'artisanat, 30 000 000 pour les services
+          source: >-
+              AUDCIF art. 13 ; décret n° 2019/262 du 28 mai 2019 portant application du
+              système comptable OHADA révisé, consulté le 18/08/2026
+        note: >-
+            ⚠️ UN SEUL SEUIL LÀ OÙ LE TEXTE EN MODULE TROIS. La valeur retenue est la
+            plus élevée des trois — celle du négoce. Une entité de services réalisant
+            45 000 000 FCFA est donc classée au Système Normal alors que le texte
+            l'admettrait au SMT. Le sur-classement est le sens d'erreur le moins
+            dommageable : une liasse plus détaillée que nécessaire est acceptée,
+            l'inverse est rejeté. `liasse.py` signale ce sur-classement plutôt que de
+            le subir. Trois paramètres sectoriels restent la bonne cible.
+
+  - code: ABATTEMENT_CGA_PLAFOND
+    libelle: Plafond annuel de l'abattement consenti aux adhérents d'un centre de gestion agréé
+    categorie: AVANTAGE_CGA
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 0
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: Existence d'un plafond à confirmer sur le CGI
+          source: Aucune — paramètre créé pour porter la question, pas pour l'affirmer
+        note: >-
+          ⚠️ VALEUR NULLE SIGNIFIANT « AUCUN PLAFOND CONNU », ET NON « PLAFOND À ZÉRO ».
+          Le calcul traite explicitement zéro comme l'absence de plafond — voir
+          `application/passage_fiscal.py`. Ce paramètre existe pour que la question soit
+          posée au fiscaliste et tracée, plutôt que d'être oubliée : si un plafond
+          existe et n'est pas appliqué, l'abattement calculé est trop favorable et la
+          liasse est fausse en faveur de l'adhérent, ce qui est la pire des deux erreurs.
+
+  # ── Pilotage : la pondération du score de risque ───────────────────────────
+  #
+  # ┌──────────────────────────────────────────────────────────────────────────┐
+  # │  CES PARAMÈTRES NE SONT PAS DES VALEURS LÉGALES.                         │
+  # │                                                                          │
+  # │  Ils ne relèvent d'aucun texte et n'ont donc pas à être validés par un    │
+  # │  fiscaliste : ce sont des **réglages de la direction du cabinet**. Ils    │
+  # │  portent `nature: POLITIQUE_CABINET`, et la direction les a arrêtés le    │
+  # │  18 août 2026 — jusque-là, un score calculé sur des poids que personne    │
+  # │  n'avait choisis n'était pas un indicateur, c'était une opinion du        │
+  # │  développeur.                                                            │
+  # │                                                                          │
+  # │  Ils vivent au référentiel plutôt que dans le code pour une raison        │
+  # │  précise, écrite au § 01 du dossier d'architecture : « la pondération     │
+  # │  des composantes du score appartient à la direction ». Une direction qui  │
+  # │  doit demander un déploiement pour changer un poids ne pilote pas.        │
+  # └──────────────────────────────────────────────────────────────────────────┘
+
+  - code: POIDS_RISQUE_ANOMALIES_BLOQUANTES
+    libelle: >-
+      Poids d'une anomalie bloquante non levée dans le score de risque d'un dossier
+    categorie: PILOTAGE
+    unite: POINTS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 25
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Poids des anomalies bloquantes dans le score de risque du dossier
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026, en application du § 01
+              du dossier d'architecture qui réserve la pondération du score de risque à
+              la direction
+        note: >-
+          Le poids le plus élevé du barème, et délibérément : une anomalie bloquante
+          non levée interdit la comptabilisation. Le dossier ne peut pas avancer, et
+          l'échéance, elle, avance quand même.
+
+  - code: POIDS_RISQUE_RETARD_DECLARATIF
+    libelle: Poids d'une obligation déclarative échue et non déposée
+    categorie: PILOTAGE
+    unite: POINTS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 20
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Poids du retard déclaratif dans le score de risque du dossier
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026, en application du § 01
+              du dossier d'architecture qui réserve la pondération du score de risque à
+              la direction
+        note: >-
+          Un retard déclaratif court des pénalités chaque mois. C'est la seule
+          composante du score dont le coût est immédiatement chiffrable.
+
+  - code: POIDS_RISQUE_PIECES_EN_SOUFFRANCE
+    libelle: Poids d'une pièce reçue et non encore traitée
+    categorie: PILOTAGE
+    unite: POINTS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 5
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Poids des pièces en souffrance dans le score de risque du dossier
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026, en application du § 01
+              du dossier d'architecture qui réserve la pondération du score de risque à
+              la direction
+        note: >-
+          Poids faible et volontairement : une pièce en souffrance est un travail à
+          faire, pas encore un risque. Elle le devient en nombre — c'est pourquoi le
+          score la compte plutôt que de l'ignorer.
+
+  - code: POIDS_RISQUE_DEMANDES_SANS_REPONSE
+    libelle: Poids d'une demande de pièce restée sans réponse de l'adhérent
+    categorie: PILOTAGE
+    unite: POINTS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 10
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Poids des demandes sans réponse dans le score de risque du dossier
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026, en application du § 01
+              du dossier d'architecture qui réserve la pondération du score de risque à
+              la direction
+        note: >-
+          Distinct des pièces en souffrance : celles-ci sont au cabinet, celles-là
+          n'y sont pas. Une demande sans réponse est un dossier qui ne se complétera
+          pas tout seul, et c'est le cabinet qui en portera la responsabilité.
+
+  - code: SEUIL_RISQUE_ELEVE
+    libelle: Score à partir duquel un dossier est signalé à risque élevé
+    categorie: PILOTAGE
+    unite: POINTS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 60
+        # Borne : « à partir duquel » : ce score même classe à risque élevé.
+        borne: INCLUSE
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Score à partir duquel un dossier est classé à risque élevé
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026, en application du § 01
+              du dossier d'architecture qui réserve la pondération du score de risque à
+              la direction
+
+  - code: SEUIL_RISQUE_MODERE
+    libelle: Score à partir duquel un dossier est signalé à risque modéré
+    categorie: PILOTAGE
+    unite: POINTS
+    nature: POLITIQUE_CABINET
+    versions:
+      - valeur: 25
+        # Borne : « à partir duquel » : ce score même classe à risque modéré.
+        borne: INCLUSE
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: VALIDE
+        valide_par: CGA Broad Range Consulting Group (agrément MINFI/DGI n° 00000048)
+        valide_le: 2026-08-18
+        fondement:
+          texte: >-
+              Score à partir duquel un dossier est classé à risque modéré
+          source: >-
+              Arrêté par la direction du cabinet le 18 août 2026, en application du § 01
+              du dossier d'architecture qui réserve la pondération du score de risque à
+              la direction
+        note: >-
+          ⚠️ Doit rester inférieur à SEUIL_RISQUE_ELEVE. Le domaine le vérifie et
+          refuse de classer si l'ordre est inversé : un dossier ne peut pas être
+          « modéré » au-delà du seuil « élevé », et le laisser passer produirait un
+          tableau de bord où les couleurs mentent.

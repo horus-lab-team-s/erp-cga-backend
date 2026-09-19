@@ -25,7 +25,7 @@ from app.infrastructure.config import RACINE_DEPOT
 from app.partage.erreurs import message_lisible
 from tests.conftest import exige_postgresql
 
-RACINE_APP = RACINE_DEPOT / "Backend_erp_cga" / "app"
+RACINE_APP = RACINE_DEPOT / "app"
 
 #: Les marques de l'enrobage : si l'une d'elles atteint un message, il n'a pas été
 #: déballé.

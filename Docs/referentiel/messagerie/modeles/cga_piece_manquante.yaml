@@ -1,0 +1,11 @@
+nom: cga_piece_manquante
+libelle: Pièce manquante
+langue: fr
+categorie: UTILITAIRE
+statut: EN_ATTENTE
+usage: >-
+  Quand la complétude d'un dossier bloque sur un justificatif attendu. Rédigé pour appeler une réponse, ce qui rouvre la fenêtre et rend gratuit l'échange qui suit.
+corps: |-
+  Bonjour {{1}}, il nous manque une pièce pour avancer sur votre dossier {{2}} :
+  {{3}}.
+  Vous pouvez nous l'envoyer en réponse à ce message.

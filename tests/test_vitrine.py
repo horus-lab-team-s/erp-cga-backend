@@ -31,6 +31,7 @@ from app.contextes.vitrine.api import (
     SlugsEnDoublon,
 )
 from app.infrastructure.config import RACINE_DEPOT
+from app.infrastructure.voisinage import VARIABLE_VITRINE, VITRINE, un_depot_voisin
 
 CONTENU = RACINE_DEPOT / "Contenu_vitrine"
 
@@ -248,7 +249,17 @@ class TestContenuPublie:
         """L'image sert de vignette sur Facebook et WhatsApp. Une image absente du
         dépôt public donnerait un lien partagé sans vignette — donc sans raison
         d'être cliqué."""
-        public = RACINE_DEPOT / "Frontend_erp_cga" / "public"
+        # ⚠️ Le texte de l'article est ici, l'image est chez la vitrine. C'est la
+        # seule couture que la scission ait laissée entre ces deux dépôts, et ce
+        # test est ce qui la tient : sans lui, un article peut désigner une image
+        # que personne ne publie, et le lien partagé arrive sans vignette.
+        vitrine = un_depot_voisin(VITRINE, VARIABLE_VITRINE, "public")
+        if vitrine is None:
+            pytest.skip(
+                "la vitrine vit dans le dépôt `erp-cga-vitrine` depuis la scission. "
+                f"Le désigner par {VARIABLE_VITRINE}, ou le cloner à côté de celui-ci."
+            )
+        public = vitrine / "public"
         for article in contenu_reel.articles():
             chemin = public / article.image.lstrip("/")
             assert chemin.is_file(), f"{article.slug} : image introuvable — {article.image}"

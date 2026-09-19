@@ -1,0 +1,64 @@
+# Les sous-domaines que la plateforme se garde.
+#
+# Un tenant nommé « api » masquerait la plateforme elle-même : ses requêtes iraient à un
+# client au lieu du service. Le refus doit donc être prononcé à la souscription, avant
+# qu'un slug ne soit attribué et qu'il devienne inréattribuable.
+#
+# Cette liste est une donnée et non une constante parce qu'elle grandit : un sous-domaine
+# technique de plus, une marque à protéger, un nom qu'on regrette d'avoir laissé libre.
+# La faire grandir ne doit pas demander une livraison.
+#
+# La comparaison est insensible à la casse des deux côtés : réserver « API » interdit
+# « api ».
+
+statut: A_VALIDER
+fondement:
+  texte: >-
+    Sous-domaines techniques employés par la plateforme, plus les noms génériques qu'un
+    client ne doit pas pouvoir s'approprier. Liste à compléter par l'exploitation avant la
+    mise en service.
+  source: Conception, section 21 · Les sous-domaines
+
+noms:
+  # Ce que la plateforme sert elle-même
+  - www
+  - api
+  - app
+  - admin
+  - console
+  - static
+  - cdn
+  - assets
+  - media
+
+  # Ce qui sert à l'exploitation
+  - status
+  - sante
+  - metrics
+  - logs
+  - test
+  - recette
+  - demo
+  - staging
+
+  # Ce qui part ou arrive par courriel
+  - mail
+  - smtp
+  - imap
+  - webmail
+  - mx
+  - ns
+  - ns1
+  - ns2
+
+  # Ce qu'un client ne doit pas pouvoir s'approprier
+  - blog
+  - docs
+  - aide
+  - support
+  - contact
+  - facture
+  - paiement
+  - compte
+  - login
+  - connexion
