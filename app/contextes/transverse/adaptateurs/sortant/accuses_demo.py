@@ -62,7 +62,7 @@ def _depot(
     fin: date,
     numero: str,
     depose_le: datetime,
-    montant: str,
+    montant: str | None,
     precision: str,
 ) -> tuple[DocumentATransmettre, AccuseReception]:
     """Un document et l'accusé qui lui correspond, à l'octet près."""
@@ -87,7 +87,7 @@ def _depot(
         mode=ModeDepot.MANUEL,
         empreinte_deposee=document.empreinte,
         depose_par=_REVISEUR,
-        montant_constate=Decimal(montant),
+        montant_constate=Decimal(montant) if montant is not None else None,
         precision=precision,
     )
     return document, accuse
@@ -122,8 +122,13 @@ ACCUSES_DEMO: list[tuple[DocumentATransmettre, AccuseReception]] = [
     ),
     _depot(
         # La déclaration annuelle de l'exercice 2023, déposée dans les délais.
+        #
+        # ⚠️ AUCUN MONTANT, et c'est le point. Constaté sur l'appareil : avec
+        # zéro, l'écran affichait « 0 F » sous « Déclaration annuelle », ce qui
+        # laisse croire que rien n'était dû. Une DSF n'est pas un paiement :
+        # c'est une déclaration, et son accusé ne porte pas de montant.
         "DSF", date(2023, 1, 1), date(2023, 12, 31),
         "DGI-2024-DSF-009214", datetime(2024, 3, 14, 16, 20),
-        "0", "Liasse fiscale complète, déposée au centre divisionnaire",
+        None, "Liasse fiscale complète, déposée au centre divisionnaire",
     ),
 ]
