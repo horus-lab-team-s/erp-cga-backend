@@ -63,6 +63,8 @@ from app.contextes.social.adaptateurs.sortant.depots import (
     DepotSalariesSql,
 )
 from app.contextes.social.api import CONTRATS_DEMO, RATTACHEMENTS_DEMO, SALARIES_DEMO
+from app.contextes.transverse.adaptateurs.sortant.accuses_demo import ACCUSES_DEMO
+from app.contextes.transverse.adaptateurs.sortant.depots_sql import PortailSql
 from app.contextes.transverse.api import (
     COMPTES_DEMO,
     HABILITATIONS_DEMO,
@@ -154,6 +156,24 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             # peuvent en avoir.
             imputation.enregistrer_plan(niu, PLAN_IMPUTATION_DEMO)
 
+        # ── Les accusés de dépôt ──────────────────────────────────────────
+        #
+        # ⚠️ Ils manquaient, et l'espace adhérent le montrait : « mes documents »
+        # rendait une liste vide sur un dossier adhérent depuis juin 2022. Un
+        # cabinet qui dépose depuis trois ans a forcément des accusés.
+        #
+        # ⚠️ Ils passent par `enregistrer_accuse`, qui vérifie que l'accusé porte
+        # bien sur le document préparé et refuse un second dépôt de la même
+        # période. Écrire dans la table contournerait ces gardes et laisserait
+        # entrer un jeu d'essai que le produit lui-même refuserait.
+        #
+        # ⚠️ Un guichet par accusé : la CNPS et la DGI ne se confondent pas, et
+        # le domaine refuse d'attacher l'un à l'autre.
+        for document, accuse in ACCUSES_DEMO:
+            PortailSql(session, locataire, accuse.portail).enregistrer_accuse(
+                accuse, document=document
+            )
+
         return {
             "creations": len(PIPELINE_DEMO),
             "salaries": len(SALARIES_DEMO),
@@ -164,4 +184,5 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             "pieces": len(PIECES_DEMO),
             "demandes": len(DEMANDES_DEMO),
             "ecritures": ecritures_posees,
+            "accuses": len(ACCUSES_DEMO),
         }
