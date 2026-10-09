@@ -42,7 +42,7 @@ def _demande(deposee_le: datetime = LE_JOUR) -> DemandeDeContact:
         deposee_le=deposee_le,
         nom="Abena Ndzana",
         telephone="699112233",
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         canal_prefere=Canal.WHATSAPP,
         consentement=Consentement(
             accorde=True,
@@ -158,9 +158,39 @@ class TestLeGraphe:
         with pytest.raises(TransitionDossierRefusee):
             _dossier().premier_contact(LE_JOUR)
 
-    def test_on_ne_chiffre_pas_avant_d_avoir_qualifie(self):
-        with pytest.raises(TransitionDossierRefusee):
-            _a(EtatDossier.EN_CONVERSATION).chiffrer(LE_JOUR)
+    def test_on_chiffre_depuis_la_conversation_quand_le_prix_est_deja_arrete(self):
+        """⚠️ CE CAS DISAIT L'INVERSE, ET IL AVAIT RAISON JUSQU'AU PAS 137.
+
+        « On ne chiffre pas avant d'avoir qualifié » était vrai tant que tout
+        prix se calculait. Il ne l'est plus : le gérant arrête lui-même le prix
+        de certaines prestations, et il n'y a alors **rien à qualifier**.
+
+        `FORMATION` et `DOMICILIATION` en mouraient : `QUALIFIÉE` ne s'atteint
+        que par une qualification, la qualification exige un questionnaire, et
+        ces services n'en ont pas. Leurs dossiers restaient bloqués en
+        `EN_CONVERSATION` pour toujours, après avoir été proposés sur le site
+        public.
+
+        ⚠️ **LA GARDE N'A PAS DISPARU, ELLE A CHANGÉ D'ÉTAGE.** Le dossier ne
+        connaît pas le catalogue, et il n'a pas à le connaître : savoir si un
+        prix a une base est la question de celui qui tient les tarifs. C'est
+        `_proposition_du_dossier` qui refuse en 409 un service sur étude dont la
+        qualification est incomplète, et `test_prix_du_dossier.py` l'éprouve —
+        y compris la contre-épreuve : sans décision du gérant, la formation
+        reste refusée.
+        """
+        chiffre = _a(EtatDossier.EN_CONVERSATION).chiffrer(LE_JOUR)
+        assert chiffre.etat is EtatDossier.CHIFFREE
+
+    def test_on_ne_chiffre_toujours_pas_sans_avoir_parle_au_client(self):
+        """La borne qui reste, et qui est la vraie.
+
+        Émettre un prix sur un dossier que personne n'a ouvert, c'est envoyer une
+        facture à quelqu'un qui a posé une question.
+        """
+        for etat in (EtatDossier.DEPOSEE, EtatDossier.AFFECTEE):
+            with pytest.raises(TransitionDossierRefusee):
+                _a(etat).chiffrer(LE_JOUR)
 
     def test_rien_ne_repart_d_un_dossier_paye(self):
         paye = _a(EtatDossier.PAYEE)

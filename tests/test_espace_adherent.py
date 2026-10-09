@@ -324,7 +324,7 @@ class TestLesJustificatifs:
 # ── 4. Le bandeau ─────────────────────────────────────────────────────────────
 
 
-def _attendue(demande="DP-1", attendue_pour=date(2026, 8, 12)):
+def _attendue(demande="DP-1", attendue_pour=date(2026, 8, 12), reponse=None):
     return AttendueDeLAdherent(
         demande=demande,
         libelle="Relevé",
@@ -334,7 +334,84 @@ def _attendue(demande="DP-1", attendue_pour=date(2026, 8, 12)):
         en_retard=False,
         bloquante=False,
         a_corriger=False,
+        reponse=reponse,
     )
+
+
+class TestElleARepondu:
+    """Le bandeau comptait ce qu'elle avait déjà expliqué.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    CE QUE LA PILE A MONTRÉ, LE 30 SEPTEMBRE
+
+    Le dossier de démonstration portait trois demandes ouvertes, et **les trois
+    avaient une réponse de l'adhérente** : « Je n'ai pas ce document », « Je
+    l'aurai la semaine prochaine ». Le bandeau annonçait :
+
+        Il manque 3 justificatifs
+        La date prévue est passée : envoyez-les dès que possible, le cabinet
+        vous attend.
+
+    Elle avait parlé trois fois. Le produit ne l'entendait pas — et c'est le
+    premier texte qu'elle lit en ouvrant son espace.
+
+    ⚠️ Une demande répondue **reste ouverte** : le cabinet a toujours besoin de la
+    pièce. Mais elle n'attend plus un geste d'elle. Elle attend une suite du
+    cabinet, qui doit insister, accepter un substitut, ou clore.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    REGLAGES = ReglagesDeLEspaceAdherent()
+
+    def test_toutes_repondues_ne_lui_demande_plus_rien(self):
+        bandeau, limite = rendre_le_bandeau(
+            EtatDuMois.A_ENVOYER,
+            attendues=[
+                _attendue("DP-1", date(2026, 8, 12), reponse="Je n'ai pas ce document"),
+                _attendue("DP-2", date(2026, 8, 20), reponse="Je l'aurai la semaine prochaine"),
+            ],
+            nom_du_mois="juillet 2026",
+            jour=date(2026, 9, 30),
+            reglages=self.REGLAGES,
+        )
+        assert bandeau.titre == "Vous avez répondu à 2 demandes"
+        assert "Rien à faire de votre côté" in bandeau.detail
+        # ⚠️ Et surtout : plus aucune injonction à envoyer.
+        assert "envoyez" not in bandeau.detail.lower()
+        # ⚠️ Aucune date limite rappelée : la lui rappeler la mettrait en faute
+        # pour une pièce qu'elle a dit ne pas avoir.
+        assert limite is None
+
+    def test_le_compte_ne_retient_que_ce_qui_reste_chez_elle(self):
+        """Le cas mixte, celui qui se produit le plus souvent."""
+        bandeau, limite = rendre_le_bandeau(
+            EtatDuMois.A_ENVOYER,
+            attendues=[
+                _attendue("DP-1", date(2026, 8, 12), reponse="Je n'ai pas ce document"),
+                _attendue("DP-2", date(2026, 8, 20)),
+            ],
+            nom_du_mois="juillet 2026",
+            jour=date(2026, 8, 5),
+            reglages=self.REGLAGES,
+        )
+        assert bandeau.titre == "Il manque 1 justificatif", (
+            "les deux étaient comptées, dont une qu'elle avait déjà expliquée"
+        )
+        # ⚠️ La date annoncée est celle de la pièce qu'elle doit ENCORE envoyer.
+        assert limite == date(2026, 8, 20)
+        assert "20/08/2026" in bandeau.detail
+
+    def test_sans_aucune_reponse_le_texte_ne_change_pas(self):
+        """La contre-épreuve : le cas nominal doit rester intact."""
+        bandeau, limite = rendre_le_bandeau(
+            EtatDuMois.A_ENVOYER,
+            attendues=[_attendue("DP-1", date(2026, 8, 12))],
+            nom_du_mois="juillet 2026",
+            jour=date(2026, 8, 5),
+            reglages=self.REGLAGES,
+        )
+        assert bandeau.titre == "Il manque 1 justificatif"
+        assert limite == date(2026, 8, 12)
 
 
 class TestLeBandeau:

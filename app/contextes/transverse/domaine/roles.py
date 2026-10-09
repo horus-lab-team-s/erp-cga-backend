@@ -201,6 +201,12 @@ class Permission(StrEnum):
     # fuite dont personne ne verrait la cause.
     LIRE_PROSPECT = "LIRE_PROSPECT"
     QUALIFIER_PROSPECT = "QUALIFIER_PROSPECT"
+    #: Arrêter le prix d'une prestation du catalogue, à partir d'une date.
+    #: **La direction seule** : un prix engage le cabinet envers chaque client
+    #: qui le paie. Le moteur de chiffrage « rend un intervalle, jamais un prix »
+    #: (référentiel de tarification) ; c'est cette permission qui porte la
+    #: décision humaine.
+    FIXER_LES_TARIFS = "FIXER_LES_TARIFS"
 
     # ── Formalités et administration ─────────────────────────────────────────
     SUIVRE_FORMALITE = "SUIVRE_FORMALITE"
@@ -335,6 +341,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.EDITER_VITRINE,
         Permission.LIRE_PROSPECT,
         Permission.QUALIFIER_PROSPECT,
+        Permission.FIXER_LES_TARIFS,
     },
     # Voir l'en-tête : aucune permission comptable ou déclarative.
     Role.ADMINISTRATEUR: {

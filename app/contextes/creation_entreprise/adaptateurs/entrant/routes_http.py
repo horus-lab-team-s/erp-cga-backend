@@ -14,6 +14,7 @@ aucun écran : le rôle existait, son droit existait, et il n'y avait rien derri
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from decimal import Decimal
 from functools import lru_cache
@@ -74,6 +75,8 @@ def _aujourd_hui() -> date:
     """
     return maintenant().date()
 
+
+_journal_de_creation = logging.getLogger(__name__)
 
 routeur = APIRouter(prefix="/creations", tags=["Création d'entreprise"])
 
@@ -138,6 +141,15 @@ class LigneDossier(BaseModel):
     pieces_manquantes: int
     #: Le guichet a dépassé son délai annoncé. Déclenche une relance, pas un blocage.
     en_retard: bool
+    #: ⚠️ **LA CLIENTE A BOUGÉ LA DERNIÈRE, ET PERSONNE NE LUI A RÉPONDU.**
+    #:
+    #: Sans cette ligne, un dossier où elle vient de déposer cinq documents
+    #: affiche « sans mouvement depuis 1 j » et tombe au bas d'une liste triée
+    #: du plus ancien au plus récent : elle a répondu, et plus personne ne
+    #: regarde. Voir `DossierCreation.attend_le_cabinet`.
+    attend_le_cabinet: bool
+    #: Depuis combien de jours elle attend. `0` quand ce n'est pas son tour.
+    jours_d_attente: int
     immatriculee: bool
     converti_en: str | None
 
@@ -154,6 +166,12 @@ class LigneDossier(BaseModel):
             jours_d_immobilite=(a_la_date - dossier.immobile_depuis).days,
             pieces_manquantes=len(dossier.pieces_manquantes),
             en_retard=depasse_le_delai_annonce(dossier, parametres(), a_la_date),
+            attend_le_cabinet=dossier.attend_le_cabinet,
+            jours_d_attente=(
+                (a_la_date - dossier.derniere_piece_recue).days
+                if dossier.attend_le_cabinet and dossier.derniere_piece_recue
+                else 0
+            ),
             immatriculee=dossier.immatriculation.immatriculee,
             converti_en=dossier.converti_en,
         )
@@ -230,11 +248,37 @@ def lister(
         None, ge=0, description="Ne rend que les dossiers sans mouvement depuis N jours"
     ),
 ) -> list[LigneDossier]:
-    """Le pipeline, du plus ancien mouvement au plus récent.
+    """Le pipeline par urgence : d'abord celles qui attendent une réponse.
 
+    ─────────────────────────────────────────────────────────────────────────────
     L'ordre n'est pas anodin : le pipeline se lit par urgence, pas par ordre
     d'arrivée. Un dossier qui dort depuis trois semaines se présente avant celui
-    d'hier — c'est ce qui fait de cet écran un outil de relance et non une liste.
+    d'hier, et c'est ce qui fait de cet écran un outil de relance.
+
+    ⚠️ **DEUX FILES, ET NON UNE.**
+
+    Compter le dépôt d'une cliente comme un mouvement (pas 149) a rendu
+    `immobile_depuis` honnête et l'ordre faux : un dossier où elle vient
+    d'envoyer cinq documents affiche « sans mouvement depuis 1 j » et tombait
+    **au bas** de la liste, sous ceux où il ne se passe rien. Elle avait répondu,
+    et plus personne ne regardait.
+
+    On sépare donc ce qui demande deux gestes différents :
+
+      1. **elle attend une réponse** : la plus ancienne attente d'abord, parce
+         qu'un client qui a fait sa part et n'obtient rien est celui qui part ;
+      2. **rien ne bouge** : le plus ancien mouvement d'abord, comme avant.
+
+    ⚠️ Le tri SQL reste celui du dépôt, et il garde son index ; on ne fait ici
+    que remonter la première file. Le pipeline se lit entier, sans pagination :
+    réordonner en Python ne coûte rien et évite une colonne de plus.
+
+    ⚠️ **`immobiles_depuis_jours` garde son sens**, qui est littéral : « sans
+    mouvement depuis N jours ». Un dépôt étant un mouvement, il en exclut les
+    dossiers qui attendent une réponse. C'est cohérent avec ce que le paramètre
+    dit, et c'est un piège pour qui le prendrait pour « qui a besoin de moi ? » :
+    cette question-là se lit dans l'ordre rendu ici, sans filtre.
+    ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.SUIVRE_FORMALITE)
     jour = a_la_date or _aujourd_hui()
@@ -242,7 +286,12 @@ def lister(
     if immobiles_depuis_jours is not None:
         seuil = jour - timedelta(days=immobiles_depuis_jours)
     dossiers = depot().lister(etape=etape, immobiles_avant=seuil)
-    return [LigneDossier.depuis(d, jour) for d in dossiers]
+    lignes = [LigneDossier.depuis(d, jour) for d in dossiers]
+    # ⚠️ Tri **stable** : à égalité de clé, l'ordre du dépôt est conservé, donc
+    # le plus ancien mouvement d'abord à l'intérieur de chaque file.
+    return sorted(
+        lignes, key=lambda ligne: (not ligne.attend_le_cabinet, -ligne.jours_d_attente)
+    )
 
 
 @routeur.get("/checklist/{forme_juridique}", summary="Les pièces à réunir pour une forme")
@@ -334,6 +383,359 @@ def franchir(
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     magasin.enregistrer(avance)
     return avance
+
+
+# ══ Ce que la fondatrice voit, sans compte ═══════════════════════════════════
+
+
+class PieceAttendue(BaseModel):
+    """Une pièce, telle qu'elle la lit. Sans empreinte ni détail interne."""
+
+    code: str
+    libelle: str
+    obligatoire: bool
+    fournie: bool
+    fournie_le: date | None = None
+
+
+class IdentifiantsDeMaSociete(BaseModel):
+    """Les numéros délivrés, tels que la fondatrice les lira.
+
+    ⚠️ Chaque numéro vient avec sa date : « obtenu le » est ce qu'une banque
+    demande, et une date sans son numéro n'aurait aucun sens.
+
+    ⚠️ `immatriculee` est calculée ici plutôt que laissée à l'écran : la règle
+    est « RCCM **et** NIU », et un écran qui la referait pourrait la refaire
+    autrement. La patente et le numéro CNPS suivent souvent de plusieurs
+    semaines et ne conditionnent rien.
+    """
+
+    rccm: str | None = None
+    rccm_obtenu_le: date | None = None
+    niu: str | None = None
+    niu_obtenu_le: date | None = None
+    patente: str | None = None
+    patente_obtenue_le: date | None = None
+    cnps: str | None = None
+    cnps_obtenu_le: date | None = None
+    #: RCCM et NIU obtenus : la société existe.
+    immatriculee: bool = False
+
+
+class SuiviDeMaCreation(BaseModel):
+    """Le dossier dans les mots de la cliente.
+
+    ⚠️ **UN SOUS-ENSEMBLE DÉLIBÉRÉ**, et non le dossier tel que le cabinet le
+    voit. `DossierCreation` porte le fondateur, les jalons, les identifiants
+    délivrés et les commentaires internes. Rien de tout cela n'a à sortir sur un
+    lien qui circule dans une boîte aux lettres : elle a besoin de savoir où en
+    est son dossier et ce qu'on attend d'elle, pas de relire le travail du
+    cabinet.
+    """
+
+    reference: str
+    denomination_souhaitee: str
+    forme_juridique: str
+    etape: str
+    ouvert_le: date
+    clos: bool
+    pieces: list[PieceAttendue]
+    #: Ce qui manque encore, et qui bloque. Compté ici pour que l'écran n'ait pas
+    #: à refaire la règle : une pièce d'usage absente ne bloque pas.
+    manquantes_bloquantes: int
+    #: ⚠️ **LES IDENTIFIANTS DE SA PROPRE SOCIÉTÉ.**
+    #:
+    #: Ils manquaient, et c'était le plus gros manque de cette page : la cliente
+    #: suivait son dossier jusqu'à « SUIVI_IMMATRICULATION », une étiquette
+    #: technique, sans jamais lire **la nouvelle qu'elle attend depuis le
+    #: premier jour**. Son RCCM et son NIU existaient au dossier, visibles du
+    #: cabinet seul.
+    #:
+    #: Ce ne sont pas des informations internes : ce sont les numéros de son
+    #: entreprise, que sa banque, ses fournisseurs et l'administration lui
+    #: demanderont. Les lui cacher derrière un appel téléphonique n'ajoutait
+    #: aucune sécurité, seulement un délai.
+    #:
+    #: ⚠️ Le reste du dossier n'est toujours pas rendu : ni jalons, ni
+    #: commentaires internes, ni identité du collaborateur. Le sous-ensemble
+    #: reste délibéré, il s'élargit de ce qui lui appartient.
+    identifiants: IdentifiantsDeMaSociete
+
+
+def _suivi(dossier) -> SuiviDeMaCreation:
+    return SuiviDeMaCreation(
+        reference=dossier.reference,
+        denomination_souhaitee=dossier.denomination_souhaitee,
+        forme_juridique=dossier.forme_juridique.value,
+        etape=dossier.etape.value,
+        ouvert_le=dossier.ouvert_le,
+        clos=dossier.clos,
+        pieces=[
+            PieceAttendue(
+                code=p.code,
+                libelle=p.libelle,
+                obligatoire=p.obligatoire,
+                fournie=p.fournie_le is not None,
+                fournie_le=p.fournie_le,
+            )
+            for p in dossier.pieces
+        ],
+        manquantes_bloquantes=sum(
+            1 for p in dossier.pieces if p.obligatoire and p.fournie_le is None
+        ),
+        identifiants=IdentifiantsDeMaSociete(
+            **dossier.immatriculation.model_dump(),
+            immatriculee=dossier.immatriculation.immatriculee,
+        ),
+    )
+
+
+def _dossier_scelle(reference: str, sceau: str):
+    """Le dossier derrière un lien signé, ou 404.
+
+    ⚠️ **404 DANS LES TROIS CAS** : sceau absent, sceau faux, dossier inconnu.
+    Distinguer « dossier inconnu » de « sceau invalide » permettrait d'énumérer
+    les références en lisant les refus. C'est le raisonnement déjà tenu par la
+    consultation de proforma et par la résolution des locataires.
+    """
+    from app.contextes.creation_entreprise.domaine.lien_de_suivi import (
+        LienDeSuiviInvalide,
+        exiger_le_sceau,
+    )
+
+    try:
+        exiger_le_sceau(reference, sceau, secret=_secret_du_suivi())
+        return _lire(reference, depot())
+    except (LienDeSuiviInvalide, DossierCreationIntrouvable) as refus:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Ce lien ne s'ouvre pas. Vérifiez que vous l'avez copié en "
+                "entier, ou demandez-en un nouveau au cabinet."
+            ),
+        ) from refus
+
+
+def _secret_du_suivi() -> str:
+    """La clé du cabinet, comme pour les liens d'acceptation.
+
+    ⚠️ Un second secret serait un second réglage à poser, à conserver et à faire
+    tourner, pour une garantie identique.
+    """
+    from app.infrastructure.config import configuration
+
+    return configuration().cle_chiffrement or "secret-de-developpement"
+
+
+class LienDeSuivi(BaseModel):
+    """Le lien de suivi d'un dossier, pour le cabinet qui doit le redonner."""
+
+    reference: str
+    denomination_souhaitee: str
+    #: L'adresse complète, prête à coller dans un message ou à dicter.
+    #:
+    #: ⚠️ **PAS DE CHAMP `sceau` À CÔTÉ**, et ce n'est pas un oubli. Il y en avait
+    #: un, « pour un canal qui composerait lui-même son adresse » : personne ne
+    #: le demandait, et `tests/test_surface_des_reponses.py` l'a refusé, à raison.
+    #: Un secret rendu deux fois se protège deux fois moins bien qu'une fois, et
+    #: le besoin invoqué était imaginaire.
+    lien: str
+    #: `True` quand le dossier est clos : le lien ouvre encore, mais il n'y a
+    #: plus rien à déposer. L'écran doit le dire avant qu'on le renvoie.
+    clos: bool
+
+
+@routeur.get(
+    "/{reference}/lien-de-suivi",
+    summary="Retrouver le lien de suivi d'un dossier, pour le redonner",
+    responses={
+        403: {"description": "Habilitation insuffisante"},
+        404: {"description": "Dossier inconnu"},
+    },
+)
+def lien_de_suivi_du_dossier(acces: AccesRequis, reference: str) -> LienDeSuivi:
+    """Le lien que la cliente a reçu à l'ouverture, retrouvé.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **POURQUOI CETTE ROUTE EXISTE : LE COURRIEL SE PERD.**
+
+    Le lien ne partait qu'une fois, à l'ouverture du dossier, dans un courriel.
+    Perdu, classé en indésirable, adresse saisie de travers, cliente qui change
+    de téléphone : elle n'avait plus aucun moyen d'entrer, et **le cabinet non
+    plus n'avait aucun moyen de le lui rendre**. Le sceau n'apparaissait nulle
+    part : ni à la fiche, ni au pipeline, ni dans un journal.
+
+    C'est un cas de tous les jours, pas un cas limite, et il n'avait pas d'issue.
+    Vu en jouant le parcours complet, pas en relisant le code.
+
+    ⚠️ LE SCEAU EST RECALCULÉ, IL N'EST PAS STOCKÉ
+
+    `sceau_de_suivi` est une fonction de la référence et de la clé du cabinet :
+    le même dossier rend toujours le même sceau. Rien à conserver, rien à
+    resynchroniser, et le lien envoyé il y a trois semaines reste exactement
+    celui-ci. C'est la propriété qui distingue ce sceau de celui de la proforma,
+    à usage unique et daté.
+
+    ⚠️ LECTURE PURE, COMME `GET /proformas/{numero}/lien`
+
+    Aucun envoi, aucune trace de transmission : le collaborateur relit, puis
+    décide du canal. Envoyer d'ici mêlerait deux gestes, et un clic malheureux
+    écrirait à la cliente.
+
+    ⚠️ **`SUIVRE_FORMALITE` et non `LIRE_PROSPECT`.** Ce lien ouvre le dossier
+    sans mot de passe : le rendre lisible plus largement que le dossier lui-même
+    créerait un chemin d'accès plus court que la porte qu'il contourne.
+
+    ⚠️ **CE QUI N'EST PAS FAIT, ET QU'IL FAUT SAVOIR : AUCUNE TRACE.**
+
+    Cette route remet une valeur qui vaut accès, et rien ne consigne qui l'a
+    demandée ni quand. `GET /proformas/{numero}/lien` est dans le même cas : ces
+    deux routes sont les seules à rendre un secret en clair à un collaborateur.
+
+    Le journal d'audit chaîné existe (`transverse/domaine/audit.py`) et pourrait
+    les recevoir. Ce n'est pas fait ici, et la raison n'est pas technique : ce
+    journal se conserve dix ans et se lit par tous les rôles portant
+    `LIRE_AUDIT`. Y verser une nouvelle catégorie d'événement est une décision
+    du cabinet, pas une commodité d'implémentation. Noté plutôt que sous-entendu.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    from app.contextes.creation_entreprise.domaine.lien_de_suivi import sceau_de_suivi
+    from app.infrastructure.config import configuration
+
+    exiger(acces, Permission.SUIVRE_FORMALITE)
+    try:
+        dossier = depot().lire(reference)
+    except DossierCreationIntrouvable as echec:
+        raise HTTPException(status_code=404, detail=str(echec)) from echec
+
+    sceau = sceau_de_suivi(dossier.reference, secret=_secret_du_suivi())
+    base = configuration().adresse_publique_vitrine.rstrip("/")
+    return LienDeSuivi(
+        reference=dossier.reference,
+        denomination_souhaitee=dossier.denomination_souhaitee,
+        # ⚠️ La MÊME composition que celle du courriel d'ouverture
+        # (`abonne_de_souscription._annoncer_l_ouverture`). Deux recettes pour
+        # une seule adresse ont déjà divergé une fois sur la proforma, et la
+        # cliente recevait un lien vers un site où son dossier n'existait pas.
+        lien=f"{base}/fr/mon-dossier/{dossier.reference}?s={sceau}",
+        clos=dossier.clos,
+    )
+
+
+@routeur.get(
+    "/{reference}/suivi",
+    summary="Suivre sa création depuis le lien reçu, sans compte",
+    responses={404: {"description": "Lien invalide, ou dossier inconnu"}},
+)
+def suivre_ma_creation(
+    reference: str,
+    s: str = Query("", description="Le sceau du lien reçu par courriel"),
+) -> SuiviDeMaCreation:
+    """Où en est son dossier, et ce qu'on attend d'elle.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ AUCUNE HABILITATION, ET C'EST TOUT L'OBJET.
+
+    Les dix autres routes de ce contexte exigent `SUIVRE_FORMALITE`, une
+    habilitation de collaborateur. Entre son paiement et son immatriculation —
+    les semaines où elle attend le plus — la cliente n'avait donc **rien** : ni
+    dépôt de pièce, ni avancement.
+
+    Le canal prévu était WhatsApp. Il ne tient pas : on ne peut écrire librement
+    qu'à l'intérieur de la fenêtre de vingt-quatre heures ouverte par son dernier
+    message, et hors de cette fenêtre le seul recours est un modèle approuvé —
+    dont aucun ne l'est. Une formalité dure des semaines.
+
+    ⚠️ **ET TOUJOURS PAS DE MOT DE PASSE.** « Un formulaire à identifiants pour
+    envoyer une photo de sa carte d'identité ferait abandonner la moitié des
+    dossiers. » Le compte arrive avec la société, au NIU.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    return _suivi(_dossier_scelle(reference, s))
+
+
+class PieceQuElleDepose(BaseModel):
+    """Ce que la fondatrice déclare après avoir téléversé son document."""
+
+    code: str = Field(min_length=1, description="Le code de la pièce, tel que le suivi le rend")
+    empreinte: str = Field(
+        min_length=64,
+        max_length=64,
+        description="L'empreinte rendue par le dépôt de fichier scellé",
+    )
+
+
+@routeur.post(
+    "/{reference}/suivi/pieces",
+    summary="Déposer une pièce depuis le lien reçu, sans compte",
+    responses={
+        404: {"description": "Lien invalide, dossier inconnu, ou pièce hors checklist"},
+        409: {"description": "Le dossier est clos"},
+    },
+)
+def deposer_ma_piece(
+    reference: str,
+    corps: PieceQuElleDepose,
+    s: str = Query("", description="Le sceau du lien reçu par courriel"),
+) -> SuiviDeMaCreation:
+    """Rattache le document qu'elle vient de téléverser à la pièce attendue.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ DEUX APPELS, ET C'EST LE MÊME MOTIF QU'AILLEURS.
+
+    Le fichier part d'abord à `POST /collecte/fichiers-scelles`, qui rend son
+    empreinte ; cette route-ci la rattache. C'est exactement ce que fait la
+    console pour les pièces du cabinet, et pour la même raison : on ne peut pas
+    désigner une pièce qui n'existe pas encore.
+
+    ⚠️ **LA CRÉATION NE VOIT PAS LA COLLECTE**, et ne la verra pas. Le graphe ne
+    l'autorise pas, et ce n'est pas nécessaire : l'empreinte suffit. Les deux
+    contextes ne partagent que le sceau, qui vit à `partage/` et ne dépend de
+    rien.
+
+    ⚠️ **UN DOSSIER CLOS N'ACCEPTE PLUS RIEN.** Converti, la société existe et ses
+    pièces vivent au portefeuille ; abandonné, le cabinet n'attend plus. Accepter
+    un dépôt sur l'un ou l'autre rangerait un document que personne ne relira.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    dossier = _dossier_scelle(reference, s)
+    if dossier.clos:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Ce dossier est clos : le cabinet n'attend plus de pièce. "
+                "Contactez-le si vous pensez qu'il s'agit d'une erreur."
+            ),
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ ELLE NE REMPLIT QUE CE QUI EST ATTENDU D'ELLE.
+    #
+    # `fournir_piece` **ajoute** une pièce inconnue plutôt que de la refuser, et
+    # c'est juste pour un collaborateur : « le guichet réclame parfois une pièce
+    # que la liste n'a pas prévue, et le dossier doit pouvoir en garder la
+    # trace ».
+    #
+    # Ce raisonnement est celui du cabinet face au greffe. Il n'est pas celui de
+    # la cliente : lui laisser inventer un code ferait entrer dans son dossier des
+    # « Pièce complémentaire XYZ » que personne n'a demandées, et qu'un
+    # collaborateur devrait nettoyer. Constaté en écrivant le cas : un code
+    # fantaisiste passait, et sortait dans sa propre liste.
+    #
+    # On restreint donc ici, et ici seulement. Le domaine garde sa largeur.
+    # ─────────────────────────────────────────────────────────────────────────
+    if not any(p.code == corps.code for p in dossier.pieces):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Aucune pièce « {corps.code} » n'est attendue sur ce dossier. "
+                "Si le cabinet vous a demandé autre chose, répondez-lui "
+                "directement."
+            ),
+        )
+    magasin = depot()
+    avec = fournir_piece(dossier, corps.code, _aujourd_hui(), empreinte=corps.empreinte)
+    magasin.enregistrer(avec)
+    return _suivi(avec)
 
 
 @routeur.post("/{reference}/pieces", summary="Marquer une pièce comme reçue")
@@ -484,6 +886,7 @@ def convertir_dossier(
         entreprises_en_memoire().enregistrer(entreprise)
     enregistree = True
     magasin.enregistrer(clos)
+    _annoncer_l_entreprise(clos, entreprise, adherente=demande.adherent)
 
     return ResultatConversion(
         dossier=clos,
@@ -492,6 +895,86 @@ def convertir_dossier(
         date_creation=entreprise.date_creation,
         enregistree_au_portefeuille=enregistree,
     )
+
+
+#: Le fait publié quand une société créée entre au portefeuille.
+#:
+#: ⚠️ Le nom métier, tel que le document de conception l'écrit — c'est lui qui
+#: figurera dans les journaux qu'un exploitant lit à trois heures du matin.
+NOM_ENTREPRISE_CREEE = "EntrepriseCréée"
+
+
+def _annoncer_l_entreprise(
+    dossier: DossierCreation, entreprise, *, adherente: bool
+) -> None:
+    """Dépose `EntrepriseCréée`, sur lequel l'ouverture de l'accès se branche.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI ICI, ET PAS À L'ENCAISSEMENT.
+
+    Le cabinet a tranché le 27 septembre : une cliente qui achète une prestation
+    est une **adhérente**, et la portée d'une adhérente est le dossier de SON
+    entreprise — « une souscription ne peut pas fabriquer un réviseur ».
+    L'ouverture d'un accès adhérent exige donc un NIU.
+
+    Or au moment où elle paie sa création, son entreprise **n'existe pas**. Son
+    NIU n'arrive qu'ici, à la conversion. Son accès ne peut pas s'ouvrir avant —
+    et ce n'est pas une contrainte technique subie : avant l'immatriculation, il
+    n'y a rien à lui montrer.
+
+    ⚠️ **Par un événement, et non par un appel.** Le graphe autorise
+    `creation_entreprise → {conformite, portefeuille}` : ce contexte n'a pas le
+    droit de toucher à l'identité, et c'est voulu. L'événement porte ce qu'il
+    faut savoir, et l'abonné du Transverse ouvre l'accès.
+
+    ⚠️ **La clé est la référence du dossier**, comme partout ailleurs : le relais
+    garantit « au moins une fois », et deux conversions rejouées doivent tomber
+    sur le même fait.
+
+    ⚠️ **On ne lève pas.** L'entreprise est née, le dossier est clos : faire
+    échouer la requête pour une boîte d'envoi indisponible reviendrait à défaire
+    une immatriculation. L'accès s'ouvrira au rattrapage.
+    """
+    from app.contextes.transverse.api import boite_d_envoi
+    from app.orchestration.boite_d_envoi import deposer
+
+    fondateur = dossier.fondateur
+    try:
+        deposer(
+            boite_d_envoi(),
+            f"ent-{dossier.reference}",
+            NOM_ENTREPRISE_CREEE,
+            dossier.reference,
+            {
+                "niu": entreprise.niu,
+                "denomination": entreprise.denomination,
+                # ⚠️ Le strict nécessaire à créer son accès, et rien de plus :
+                # ni le capital, ni le siège, ni la forme juridique. Ils vivent
+                # au portefeuille, et un événement est recopié dans les
+                # journaux, les files et les sauvegardes.
+                "courriel_fondateur": fondateur.courriel,
+                "nom_fondateur": fondateur.nom,
+                "prenom_fondateur": fondateur.prenom,
+                "telephone_fondateur": fondateur.telephone,
+                # ⚠️ A-T-ELLE PRIS LE SUIVI ? C'est la seconde condition de son
+                # accès, et elle est aussi importante que la première.
+                #
+                # Le cabinet peut immatriculer une société sans en tenir la
+                # comptabilité : c'est une prestation ponctuelle, et la cliente
+                # repart avec son RCCM et son NIU. Lui ouvrir un espace de suivi
+                # qu'elle n'a pas acheté lui ferait croire à un service qu'elle
+                # ne recevra pas, et le cabinet le découvrirait à la première
+                # échéance non traitée.
+                "adherente": adherente,
+            },
+            maintenant(),
+        )
+    except Exception:  # noqa: BLE001 — voir la docstring : on ne défait pas une naissance
+        _journal_de_creation.exception(
+            "Entreprise %s créée, mais l'annonce n'a pas pu être déposée : "
+            "son accès devra être ouvert à la main.",
+            entreprise.niu,
+        )
 
 
 def _lire(reference: str, magasin: DepotDossiersCreation | None = None) -> DossierCreation:

@@ -39,7 +39,7 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
-from app.contextes.souscription.domaine.offre import Service
+from app.contextes.souscription.domaine.offre import Service, TarifFixe
 from app.contextes.souscription.domaine.paiements import EvenementPaiement, Paiement
 from app.contextes.souscription.domaine.proforma import Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
@@ -54,6 +54,7 @@ __all__ = [
     "DepotQualifications",
     "DepotSuivisDeRelance",
     "DepotServices",
+    "DepotTarifsFixes",
     "DepotSouscriptions",
     "FournisseurPaiement",
     "InitiationPaiement",
@@ -70,6 +71,14 @@ class DepotServices(Protocol):
     """
 
     def charger(self, a_la_date: date) -> list[Service]: ...
+
+
+class DepotTarifsFixes(Protocol):
+    """Les décisions de prix du gérant, dans l'ordre où il les a prises."""
+
+    def enregistrer(self, fixation: TarifFixe) -> None: ...
+
+    def lister(self) -> list[TarifFixe]: ...
 
 
 class DepotDevis(Protocol):

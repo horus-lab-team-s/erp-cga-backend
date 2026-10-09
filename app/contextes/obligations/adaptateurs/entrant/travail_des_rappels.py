@@ -114,7 +114,7 @@ def envoyer_les_rappels() -> str:
                 if cle in deja:
                     continue
                 contexte = {
-                    "prenom": compte.prenom,
+                    "prenom": compte.appellation,
                     "titre": carte.titre,
                     "periode": carte.periode,
                     "echeance": f"{carte.echeance:%d/%m/%Y}",

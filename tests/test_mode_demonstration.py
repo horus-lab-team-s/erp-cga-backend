@@ -51,6 +51,7 @@ from app.contextes.transverse.api import Role, roles_au
 from app.infrastructure.config import Configuration, configuration
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
+from tests.gerant_d_essai import fixer_les_prix_du_comptoir
 
 INSTANT = datetime(2026, 8, 15, 10, 0)
 NIU = "M081234567890P"
@@ -75,6 +76,7 @@ def _client(monkeypatch, *, demonstration: bool) -> Iterator[TestClient]:
     )
 
     reinitialiser_comptoir()
+    fixer_les_prix_du_comptoir()
     with horloge_figee(INSTANT):
         yield TestClient(creer_application())
     configuration.cache_clear()
@@ -99,7 +101,9 @@ class TestVerrous:
             "environnement": "production",
             "persistance": "postgresql",
             "smtp_hote": "smtp.exemple.cm",
+            "adresse_publique": "https://api.cga-brcg.cm",
             "adresse_publique_site": "https://www.cga-brcg.cm",
+            "adresse_publique_vitrine": "https://www.cga-brcgroup.com",
             "origines_cors": ["https://www.cga-brcg.cm"],
             "cle_chiffrement": base64.b64encode(bytes(32)).decode("ascii"),
         } | surcharges

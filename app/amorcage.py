@@ -71,6 +71,8 @@ from app.contextes.transverse.api import (
     LOCATAIRE_PAR_DEFAUT,
     unite_de_travail,
 )
+from app.demonstration_a_jour import consigner
+from app.partage.horloge import maintenant
 
 __all__ = ["AmorcageRefuse", "amorcer"]
 
@@ -173,6 +175,11 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             PortailSql(session, locataire, accuse.portail).enregistrer_accuse(
                 accuse, document=document
             )
+        # ⚠️ Puis ce qui manque pour que le dossier soit à jour AU JOUR DE
+        # L'AMORÇAGE : les six accusés ci-dessus datent de 2024, et le dossier
+        # affichait sinon quatre-vingts périodes en retard. Voir
+        # `demonstration_a_jour.py`.
+        accuses_du_jour = consigner(session, locataire, maintenant().date())
 
         return {
             "creations": len(PIPELINE_DEMO),
@@ -184,5 +191,5 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             "pieces": len(PIECES_DEMO),
             "demandes": len(DEMANDES_DEMO),
             "ecritures": ecritures_posees,
-            "accuses": len(ACCUSES_DEMO),
+            "accuses": len(ACCUSES_DEMO) + accuses_du_jour,
         }

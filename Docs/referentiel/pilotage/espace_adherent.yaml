@@ -8,7 +8,9 @@
 #
 # Valeurs citables dans les textes : {mois} (« juillet 2026 »), {de_mois} (« de juillet 2026 »,
 # « d'août 2026 » : l'élision est faite, ne jamais écrire « de {mois} »), {pieces}
-# (« 3 justificatifs »), {date_limite} (« 12/08/2026 », seulement dans a_envoyer).
+# (« 3 justificatifs », compte les demandes SANS réponse), {demandes} (« 3 demandes »,
+# seulement dans a_envoyer_toutes_repondues), {date_limite} (« 12/08/2026 », seulement
+# dans a_envoyer).
 # ⚠️ a_envoyer doit citer {date_limite} ; les autres ne le peuvent pas.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,23 @@ a_envoyer_en_retard:
 a_envoyer_sans_date:
   titre: "Il manque {pieces}"
   detail: "Envoyez-les dès que possible pour que votre déclaration soit prête à temps."
+
+# ⚠️ ELLE A RÉPONDU À CHAQUE DEMANDE, ET LE BANDEAU LUI DISAIT D'ENVOYER.
+#
+# Relevé le 30 septembre sur la pile, sur le dossier de démonstration : trois
+# demandes ouvertes, les trois avec une réponse de l'adhérente — « Je n'ai pas ce
+# document », « Je l'aurai la semaine prochaine ». Le bandeau annonçait pourtant
+# « Il manque 3 justificatifs. La date prévue est passée : envoyez-les dès que
+# possible, le cabinet vous attend. »
+#
+# Elle avait parlé trois fois. Le produit ne l'entendait pas, et c'est le premier
+# texte qu'elle lit en ouvrant son espace.
+#
+# ⚠️ Ce texte NE PRÉTEND PAS que le cabinet a agi. Il dit ce qui est vrai : sa
+# part est faite, la suite n'est plus chez elle.
+a_envoyer_toutes_repondues:
+  titre: "Vous avez répondu à {demandes}"
+  detail: "Le cabinet en prend connaissance et vous dira la suite. Rien à faire de votre côté pour l'instant."
 
 en_verification:
   titre: "Le cabinet vérifie votre mois {de_mois}"

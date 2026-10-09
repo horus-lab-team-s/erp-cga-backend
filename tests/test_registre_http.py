@@ -105,7 +105,7 @@ class TestCeQuEllePublie:
         assert referentiel["execution"] == "REPOND"
 
     def test_les_services_sans_sonde_le_disent(self, administrateur):
-        """⚠️ Trois sur quatorze depuis le pas 121, et c'est dit plutôt que masqué.
+        """⚠️ Zéro sur quatorze depuis le pas 135. La liste reste, et elle doit.
 
         Un registre qui déclarerait sains les services qu'il n'interroge pas serait
         la sonde complaisante que le pas 12 a supprimée : il affirmerait précisément
@@ -115,18 +115,25 @@ class TestCeQuEllePublie:
         « pilotage et clôture sont sans sonde » ; le Pilotage a pris sept réglages sans
         prendre de sonde, et rien ne l'a signalé pendant quatre pas. Une liste fermée
         oblige à revenir ici le jour où un service change de camp, dans un sens comme
-        dans l'autre.
+        dans l'autre — et c'est précisément ce qui vient de se produire, dans le bon
+        sens cette fois.
+
+        ⚠️ **Une liste vide n'est pas un cas vide.** Le jour où quelqu'un retire une
+        sonde, ou l'inscrit sous un nom mal orthographié, ce service reparaît ici et
+        le cas tombe. C'est sa seule fonction, et elle survit à la liste.
         """
         corps = administrateur.get("/transverse/services").json()
         sans_sonde = sorted(
             s["nom"] for s in corps["services"] if s["execution"] == "SANS_SONDE"
         )
-        # ⚠️ La Clôture et la Création d'entreprise n'ont aucune ressource à elles : elles
-        # lisent la Comptabilité, le Portefeuille et la base. Le Social lit les barèmes,
-        # mais ils appartiennent au Référentiel, dont la sonde les couvre. Leur inventer
-        # une sonde qui relit la ressource d'un autre créerait deux vérités sur une même
-        # question. Voir `_inscrire_les_sondes` dans `app/main.py`.
-        assert sans_sonde == ["cloture", "creation_entreprise", "social"]
+        # ⚠️ La Clôture, la Création d'entreprise et le Social ont pris leur sonde au
+        # pas 135. La décision antérieure — « leur inventer une sonde qui relit la
+        # ressource d'un autre créerait deux vérités sur une même question » — a été
+        # révisée : leurs sondes ne posent PAS la question du Référentiel. La sienne
+        # demande « le fichier se charge-t-il » ; les leurs demandent « porte-t-il les
+        # valeurs nommées sans lesquelles je ne produis plus rien ». Voir
+        # `_inscrire_les_sondes` dans `app/main.py`.
+        assert sans_sonde == []
 
     def test_une_installation_neuve_n_affiche_aucun_service_en_difficulte(
         self, administrateur
@@ -188,12 +195,27 @@ class TestLeControleDeSanteParService:
         assert reponse.json()["etat"] == "SUSPECT"
         assert reponse.json()["motif"] == "répertoire vide"
 
-    def test_un_service_sans_sonde_rend_200(self, administrateur):
-        """⚠️ Trois sur quatorze, et les rendre critiques afficherait un tableau
-        Consul rouge en permanence. Un tableau rouge en permanence n'est plus lu.
+    def test_un_service_sans_sonde_rend_200(self, administrateur, monkeypatch):
+        """Un service qu'on n'interroge pas n'est pas critique : il est inconnu.
 
-        Le corps porte la nuance : `SANS_SONDE` n'est pas `REPOND`.
+        Les rendre critiques afficherait un tableau Consul rouge en permanence, et
+        un tableau rouge en permanence n'est plus lu. Le corps porte la nuance :
+        `SANS_SONDE` n'est pas `REPOND`.
+
+        ⚠️ **CE CAS FORCE L'ABSENCE DE SONDE, ET IL LE DOIT MAINTENANT.**
+
+        Il visait la Clôture, qui n'en avait pas. Elle en a une depuis le pas 135,
+        et les quatorze services aussi : plus aucune situation réelle ne fait passer
+        le registre par cette branche. Un cas qui ne peut plus rencontrer l'état
+        qu'il mesure ne mesure plus rien — c'est exactement ce que le cas de la
+        panne 503, trois lignes plus bas, a dû apprendre avant lui.
+
+        On vide donc le répertoire des sondes pour cet appel, comme lui force la
+        sienne.
         """
+        import app.contextes.transverse.adaptateurs.entrant.routes_registre as routes
+
+        monkeypatch.setattr(routes, "sondes_du_processus", dict)
         reponse = administrateur.get("/transverse/services/cloture/sante")
         assert reponse.status_code == 200
         assert reponse.json()["etat"] == "SANS_SONDE"

@@ -83,6 +83,11 @@ class Regle:
     """Combien de requêtes, sur quelle durée, pour quel point d'entrée."""
 
     #: Le chemin exact, préfixe d'application compris.
+    #:
+    #: ⚠️ UNE ÉTOILE FINALE VAUT « CE CHEMIN ET TOUT CE QUI SUIT ». Les routes
+    #: publiques d'acquisition portent une référence dans leur chemin
+    #: (`/acquisition/devis/DV-…/rappel`) : une correspondance exacte ne les
+    #: aurait jamais attrapées, et la règle serait restée décorative.
     chemin: str
     methode: str
     #: Le nombre de requêtes tolérées dans la fenêtre.
@@ -135,6 +140,43 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
         fenetre=900,
         motif="second facteur",
     ),
+    # ── Les portes publiques du parcours commercial ───────────────────────
+    #
+    # ⚠️ ELLES N'ÉTAIENT PAS PROTÉGÉES, et ce trou s'est aggravé le jour où
+    # l'affectation est devenue automatique : chaque demande déposée désigne
+    # désormais un responsable et lui arrive dans sa file. Un automate qui
+    # martèle le formulaire ne remplissait donc plus seulement une table, il
+    # occupait des gens.
+    Regle(
+        chemin="/acquisition/demandes",
+        methode="POST",
+        # Trente par heure et par adresse : un cabinet entier derrière une seule
+        # sortie Internet peut déposer pour plusieurs clients dans la journée ;
+        # un automate, lui, dépasse trente en quelques secondes.
+        maximum=30,
+        fenetre=3600,
+        motif="dépôt de demande de contact",
+    ),
+    Regle(
+        chemin="/acquisition/devis/*",
+        methode="POST",
+        # La demande de rappel sur un devis. Même raison : elle ouvre un dossier
+        # dans la file d'un responsable.
+        maximum=30,
+        fenetre=3600,
+        motif="demande de rappel sur un devis",
+    ),
+    Regle(
+        chemin="/acquisition/proformas/*",
+        methode="POST",
+        # L'acceptation d'une proforma est publique et scellée. Le sceau protège
+        # du faux, pas du martèlement : sans borne, on peut éprouver des sceaux
+        # à la chaîne. Le seuil reste large — un client hésitant recharge sa page
+        # et clique plusieurs fois.
+        maximum=60,
+        fenetre=3600,
+        motif="acceptation ou transmission de proforma",
+    ),
     Regle(
         chemin="/souscription/devis",
         methode="POST",
@@ -164,7 +206,12 @@ class Limiteur:
 
     def regle_pour(self, methode: str, chemin: str) -> Regle | None:
         for regle in self.regles:
-            if regle.methode == methode and regle.chemin == chemin:
+            if regle.methode != methode:
+                continue
+            if regle.chemin.endswith("*"):
+                if chemin.startswith(regle.chemin[:-1]):
+                    return regle
+            elif regle.chemin == chemin:
                 return regle
         return None
 

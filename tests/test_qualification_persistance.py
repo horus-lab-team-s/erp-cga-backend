@@ -44,7 +44,7 @@ def questionnaire():
     incohérence entre le domaine et ce que le centre a réellement rédigé.
     """
     return RepertoireDeQuestionnaires.depuis(DOSSIER_QUESTIONNAIRES).prendre(
-        "creation-sarl"
+        "CREATION"
     )
 
 
@@ -136,7 +136,7 @@ class TestLaVersionDuQuestionnaireEstConservee:
         ligne = session_sql.execute(
             text("SELECT service, version_questionnaire FROM qualification")
         ).one()
-        assert ligne.service == "creation-sarl"
+        assert ligne.service == "CREATION"
         assert ligne.version_questionnaire == questionnaire.version
 
 

@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from app.contextes.transverse.adaptateurs.entrant.dependances import AccesRequis, exiger
 from app.contextes.transverse.domaine.roles import Permission
+from app.infrastructure.charge import MESURES, charge_de_la_base, charge_du_processus
 from app.registre.etat import (
     EtatDeConstruction,
     EtatDExecution,
@@ -285,3 +286,80 @@ def sante_d_un_service(nom: str, reponse: Response, acces: AccesRequis) -> Sante
     return SanteDUnService(
         service=nom, etat=fiche.execution.etat.value, motif=fiche.execution.motif or None
     )
+
+# ── La charge : ce que la plateforme consomme et ce qu'elle encaisse ─────────
+
+
+class ChargeDeLaPlateforme(BaseModel):
+    """Ce que l'exploitant regarde en premier quand « c'est lent ».
+
+    ⚠️ **PAR INSTANCE, EN MÉMOIRE, SANS HISTORIQUE.** Ce n'est pas un système de
+    métriques : deux répliques derrière un répartiteur rendent chacune ses
+    propres chiffres, et un redémarrage remet tout à zéro. Le champ
+    `portee_de_la_mesure` le dit, et l'écran le répète — un exploitant qui
+    croirait lire l'ensemble du parc conclurait de travers.
+
+    ⚠️ **La charge moyenne est celle de la MACHINE**, pas du conteneur :
+    `/proc/loadavg` est celui de l'hôte. Sur un serveur partagé, elle compte
+    donc les autres locataires de la machine.
+    """
+
+    portee_de_la_mesure: str
+    processus: dict[str, object]
+    base_de_donnees: dict[str, object]
+    requetes: dict[str, object]
+
+
+@routeur.get(
+    "/charge",
+    summary="Ce que la plateforme consomme, et ce qu'elle encaisse",
+    responses={403: {"description": "Habilitation insuffisante"}},
+)
+def lire_la_charge(acces: AccesRequis) -> ChargeDeLaPlateforme:
+    """Mémoire, processeur, connexions de base, latences et taux d'erreur.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **RÉSERVÉE À L'ADMINISTRATION.** Les routes les plus lentes dessinent la
+    forme de l'application, et le nombre de requêtes dit l'activité du cabinet.
+    Ce n'est pas secret, ce n'est pas non plus le travail d'un comptable.
+
+    ⚠️ **ELLE NE SE MESURE PAS ELLE-MÊME.** Ce chemin et la sonde de santé sont
+    exclus de l'anneau : la sonde est appelée toutes les cinq secondes par Docker
+    et par Kubernetes, et représenterait la moitié des mesures. Les latences
+    réelles du travail du cabinet en seraient écrasées.
+
+    ⚠️ **ELLE NE DOIT JAMAIS ÊTRE LA CAUSE D'UNE PANNE.** Chaque lecture est
+    tentée séparément et rend `null` quand elle échoue : un écran de surveillance
+    qui tomberait faute de pouvoir se mesurer serait un comble.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger(acces, Permission.GERER_COMPTES)
+
+    # ⚠️ Import tardif : `moteur()` ouvre le bassin de connexions au premier
+    # appel. L'importer en tête du module le ferait ouvrir au chargement de
+    # l'application, avant même que la configuration ne soit lue.
+
+    return ChargeDeLaPlateforme(
+        portee_de_la_mesure=(
+            "Cette instance seulement, depuis son démarrage. Sans historique ni "
+            "agrégation : deux répliques rendent chacune ses propres chiffres."
+        ),
+        processus=charge_du_processus(),
+        base_de_donnees=charge_de_la_base(_moteur_ou_none()),
+        requetes=MESURES.instantane(),
+    )
+
+
+def _moteur_ou_none() -> object | None:
+    """Le moteur, ou `None` quand la persistance est en mémoire.
+
+    ⚠️ Un écran de surveillance ne doit pas lever parce qu'il n'y a pas de base :
+    en mémoire — les essais, une démonstration hors base — c'est un état légitime
+    que la réponse annonce, pas une panne.
+    """
+    try:
+        from app.infrastructure.base_de_donnees import moteur
+
+        return moteur()
+    except Exception:  # noqa: BLE001 — l'écran dit « pas de base », il ne tombe pas
+        return None

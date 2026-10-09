@@ -50,7 +50,7 @@ def _demande(rang: int) -> DemandeDeContact:
         deposee_le=LE_JOUR,
         nom="Prospect muet",
         telephone=f"6991122{rang:02d}",
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         canal_prefere=Canal.APPEL,
         consentement=Consentement(
             accorde=False,

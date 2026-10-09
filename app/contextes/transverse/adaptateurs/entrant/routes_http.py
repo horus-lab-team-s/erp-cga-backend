@@ -210,10 +210,11 @@ def connexion(demande: DemandeConnexion, requete: Request, reponse: Response) ->
         httponly=True,
         samesite="lax",
         max_age=int(DUREE_SESSION.total_seconds()),
-        # ⚠️ `secure=False` pour que le développement en HTTP fonctionne. À passer
-        # à `True` dès qu'un domaine est servi en HTTPS, faute de quoi le témoin
-        # circulerait en clair sur un réseau partagé.
-        secure=False,
+        # ⚠️ DÉDUIT DE L'ADRESSE PUBLIQUE, et non écrit en dur. Ici se trouvait
+        # `secure=False` et un commentaire disant de le passer à `True` en
+        # production : personne ne l'aurait fait, et le témoin de session serait
+        # parti en clair. Voir `Configuration.temoin_securise`.
+        secure=configuration().temoin_securise,
     )
     return resoudre_acces(
         compte,
@@ -360,7 +361,7 @@ def oubli(demande: DemandeOubli) -> AccuseDOubli:
             "compte.reinitialisation",
             destinataire=compte.courriel,
             contexte={
-                "prenom": compte.prenom,
+                "prenom": compte.appellation,
                 # ⚠️ Un lien, jamais le secret nu. Un message qui affiche
                 # « votre code : xY7… » apprend à l'adhérent qu'un secret se
                 # recopie, et c'est exactement le geste qu'un hameçonnage lui
@@ -491,7 +492,7 @@ def inviter(acces: AccesRequis, demande: DemandeInvitation) -> Invitation:
         "compte.invitation",
         destinataire=compte.courriel,
         contexte={
-            "prenom": compte.prenom,
+            "prenom": compte.appellation,
             "role": libelle_role(demande.role),
             "lien": f"/activation?jeton={secret}",
             "expire_le": moment_long(jeton.expire_le),
@@ -534,7 +535,7 @@ def suspendre(acces: AccesRequis, identifiant: str, demande: DemandeSuspension) 
     # appelé » : un collaborateur dont les sessions tombaient ne savait pas pourquoi. Le
     # motif ne part pas dans le courriel ; il est au journal, et le message renvoie au cabinet.
     boutique.notifications.envoyer(
-        "compte.suspendu", destinataire=compte.courriel, contexte={"prenom": compte.prenom}
+        "compte.suspendu", destinataire=compte.courriel, contexte={"prenom": compte.appellation}
     )
     return compte
 
@@ -579,7 +580,7 @@ def retablir(acces: AccesRequis, identifiant: str, demande: DemandeRetablissemen
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     # Le titulaire est prévenu, comme de la suspension : il sait qu'il peut se reconnecter.
     boutique.notifications.envoyer(
-        "compte.retabli", destinataire=compte.courriel, contexte={"prenom": compte.prenom}
+        "compte.retabli", destinataire=compte.courriel, contexte={"prenom": compte.appellation}
     )
     return compte
 
@@ -875,7 +876,7 @@ def enroler(acces: AccesRequis) -> Enrolement:
             "compte.second_facteur_confirmation",
             destinataire=compte.courriel,
             contexte={
-                "prenom": compte.prenom,
+                "prenom": compte.appellation,
                 "lien": f"/second-facteur/confirmation?jeton={lien}",
             },
         )
@@ -904,7 +905,7 @@ def enroler(acces: AccesRequis) -> Enrolement:
     boutique.notifications.envoyer(
         "compte.second_facteur_enrole",
         destinataire=compte.courriel,
-        contexte={"prenom": compte.prenom},
+        contexte={"prenom": compte.appellation},
     )
     return Enrolement(
         secret=secret,
@@ -962,7 +963,7 @@ def confirmer_l_enrolement(
     boutique.notifications.envoyer(
         "compte.second_facteur_enrole",
         destinataire=compte.courriel,
-        contexte={"prenom": compte.prenom},
+        contexte={"prenom": compte.appellation},
     )
     return Enrolement(
         secret=secret,
@@ -1017,7 +1018,7 @@ def reinitialiser_le_second_facteur(
     boutique.notifications.envoyer(
         "compte.second_facteur_reinitialise",
         destinataire=compte.courriel,
-        contexte={"prenom": compte.prenom},
+        contexte={"prenom": compte.appellation},
     )
     return compte
 

@@ -109,6 +109,24 @@ class ReglagesDeLEspaceAdherent(BaseModel):
         titre="Il manque {pieces}",
         detail="La date prévue est passée : envoyez-les dès que possible, le cabinet vous attend.",
     )
+    #: ⚠️ ELLE A RÉPONDU À CHAQUE DEMANDE, ET LE BANDEAU LUI DISAIT D'ENVOYER.
+    #:
+    #: Relevé le 30 septembre sur la pile : trois demandes ouvertes, les trois avec
+    #: une réponse de l'adhérente — « Je n'ai pas ce document », « Je l'aurai la
+    #: semaine prochaine ». Le bandeau annonçait « Il manque 3 justificatifs. La
+    #: date prévue est passée : envoyez-les dès que possible. »
+    #:
+    #: Elle avait parlé trois fois, et c'est le premier texte qu'elle lit.
+    #:
+    #: ⚠️ Ce texte ne prétend pas que le cabinet a agi. Il dit ce qui est vrai : sa
+    #: part est faite, la suite n'est plus chez elle.
+    a_envoyer_toutes_repondues: TexteDeBandeau = TexteDeBandeau(
+        titre="Vous avez répondu à {demandes}",
+        detail=(
+            "Le cabinet en prend connaissance et vous dira la suite. Rien à faire "
+            "de votre côté pour l'instant."
+        ),
+    )
     #: Aucune date n'a été annoncée par le cabinet.
     a_envoyer_sans_date: TexteDeBandeau = TexteDeBandeau(
         titre="Il manque {pieces}",
@@ -221,6 +239,10 @@ def _pieces(nombre: int) -> str:
     return f"{nombre} justificatif{'s' if nombre > 1 else ''}"
 
 
+def _demandes(nombre: int) -> str:
+    return f"{nombre} demande{'s' if nombre > 1 else ''}"
+
+
 def rendre_le_bandeau(
     etat: EtatDuMois,
     *,
@@ -235,15 +257,33 @@ def rendre_le_bandeau(
     laisserait passer la première pièce attendue.
     """
     # « juillet 2026 » dans le bandeau : l'année reste, un adhérent en retard d'un an existe.
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ ON NE COMPTE QUE CE QUI RESTE CHEZ ELLE.
+    #
+    # `{pieces}` comptait TOUTES les demandes ouvertes, répondues comprises. Une
+    # adhérente qui avait écrit « je n'ai pas ce document » sur les trois lisait
+    # quand même « il manque 3 justificatifs, envoyez-les dès que possible ».
+    #
+    # Une demande répondue reste ouverte — le cabinet a toujours besoin de la
+    # pièce —, mais elle n'attend plus un geste d'elle : elle attend une suite du
+    # cabinet, qui doit insister, accepter un substitut, ou clore.
+    # ─────────────────────────────────────────────────────────────────────────
+    sans_reponse = [a for a in attendues if a.reponse is None]
     valeurs = {
         "mois": nom_du_mois,
         "de_mois": de_mois(nom_du_mois),
-        "pieces": _pieces(len(attendues)),
+        "pieces": _pieces(len(sans_reponse)),
+        "demandes": _demandes(len(attendues)),
         "date_limite": "",
     }
-    limite = min((a.attendue_pour for a in attendues if a.attendue_pour), default=None)
+    # ⚠️ La date limite se lit sur ce qu'elle doit ENCORE envoyer. Rappeler
+    # l'échéance d'une demande à laquelle elle a répondu la mettrait en faute
+    # pour une pièce qu'elle a dit ne pas avoir.
+    limite = min((a.attendue_pour for a in sans_reponse if a.attendue_pour), default=None)
     if etat is EtatDuMois.A_ENVOYER:
-        if limite is None:
+        if not sans_reponse:
+            texte = reglages.a_envoyer_toutes_repondues
+        elif limite is None:
             texte = reglages.a_envoyer_sans_date
         elif limite < jour:
             texte = reglages.a_envoyer_en_retard

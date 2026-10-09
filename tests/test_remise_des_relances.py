@@ -64,7 +64,7 @@ def _dossier(*, courriel: str | None, consent: bool, prefere: Canal = Canal.WHAT
         nom="Station Bonabéri",
         telephone="+237699000001",
         courriel=courriel,
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         message=None,
         canal_prefere=prefere,
         consentement=Consentement(accorde=consent, recueilli_le=T0, version_du_texte="v1"),

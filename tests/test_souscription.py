@@ -26,7 +26,6 @@ from app.contextes.souscription.api import (
     DemandeLigne,
     DepotDevisMemoire,
     DepotPaiementsMemoire,
-    DepotServicesMemoire,
     DepotSouscriptionsMemoire,
     Devis,
     DevisImpossible,
@@ -68,6 +67,7 @@ from app.contextes.transverse.api import (
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
+from tests.gerant_d_essai import catalogue_fixe, fixer_les_prix_du_comptoir
 
 INSTANT = datetime(2026, 8, 15, 10, 0)
 AUJOURD_HUI = INSTANT.date()
@@ -146,7 +146,9 @@ class _FournisseurFactice:
 def atelier_m():
     """Les quatre dépôts de M, plus le journal d'audit et l'ouverture d'accès."""
     return {
-        "services": DepotServicesMemoire(),
+        # ⚠️ Les prix fixés par un gérant d'essai : un prix « à valider » ne se
+        # paie plus en ligne. Voir `tests/gerant_d_essai.py`.
+        "services": catalogue_fixe(),
         "devis": DepotDevisMemoire(),
         "souscriptions": DepotSouscriptionsMemoire(),
         "paiements": DepotPaiementsMemoire(),
@@ -967,6 +969,7 @@ def client() -> Iterator[TestClient]:
     """
     reinitialiser_atelier()
     reinitialiser_comptoir()
+    fixer_les_prix_du_comptoir()
     with horloge_figee(INSTANT):
         yield TestClient(creer_application())
 

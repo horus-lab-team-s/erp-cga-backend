@@ -123,6 +123,15 @@ class LigneDevis(BaseModel):
     formule: str | None = None
     precision: str | None = None
 
+    #: Le prix recopié avait-il été ARRÊTÉ PAR LE GÉRANT le jour du devis ?
+    #:
+    #: ⚠️ RECOPIÉ AVEC LE MONTANT, et pour la même raison : le devis est figé.
+    #: Un devis établi sur un prix indicatif reste indicatif, même si le gérant
+    #: fixe le prix le lendemain — il faut alors en établir un nouveau, au prix
+    #: décidé. Faux par défaut : c'est ce que valent les devis antérieurs à la
+    #: règle, et un document stocké doit rester relisable.
+    prix_arrete: bool = False
+
     @computed_field
     @property
     def chiffree(self) -> bool:
@@ -169,6 +178,17 @@ class Devis(BaseModel):
         l'en-tête de `offre.py`.
         """
         return all(ligne.chiffree for ligne in self.lignes)
+
+    @computed_field
+    @property
+    def prix_arretes(self) -> bool:
+        """Chaque ligne chiffrée repose sur un prix arrêté par le gérant.
+
+        Sérialisé : avec `complet`, c'est ce qui commande le bouton de paiement.
+        L'application et la vitrine le LISENT, au lieu de recopier la règle chacune
+        de son côté — deux copies d'une règle finissent toujours par diverger.
+        """
+        return all(ligne.prix_arrete for ligne in self.lignes if ligne.chiffree)
 
     @computed_field
     @property

@@ -4,7 +4,21 @@ langue: fr
 categorie: AUTHENTIFICATION
 statut: EN_ATTENTE
 usage: >-
-  Après l'ouverture du tenant, étape 9. Catégorie distincte : facturée même fenêtre ouverte, et soumise à des règles propres.
+  Après l'ouverture du tenant, étape 9.
+
+  ⚠️ CE MODÈLE EST LE PLUS SUSCEPTIBLE D'ÊTRE REFUSÉ, ET IL FAUT LE SAVOIR AVANT DE LE SOUMETTRE.
+  Il porte une ADRESSE LIBRE ({{4}}) dans un modèle rangé en AUTHENTIFICATION. Les modèles d'authentification de la
+  plateforme sont prévus pour un code à usage unique, généralement avec un bouton de copie, et non pour un lien composé
+  par nous. Un refus à ce titre est plausible ; il n'est pas certain, et c'est pourquoi rien ici ne le décide à notre place.
+
+  DEUX ISSUES, dans cet ordre :
+  1. Soumettre tel quel. Si la plateforme refuse la catégorie ou l'adresse, basculer en UTILITAIRE.
+  2. En UTILITAIRE, le message redevient gratuit fenêtre ouverte, ce qui est le cas courant ici : l'activation suit de peu
+     un paiement, donc un échange récent. La catégorie AUTHENTIFICATION coûte à chaque envoi, fenêtre ouverte ou non.
+
+  ⚠️ ET SURTOUT : CE CANAL N'EST PAS LE SEUL. Le lien d'activation part déjà par courriel (gabarit `compte.activation`),
+  qui ne dépend d'aucune approbation et n'a pas de fenêtre de vingt-quatre heures. WhatsApp est ici un doublon de confort,
+  pas un chemin critique : un refus de ce modèle ne bloque personne.
 corps: |-
   Bonjour {{1}}, votre espace {{2}} est ouvert.
   Voici votre lien d'activation, valable {{3}} heures : {{4}}

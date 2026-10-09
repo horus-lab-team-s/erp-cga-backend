@@ -5,7 +5,14 @@ categorie: UTILITAIRE
 statut: EN_ATTENTE
 usage: >-
   Étape 7, à 3, 7 et 14 jours après l'émission, tant qu'il n'y a pas de réponse. ⚠️ Chaque déclenchement est facturé si la fenêtre est fermée.
+# ⚠️ Le corps ne se termine PAS par un emplacement, et ne commence pas par un
+# non plus : la plateforme refuse les deux. Il finissait sur « {{4}} » seul, ce
+# qui l'aurait fait rejeter à la soumission, c'est-à-dire des semaines après
+# avoir été écrit, et pour une raison qu'aucun message local n'aurait expliquée.
+#
+# Le lien est aussi introduit par une phrase, comme dans cga_envoi_proforma : une
+# adresse jetée sur une ligne nue ne dit pas au client ce qu'elle ouvre.
 corps: |-
   Bonjour {{1}}, votre proforma n° {{2}} reste disponible jusqu'au {{3}}.
+  Vous pouvez la consulter ici : {{4}}
   Si quelque chose vous retient, dites-le nous : nous pouvons en reparler.
-  {{4}}

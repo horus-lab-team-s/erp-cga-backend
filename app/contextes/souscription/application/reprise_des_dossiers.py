@@ -156,7 +156,7 @@ def reprendre_les_dossiers(
         precedent = dossier.responsable
         resultat = reaffecter_le_dossier(
             dossier,
-            candidatures_pour(dossier.demande.service_souhaite),
+            candidatures_pour(dossier.service),
             regles,
             a_l_instant,
             a_la_date=a_la_date,

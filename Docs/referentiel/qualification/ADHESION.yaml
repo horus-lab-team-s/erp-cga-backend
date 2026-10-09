@@ -1,4 +1,4 @@
-service: tenue-comptable
+service: ADHESION
 version: "1"
 
 questions:

@@ -1,11 +1,17 @@
-service: creation-sarl
-version: "1"
+service: CREATION
+version: "2"
 
 questions:
   - code: forme_juridique
     libelle: Forme juridique retenue
     type: ENUM
-    valeurs: [SARL, SARL_UNIPERSONNELLE, SA, SAS, GIE, ETABLISSEMENT]
+    # ⚠️ LES VALEURS DE `FormeJuridique`, l'énumération du portefeuille, et non
+    # des libellés écrits ici. Ce champ traverse trois contextes — il chiffre la
+    # prestation, il ouvre le dossier de formalité, et il devient la forme de
+    # l'entreprise au portefeuille. Cette liste portait `SARL_UNIPERSONNELLE` et
+    # `ETABLISSEMENT` ; le domaine dit `SARLU` et `ETS`. Corrigé le 27 septembre,
+    # le jour où l'on a découvert que trois vocabulaires désignaient la création.
+    valeurs: [SARL, SARLU, SA, SAS, GIE, ETS]
     rang: 0
     obligatoire: true
     aide: >-
@@ -14,7 +20,7 @@ questions:
   - code: associes
     libelle: Nombre d'associés
     type: ENTIER
-    rang: 1
+    rang: 2
     obligatoire: true
     aide: >-
       Un seul associé impose la forme unipersonnelle. Au-delà de cinq, les statuts demandent plus de travail.
@@ -23,13 +29,13 @@ questions:
     libelle: Capital social envisagé
     type: DECIMAL
     unite: FCFA
-    rang: 2
+    rang: 3
     obligatoire: true
 
   - code: apports_en_nature
     libelle: Y a-t-il des apports en nature ?
     type: BOOLEEN
-    rang: 3
+    rang: 4
     obligatoire: true
     aide: >-
       Un apport en nature peut exiger un commissaire aux apports, ce qui change le calendrier et le coût.
@@ -38,7 +44,7 @@ questions:
     libelle: Chiffre d'affaires prévisionnel, en tranche
     type: ENUM
     valeurs: [MOINS_10M, DE_10M_A_50M, DE_50M_A_250M, PLUS_250M]
-    rang: 4
+    rang: 5
     obligatoire: true
     aide: >-
       En tranche et non en montant : un prévisionnel au franc près est une fausse précision, et le régime fiscal se décide par seuils.
@@ -46,7 +52,7 @@ questions:
   - code: salaries_prevus
     libelle: Salariés prévus la première année
     type: ENTIER
-    rang: 5
+    rang: 6
     obligatoire: true
 
   - code: region_siege
@@ -63,7 +69,7 @@ questions:
       - ADAMAOUA
       - EST
       - SUD
-    rang: 6
+    rang: 7
     obligatoire: true
     aide: >-
       Détermine le centre des impôts compétent, et l'agence du centre qui suivra le dossier.
@@ -71,24 +77,48 @@ questions:
   - code: activite
     libelle: Activité principale, selon la nomenclature
     type: TEXTE
-    rang: 7
+    rang: 9
     obligatoire: true
+
+  - code: denomination_souhaitee
+    libelle: Dénomination souhaitée pour la société
+    type: TEXTE
+    rang: 1
+    obligatoire: true
+    aide: >-
+      Le nom que le client veut donner à sa société. Posé juste après la forme
+      juridique, qui reste la première question — voir le cas de recette qui le
+      garde : demander le capital avant la forme fait interrompre le
+      responsable par le client. Demandé parce que c'est
+      le premier champ du dossier de formalité, et que ce dossier s'ouvre tout
+      seul dès l'encaissement : sans ce nom, il s'ouvrirait vide ou pas du tout.
+      La disponibilité au RCCM se vérifie plus tard, à la constitution.
+
+  - code: siege
+    libelle: Adresse du siège social
+    type: TEXTE
+    rang: 8
+    obligatoire: true
+    aide: >-
+      L'adresse, et non la région : `region_siege` sert au barème et au centre
+      des impôts compétent, celle-ci figure aux statuts. Un quartier et une ville
+      suffisent à ouvrir le dossier ; le complément se porte à la constitution.
 
   - code: statuts_apportes
     libelle: Le client apporte-t-il des statuts déjà rédigés ?
     type: BOOLEEN
-    rang: 8
+    rang: 10
 
   - code: pages_statuts
     libelle: Nombre de pages des statuts apportés
     type: ENTIER
-    rang: 9
+    rang: 11
     aide: >-
       Sans objet si le centre les rédige. Sert à estimer le temps de relecture.
 
   - code: pieces_deja_reunies
     libelle: Pièces déjà réunies par le client
     type: LISTE
-    rang: 10
+    rang: 12
     aide: >-
       Séparées par des virgules. Ce qui est déjà là réduit le va-et-vient.

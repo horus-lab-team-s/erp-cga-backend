@@ -168,7 +168,7 @@ class TestLesTroisAppelantsPartagentLeMagasin:
                 deposee_le=jour,
                 nom="Abena Ndzana",
                 telephone="699112233",
-                service_souhaite="creation-sarl",
+                service_souhaite="CREATION",
                 canal_prefere=Canal.APPEL,
                 consentement=Consentement(
                     accorde=False,

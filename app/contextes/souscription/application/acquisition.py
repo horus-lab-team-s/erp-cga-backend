@@ -22,7 +22,8 @@ TROIS DÉCISIONS, DANS CET ORDRE
 CE QUE CE CAS D'USAGE NE FAIT PAS
 
 Il n'affecte pas. L'affectation est l'étape 2, elle consomme l'événement
-`DemandeDéposée`, et elle a besoin de choses que ce module n'a pas : la charge
+`DemandeDéposée` (`NOM_DEMANDE_DEPOSEE`), que ce cas d'usage dépose dans la boîte
+d'envoi quand un dossier s'ouvre, et elle a besoin de choses que ce module n'a pas : la charge
 des responsables, la carte des agences, les compétences. Les fondre ferait
 dépendre le dépôt d'un formulaire de la disponibilité d'un annuaire, et un
 visiteur perdrait sa demande parce qu'un service tiers est lent.
@@ -50,8 +51,16 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     ouvrir_un_dossier,
 )
 from app.contextes.souscription.domaine.ports import DepotDossiersCommerciaux
+from app.orchestration.boite_d_envoi import BoiteDEnvoi, deposer
 
-__all__ = ["ResultatDepot", "deposer_une_demande"]
+__all__ = ["NOM_DEMANDE_DEPOSEE", "ResultatDepot", "deposer_une_demande"]
+
+#: L'événement qu'un dossier neuf publie, et que l'affectation consomme.
+#:
+#: ⚠️ Ce nom a été cité dans ce module pendant des mois sans que rien ne le
+#: publie : chaque demande restait `DÉPOSÉE` jusqu'à ce qu'un humain clique sur
+#: « affecter », et le client qui venait de demander un rappel attendait.
+NOM_DEMANDE_DEPOSEE = "DemandeDeposee"
 
 
 class ResultatDepot(BaseModel):
@@ -77,6 +86,7 @@ def deposer_une_demande(
     *,
     reference: str,
     fenetre: timedelta = FENETRE_ANTI_DOUBLON,
+    boite: BoiteDEnvoi | None = None,
 ) -> ResultatDepot:
     """Range la demande : nouveau dossier, ou rattachement au fil vivant.
 
@@ -128,4 +138,22 @@ def deposer_une_demande(
 
     dossier = ouvrir_un_dossier(reference, demande)
     depot.enregistrer(dossier)
+    if boite is not None:
+        # ⚠️ DANS LA MÊME TRANSACTION QUE LE DOSSIER. Soit les deux, soit aucun :
+        # un dossier écrit sans son événement ne serait jamais affecté, un
+        # événement sans dossier ferait échouer l'abonné en boucle.
+        #
+        # ⚠️ Seulement pour un dossier NEUF. Une demande rattachée ne republie
+        # rien : l'affectation tournerait une seconde fois et pourrait changer de
+        # responsable en plein échange (voir `ResultatDepot`).
+        #
+        # L'identifiant dérive de la référence : un rejeu ne dépose pas deux fois.
+        deposer(
+            boite,
+            identifiant=f"dd-{reference}",
+            nom=NOM_DEMANDE_DEPOSEE,
+            cle=reference,
+            charge={"dossier": reference},
+            a_l_instant=demande.deposee_le,
+        )
     return ResultatDepot(dossier=dossier, rattachee=False)

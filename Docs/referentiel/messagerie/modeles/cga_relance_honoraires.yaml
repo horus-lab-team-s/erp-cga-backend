@@ -5,7 +5,9 @@ categorie: UTILITAIRE
 statut: EN_ATTENTE
 usage: >-
   Sur un honoraire échu, avec une gradation dans le ton portée par le paramètre {{4}} plutôt que par quatre modèles distincts.
+  {{4}} était seul sur sa ligne, ce que le README signalait comme « à reprendre » : un emplacement isolé se lit comme un
+  fragment détaché, et une valeur vide y laisserait une ligne blanche au milieu du message. Il enchaîne désormais sur la
+  phrase suivante. Les mots n'ont pas changé, seule la coupure.
 corps: |-
   Bonjour {{1}}, la facture n° {{2}} d'un montant de {{3}} FCFA est échue.
-  {{4}}
-  Si le règlement est déjà parti, merci de nous l'indiquer par retour.
+  {{4}} Si le règlement est déjà parti, merci de nous l'indiquer par retour.

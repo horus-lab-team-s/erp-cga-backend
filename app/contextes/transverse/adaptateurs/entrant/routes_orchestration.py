@@ -53,7 +53,13 @@ from app.contextes.transverse.adaptateurs.entrant.dependances import (
     atelier,
     exiger,
     repertoire_des_tenants,
+    service_de_notification,
     session_de_travail,
+    unite_de_travail,
+)
+from app.contextes.transverse.adaptateurs.sortant.ports_d_ouverture import (
+    port_de_stockage,
+    port_des_comptes,
 )
 from app.contextes.transverse.domaine.roles import Permission
 from app.infrastructure.config import configuration
@@ -120,7 +126,33 @@ class Atelier:
         self.abonnements = Abonnements()
         abonner_l_ouverture(
             self.abonnements,
-            provisionneur=ProvisionneurLocal(registre, a_la_date=maintenant().date()),
+            # ⚠️ **LES TROIS PORTS SONT BRANCHÉS, ET ILS NE L'ÉTAIENT PAS.**
+            #
+            # `ProvisionneurLocal` les prend en option et **substitue** l'étape
+            # quand le port manque. Câblé sans aucun des trois — ce qui était le
+            # cas — toute ouverture se terminait avec le schéma, le stockage et
+            # le compte administrateur sans effet : un client payé sans
+            # identifiant ni lien d'activation.
+            #
+            # C'était honnête, la substitution étant déclarée, mais ce n'était
+            # pas livrable : un second cabinet n'aurait pas pu ouvrir son espace.
+            #
+            # ⚠️ **PAS DE PORT POUR `SCHEMA_CREE`.** La décision D3 — le schéma
+            # par tenant — a été révisée : le cloisonnement est par colonne et
+            # par politiques de lignes, il n'y a donc aucun schéma à créer. Son
+            # état général est vérifié par `/sante`, pas à chaque ouverture.
+            # L'étape reste substituée, et l'écran le dit. Voir
+            # `ports_d_ouverture.py`.
+            provisionneur=ProvisionneurLocal(
+                registre,
+                a_la_date=maintenant().date(),
+                stockage=port_de_stockage(configuration().dossier_fichiers),
+                # ⚠️ Le notifieur est résolu ici, au branchement, et non au
+                # chargement du module : la configuration doit être lue
+                # d'abord — sans quoi le choix du relais se ferait sur des
+                # valeurs par défaut.
+                comptes=port_des_comptes(unite_de_travail, service_de_notification()),
+            ),
             executions=self.executions,
             horloge=maintenant,
         )

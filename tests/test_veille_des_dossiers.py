@@ -60,7 +60,7 @@ def _demande(identifiant: str = "D1") -> DemandeDeContact:
         deposee_le=T0,
         nom="Abena Ndzana",
         telephone="699112233",
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         canal_prefere=Canal.APPEL,
         consentement=Consentement(
             accorde=False, recueilli_le=T0, version_du_texte="consentement-whatsapp-v1"

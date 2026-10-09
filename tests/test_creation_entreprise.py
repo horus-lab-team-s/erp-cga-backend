@@ -607,3 +607,102 @@ class TestPipelineDemo:
         assert suivi.immatriculation.rccm is not None
         assert suivi.immatriculation.niu is None
         assert not suivi.immatriculation.immatriculee
+
+
+class TestLaConversionNeJetteRienDeCeQuElleDetient:
+    """⚠️ L'ENTREPRISE NAISSAIT SANS SON RCCM NI SON CAPITAL.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    `convertir` **exige** le RCCM pour convertir — « sans RCCM il n'y a pas de
+    personne morale » — et n'en gardait que la DATE, pour situer la naissance. Le
+    numéro lui-même restait au dossier de formalité, que seul le chargé de
+    formalités ouvre.
+
+    Mesuré sur la pile : `GET /portefeuille/anomalies` signalait « rccm absent »
+    sur une société dont nous détenions le numéro. Le comptable qui prépare une
+    liasse, la banque qui le demande, l'attestation à produire : tous repassaient
+    par le dossier de création d'une société déjà née, ou par un appel.
+
+    Le capital subissait le même sort, alors qu'il est saisi à la qualification
+    et qu'il figure aux statuts.
+
+    Trouvé en parcourant le suivi comptable après la création, pas en relisant le
+    code : c'est la route des anomalies qui l'a dit.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    @staticmethod
+    def _dossier_pret():
+        from datetime import date
+        from decimal import Decimal
+
+        from app.contextes.creation_entreprise.api import (
+            DossierCreation,
+            EtapeCreation,
+        )
+
+        naissance = date(2026, 3, 2)
+        return DossierCreation(
+            reference="CRE-essai-conversion",
+            fondateur={
+                "nom": "NGONO",
+                "prenom": "Sylvie",
+                "courriel": "s@exemple.cm",
+                "telephone": "+237699001122",
+            },
+            denomination_souhaitee="NGONO COUTURE SARL",
+            forme_juridique="SARL",
+            activite="Confection",
+            siege="Bonabéri, Douala",
+            capital=Decimal(1_000_000),
+            ouvert_le=date(2026, 1, 5),
+            etape=EtapeCreation.LIVRAISON,
+            jalons=(
+                {"etape": "QUALIFICATION", "survenu_le": date(2026, 1, 5), "par": "C-007"},
+                {"etape": "CONSTITUTION", "survenu_le": date(2026, 1, 20), "par": "C-007"},
+                {"etape": "DEPOT_CFCE", "survenu_le": date(2026, 2, 1), "par": "C-007"},
+                {"etape": "SUIVI_IMMATRICULATION", "survenu_le": naissance, "par": "C-007"},
+                {"etape": "LIVRAISON", "survenu_le": date(2026, 3, 10), "par": "C-007"},
+            ),
+            immatriculation={
+                "rccm": "RC/DLA/2026/B/1234",
+                "rccm_obtenu_le": naissance,
+                "niu": "M032612345678X",
+                "niu_obtenu_le": naissance,
+            },
+        )
+
+    def _convertir(self):
+        from datetime import date
+
+        from app.contextes.creation_entreprise.api import convertir
+
+        return convertir(
+            self._dossier_pret(),
+            a_la_date=date(2026, 3, 12),
+            regime="REEL",
+            centre="CIME",
+            adherent=True,
+            par="C-007",
+        )
+
+    def test_le_rccm_entre_au_portefeuille(self):
+        _, entreprise = self._convertir()
+        assert entreprise.rccm == "RC/DLA/2026/B/1234", (
+            "l'entreprise naît sans son RCCM : le portefeuille le déclare absent "
+            "alors que le dossier de formalité le détient"
+        )
+
+    def test_le_capital_entre_au_portefeuille(self):
+        from decimal import Decimal
+
+        _, entreprise = self._convertir()
+        assert entreprise.capital == Decimal(1_000_000)
+
+    def test_la_date_de_naissance_reste_celle_du_rccm(self):
+        """⚠️ Le champ ajouté ne déplace pas ce qui existait : la naissance est
+        la date du RCCM, jamais celle de la conversion."""
+        from datetime import date
+
+        _, entreprise = self._convertir()
+        assert entreprise.date_creation == date(2026, 3, 2)

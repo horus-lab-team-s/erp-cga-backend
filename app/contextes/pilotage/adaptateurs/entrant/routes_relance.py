@@ -259,6 +259,12 @@ class Destinataire(BaseModel):
     nom: str
     courriel: str
 
+    #: Ce qu'on écrit après « Bonjour ». Porté ici plutôt que redécoupé à
+    #: l'envoi : `nom.split(" ")[0]` rendait « NKOA » pour un compte nommé
+    #: « NKOA Sylvie », et l'étiquette du formulaire public dit « Nom et
+    #: prénom », dans cet ordre. Voir `Compte.appellation`.
+    appellation: str
+
 
 def _destinataires(niu: str, jour: date) -> list[Destinataire]:
     boutique = atelier()
@@ -272,7 +278,8 @@ def _destinataires(niu: str, jour: date) -> list[Destinataire]:
         retenus.append(
             Destinataire(
                 compte=compte.identifiant,
-                nom=f"{compte.prenom} {compte.nom}".strip(),
+                nom=compte.nom_affiche,
+                appellation=compte.appellation,
                 courriel=compte.courriel,
             )
         )
@@ -558,7 +565,7 @@ def envoyer_la_relance(
                 "piece.relance",
                 destinataire=destinataire.courriel,
                 contexte={
-                    "prenom": destinataire.nom.split(" ")[0],
+                    "prenom": destinataire.appellation,
                     "mois": nom_du_mois(vue.du),
                     "introduction": rendu.introduction,
                     "liste": " ; ".join(rendu.liste),

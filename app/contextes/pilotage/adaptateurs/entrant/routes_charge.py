@@ -27,10 +27,12 @@ from app.contextes.pilotage.adaptateurs.sortant.charge_yaml import (
 )
 from app.contextes.pilotage.domaine.charge_et_production import (
     DossierPourLaCharge,
+    DossierSansComptable,
     LigneDeCharge,
     PorteurDeDossiers,
     PropositionDeReaffectation,
     ReglagesDeLaCharge,
+    dossiers_sans_comptable,
     mesurer_la_charge,
     proposer_des_reaffectations,
 )
@@ -55,6 +57,11 @@ class ChargeEtProduction(BaseModel):
     dossiers: int
     echeances_du_mois: int
     collaborateurs: list[LigneDeCharge]
+    #: ⚠️ **Les dossiers qu'aucun comptable ne porte.** Une société peut être
+    #: adhérente, payer, et n'être tenue par personne : ses pièces déposées sont
+    #: introuvables du comptable, et rien ne le signalait. Voir
+    #: `dossiers_sans_comptable`.
+    sans_comptable: list[DossierSansComptable]
     propositions: list[PropositionDeReaffectation]
     reglages: ReglagesDeLaCharge
 
@@ -118,6 +125,50 @@ def _porteurs(nius: list[str], jour: date) -> list[PorteurDeDossiers]:
 
 
 @routeur.get(
+    "/dossiers-sans-comptable",
+    summary="Les dossiers qu'aucun comptable ne porte",
+    responses={403: {"description": "Habilitation insuffisante"}},
+)
+def lire_les_dossiers_sans_comptable(
+    acces: AccesRequis,
+    a_la_date: date | None = Query(None, description="Défaut : aujourd'hui"),
+) -> list[DossierSansComptable]:
+    """La même liste que la vue de charge, sous la permission d'agir.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **QUI A LE DROIT D'AFFECTER A LE DROIT DE SAVOIR CE QUI ATTEND UNE
+    AFFECTATION.**
+
+    L'affectation d'un dossier à une habilitation exige `AFFECTER_DOSSIER`, que
+    deux rôles détiennent : la direction et l'administrateur. Ce sont eux qui en
+    répondent au cabinet.
+
+    Or la liste des dossiers orphelins ne vivait que sur
+    `GET /charge-et-production`, sous `LIRE_PILOTAGE`. Mesuré sur la pile :
+    l'administrateur recevait **403** sur l'écran qui lui dit quoi affecter. Il
+    avait le droit d'agir et pas celui de savoir.
+
+    ⚠️ **UNE ROUTE À PART PLUTÔT QU'UNE PERMISSION ÉLARGIE.** Donner
+    `LIRE_PILOTAGE` à l'administrateur lui ouvrirait toute la vue : la charge de
+    chaque collaborateur, sa production nominative, les scores de risque. C'est
+    disproportionné pour lire une liste d'orphelins, et cela changerait ce que
+    le cabinet a décidé de montrer à qui.
+
+    ⚠️ **AUCUNE DUPLICATION DE RÈGLE.** Les deux routes appellent la même
+    fonction de domaine. Recalculer ici donnerait deux définitions de
+    « sans comptable », qui divergeraient au premier changement.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger(acces, Permission.AFFECTER_DOSSIER)
+    jour = a_la_date or _aujourd_hui()
+    debut = jour.replace(day=1)
+    fin = (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    entreprises = _depot_dossiers().lister()
+    dossiers = {e.niu: _dossier(e, jour, debut, fin) for e in entreprises}
+    return dossiers_sans_comptable(_porteurs(list(dossiers), jour), dossiers)
+
+
+@routeur.get(
     "/charge-et-production",
     summary="Qui est saturé, ce qui avance, ce qu'il faudrait réaffecter",
 )
@@ -140,6 +191,7 @@ def lire_la_charge_et_la_production(
         dossiers=len(dossiers),
         echeances_du_mois=sum(d.echeances_du_mois for d in dossiers.values()),
         collaborateurs=mesurer_la_charge(porteurs, dossiers, reglages),
+        sans_comptable=dossiers_sans_comptable(porteurs, dossiers),
         propositions=proposer_des_reaffectations(porteurs, dossiers, reglages),
         reglages=reglages,
     )

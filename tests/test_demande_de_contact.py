@@ -48,7 +48,7 @@ def _demande(**surcharges) -> DemandeDeContact:
         "deposee_le": LE_JOUR,
         "nom": "Abena Ndzana",
         "telephone": "699112233",
-        "service_souhaite": "creation-sarl",
+        "service_souhaite": "CREATION",
         "canal_prefere": Canal.WHATSAPP,
         "consentement": _consentement(),
     }
@@ -302,10 +302,10 @@ class TestDoublon:
     def test_un_service_different_reste_un_doublon(self):
         """Un visiteur qui hésite entre deux prestations n'a pas besoin de deux
         responsables : il en a besoin d'un, à qui l'on dit qu'il hésite."""
-        premiere = _demande(identifiant="dc-1", service_souhaite="creation-sarl")
+        premiere = _demande(identifiant="dc-1", service_souhaite="CREATION")
         seconde = _demande(
             identifiant="dc-2",
-            service_souhaite="tenue-comptable",
+            service_souhaite="ADHESION",
             deposee_le=LE_JOUR + timedelta(hours=1),
         )
         assert doublon_parmi(seconde, [premiere]) is premiere

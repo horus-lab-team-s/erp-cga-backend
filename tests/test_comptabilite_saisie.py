@@ -535,6 +535,46 @@ class TestRoute:
         assert "pydantic" not in detail
         assert "input_value" not in detail
 
+    def test_une_ecriture_a_ligne_unique_est_refusee_et_non_plantee(self, comptable):
+        """⚠️ **ELLE RENDAIT 500. LE COMPTABLE LISAIT « INTERNAL SERVER ERROR ».**
+
+        ─────────────────────────────────────────────────────────────────────
+        `BrouillonEcriture` refuse la ligne unique par un `min_length=2`, qui
+        lève **à la construction**. Celle-ci se faisait une ligne au-dessus du
+        `try` de la route : la `ValidationError` s'échappait, et une écriture
+        simplement incomplète devenait une panne de serveur.
+
+        Le déséquilibre, lui, est vérifié plus tard par l'entité et tombait bien
+        dans la reprise. Deux invariants voisins, deux comportements — alors que
+        le commentaire de la reprise nomme les trois : « déséquilibre, ligne
+        unique, montant nul ». L'intention était là, le code d'une ligne à côté.
+
+        Trouvé en éprouvant les chemins d'erreur sur la pile, pas en relisant.
+
+        ⚠️ **409 et non 422**, comme le déséquilibre : la requête est bien
+        formée, c'est l'écriture qui ne tient pas. La route le dit dans sa
+        propre docstring.
+        ─────────────────────────────────────────────────────────────────────
+        """
+        corps = self._corps()
+        corps["lignes"] = corps["lignes"][:1]
+        refus = comptable.post(f"/comptabilite/dossiers/{AGRO}/ecritures", json=corps)
+
+        assert refus.status_code == 409, refus.text
+        detail = refus.json()["detail"]
+        assert isinstance(detail, str), "le refus doit être une phrase, pas une trace"
+        # ⚠️ Les mêmes marques d'enrobage que le cas du déséquilibre : c'est la
+        # même promesse, et elle doit tenir des deux côtés.
+        for marque in ("validation error", "pydantic", "input_value", "[type="):
+            assert marque not in detail, f"« {marque} » dans ce que lit le comptable"
+        # ⚠️ **ET LA PHRASE EST EN FRANÇAIS.** Le premier correctif a supprimé le
+        # 500 mais laissait « List should have at least 2 items after validation,
+        # not 1 », lu par un comptable camerounais sur son écran de saisie. Ne
+        # plus planter ne suffit pas : le déséquilibre, invariant voisin, dit
+        # « écriture AC/2 déséquilibrée : débit 100, crédit 90, écart 10 ».
+        assert "List should have" not in detail, "le refus est resté en anglais"
+        assert "deux lignes" in detail, detail
+
     def test_l_adherent_ne_saisit_pas_dans_son_propre_journal(self, application):
         """⚠️ LE REFUS QUI PROTÈGE L'AGRÉMENT. Un centre de gestion agréé engage
         son agrément sur les comptes qu'il produit : laisser l'adhérent écrire

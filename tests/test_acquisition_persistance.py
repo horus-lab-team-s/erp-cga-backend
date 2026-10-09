@@ -53,7 +53,7 @@ def _demande(identifiant: str, **surcharges) -> DemandeDeContact:
         "deposee_le": LE_JOUR,
         "nom": "Abena Ndzana",
         "telephone": "699112233",
-        "service_souhaite": "creation-sarl",
+        "service_souhaite": "CREATION",
         "canal_prefere": Canal.WHATSAPP,
         "consentement": Consentement(
             accorde=True,

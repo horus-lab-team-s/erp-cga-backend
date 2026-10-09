@@ -5,10 +5,40 @@ Ce que le responsable demande au client pendant l'échange, et qui devient les
 
 ## Un fichier par service
 
-Le nom du fichier est la clé du service au catalogue : `creation-sarl.yaml`
-qualifie une demande de `creation-sarl`. Un service sans fichier ne peut pas être
-qualifié, et le chargement le dit franchement plutôt que de proposer un
-questionnaire par défaut qui poserait les mauvaises questions.
+Le nom du fichier est la clé du service **au catalogue** : `CREATION.yaml`
+qualifie une demande de `CREATION`, le code que publie
+`GET /souscription/services`. Un service sans fichier ne peut pas être qualifié,
+et le chargement le dit franchement plutôt que de proposer un questionnaire par
+défaut qui poserait les mauvaises questions.
+
+### ⚠️ Cette règle était écrite ici, et les données l'avaient perdue
+
+Le 27 septembre 2026, en jouant pour la première fois le parcours d'une création
+**souscrite depuis le site**, trois vocabulaires ont été trouvés pour une même
+prestation :
+
+| Où | Code employé |
+|---|---|
+| Le formulaire de la vitrine | `creation` |
+| Le catalogue `/souscription/services` | `CREATION` |
+| Ce répertoire | `creation-sarl` |
+
+Conséquence : **aucun dossier né du vrai formulaire ne pouvait être qualifié**,
+donc ni chiffré, ni transformé en proforma. Le tunnel commercial était sans issue
+pour tout le trafic public. Ni le jeu de démonstration ni les cas du serveur ne
+pouvaient le montrer : ils déposent directement la clé de ce répertoire, et ne
+traversent donc jamais la frontière que traverse un visiteur.
+
+Le cabinet a tranché le 27 septembre : **le catalogue fait foi**. Les fichiers
+ont été renommés d'après lui — `creation-sarl.yaml` → `CREATION.yaml`,
+`tenue-comptable.yaml` → `ADHESION.yaml` —, le barème de tarification suit les
+mêmes clés, et le formulaire du site transmet désormais les codes du catalogue.
+
+⚠️ `tenue-comptable` → `ADHESION` est une **interprétation**, et elle mérite
+d'être relue : le catalogue ne porte pas de service « tenue comptable » distinct,
+et l'adhésion au centre y est décrite comme « suivi comptable et fiscal ». Si le
+cabinet veut les distinguer un jour, c'est le catalogue qu'on ouvre d'abord, et
+ce répertoire ensuite.
 
 ## Pourquoi ces fichiers existent
 

@@ -48,20 +48,25 @@ dit plutôt que de laisser un zéro traîner.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 __all__ = [
+    "FixationRefusee",
     "Formule",
     "NatureService",
     "Periodicite",
     "Service",
     "ServiceIntrouvable",
+    "StatutTarif",
     "Tarif",
+    "TarifFixe",
     "TarifIndisponible",
+    "appliquer_les_fixations",
+    "fixer",
     "service_par_code",
 ]
 
@@ -108,6 +113,36 @@ class TarifIndisponible(LookupError):
     """
 
 
+class StatutTarif(StrEnum):
+    """Qui a décidé de ce prix.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE PRIX EST UNE DÉCISION DU GÉRANT, PAS UNE DONNÉE DU CODE.
+
+    Les montants du catalogue viennent des textes de la maquette de la vitrine.
+    Personne au cabinet ne les a fixés : ils illustrent le mécanisme. Le
+    référentiel de tarification le dit de ses propres valeurs (`A_VALIDER`), et
+    le moteur de chiffrage « rend un intervalle, jamais un prix » : c'est un
+    humain qui décide.
+
+    Le catalogue public, lui, les affichait comme fermes ET en encaissait le
+    paiement. Un visiteur pouvait régler 12 500 F par mois un tarif qu'aucun
+    responsable n'avait arrêté. Il n'apparaissait pas non plus sur la fiche de
+    contreseing : il échappait à toute validation.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    #: Le montant vient du catalogue de démonstration. Il s'affiche comme
+    #: indicatif, et ne se paie pas en ligne.
+    A_VALIDER = "A_VALIDER"
+    #: Le gérant l'a arrêté, à une date. Il se paie.
+    FIXE = "FIXE"
+
+
+class FixationRefusee(ValueError):
+    """Un tarif qu'on ne peut pas fixer tel quel."""
+
+
 class Tarif(BaseModel):
     """Un montant en vigueur sur un intervalle `[du, au[`.
 
@@ -126,13 +161,34 @@ class Tarif(BaseModel):
     #: défend pas trois ans plus tard devant un client qui demande pourquoi.
     motif: str | None = None
 
+    #: À valider tant que le gérant ne l'a pas arrêté : voir `StatutTarif`.
+    statut: StatutTarif = StatutTarif.A_VALIDER
+    #: Le compte qui l'a fixé, et quand. Un prix fixé sans nom ne se défend pas.
+    #:
+    #: ⚠️ EXCLU DE LA SÉRIALISATION : le catalogue est servi par une route
+    #: PUBLIQUE, et l'identifiant du compte du gérant n'a rien à faire sur le
+    #: téléphone d'un visiteur. La console le lit sur l'objet, pas dans le JSON.
+    fixe_par: str | None = Field(default=None, exclude=True)
+    fixe_le: datetime | None = None
+
     @model_validator(mode="after")
     def _bornes(self) -> Tarif:
         if self.au is not None and self.au <= self.du:
             raise ValueError(
                 f"tarif incohérent : fin {self.au} antérieure ou égale au début {self.du}"
             )
+        if self.statut is StatutTarif.FIXE and (
+            self.montant is None or self.fixe_par is None or self.fixe_le is None
+        ):
+            raise ValueError(
+                "un tarif fixé porte un montant, le compte qui l'a fixé et l'instant : "
+                "un prix « fixé » par personne n'engage personne."
+            )
         return self
+
+    @property
+    def fixe(self) -> bool:
+        return self.statut is StatutTarif.FIXE
 
     def couvre(self, a_la_date: date) -> bool:
         return self.du <= a_la_date and (self.au is None or a_la_date < self.au)
@@ -283,3 +339,111 @@ def service_par_code(services: Sequence[Service], code: str) -> Service:
         f"service « {code} » inconnu. Codes au catalogue : "
         f"{', '.join(sorted(s.code for s in services))}"
     )
+
+
+class TarifFixe(BaseModel):
+    """La décision du gérant : tel prix, pour telle prestation, à partir de tel jour.
+
+    Conservée telle quelle, et rejouée sur le catalogue à chaque lecture : c'est
+    l'historique des décisions qui fait foi, pas un catalogue réécrit. On sait
+    ainsi qui a fixé chaque prix, quand, et à partir de quand il s'applique.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    identifiant: str = Field(min_length=1)
+    service: str = Field(min_length=1)
+    #: La tranche, pour un service à formules. `None` pour un service à tarif
+    #: unique.
+    formule: str | None = None
+    montant: Decimal = Field(gt=0)
+    a_partir_du: date
+    motif: str = Field(min_length=3)
+    fixe_par: str = Field(min_length=1)
+    fixe_le: datetime
+
+
+def _ouvrir_une_periode(tarifs: list[Tarif], fixation: TarifFixe) -> list[Tarif]:
+    """Coupe le barème au jour de la fixation, et pose le nouveau prix après.
+
+    ⚠️ ON NE RÉÉCRIT JAMAIS UN PRIX PASSÉ. Le tarif en cours s'arrête la veille
+    de la fixation ; ceux qui commencent après sont remplacés. Réécrire la
+    période en cours changerait le prix d'un devis déjà émis, que le client a
+    peut-être déjà montré à son associé.
+    """
+    jour = fixation.a_partir_du
+    garde: list[Tarif] = []
+    for t in tarifs:
+        if t.du >= jour:
+            continue  # remplacé par la fixation
+        if t.au is None or t.au > jour:
+            garde.append(t.model_copy(update={"au": jour}))
+        else:
+            garde.append(t)
+    garde.append(
+        Tarif(
+            montant=fixation.montant,
+            du=jour,
+            au=None,
+            motif=fixation.motif,
+            statut=StatutTarif.FIXE,
+            fixe_par=fixation.fixe_par,
+            fixe_le=fixation.fixe_le,
+        )
+    )
+    return sorted(garde, key=lambda t: t.du)
+
+
+def fixer(service: Service, fixation: TarifFixe) -> Service:
+    """Applique une décision du gérant à un service du catalogue."""
+    if fixation.service != service.code:
+        raise FixationRefusee(
+            f"la fixation porte sur {fixation.service}, pas sur {service.code}"
+        )
+    if service.nature is NatureService.SUR_ETUDE:
+        raise FixationRefusee(
+            f"{service.code} se chiffre sur étude, dossier par dossier : un prix unique "
+            "n'y a pas de sens. Le cabinet l'arrête sur la proposition du client."
+        )
+    if service.formules:
+        if fixation.formule is None:
+            raise FixationRefusee(
+                f"{service.code} se décline en formules : préciser laquelle."
+            )
+        codes = [f.code for f in service.formules]
+        if fixation.formule not in codes:
+            raise FixationRefusee(
+                f"{service.code} n'a pas de formule {fixation.formule} "
+                f"(formules : {', '.join(codes)})"
+            )
+        formules = [
+            f.model_copy(update={"tarifs": _ouvrir_une_periode(f.tarifs, fixation)})
+            if f.code == fixation.formule
+            else f
+            for f in service.formules
+        ]
+        return service.model_copy(update={"formules": formules})
+    if fixation.formule is not None:
+        raise FixationRefusee(
+            f"{service.code} a un tarif unique : il n'a pas de formule "
+            f"{fixation.formule}."
+        )
+    return service.model_copy(
+        update={"tarifs": _ouvrir_une_periode(service.tarifs, fixation)}
+    )
+
+
+def appliquer_les_fixations(
+    catalogue: Sequence[Service], fixations: Sequence[TarifFixe]
+) -> list[Service]:
+    """Le catalogue tel que le gérant l'a arrêté, décision après décision.
+
+    ⚠️ Dans l'ordre où elles ont été PRISES (`fixe_le`), pas dans celui de leur
+    date d'effet : si le gérant fixe d'abord mars, puis corrige février, les deux
+    décisions doivent tenir, et c'est leur succession qui le garantit.
+    """
+    services = list(catalogue)
+    for f in sorted(fixations, key=lambda x: x.fixe_le):
+        services = [fixer(s, f) if s.code == f.service else s for s in services]
+    return services
+

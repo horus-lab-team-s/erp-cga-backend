@@ -135,7 +135,7 @@ def dossier_accepte():
         deposee_le=T0,
         nom="Boulangerie du Wouri",
         telephone="+237690112233",
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         canal_prefere=Canal.APPEL,
         consentement=Consentement(
             accorde=False, recueilli_le=T0, version_du_texte="v1"
@@ -161,10 +161,10 @@ def dossier_accepte():
         emettre(
             numero=NUMERO,
             dossier=REFERENCE,
-            service="creation-sarl",
+            service="CREATION",
             tarif=tarif,
             contenu=b"%PDF",
-            modele="creation-sarl",
+            modele="CREATION",
             version_modele="2026.1",
             a_l_instant=T0,
         ).transmise(T0)

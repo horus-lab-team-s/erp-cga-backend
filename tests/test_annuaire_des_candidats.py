@@ -41,7 +41,7 @@ def _candidats(annuaire, charge=None):
         comptes=comptes,
         habilitations=habilitations,
         charge=charge or {},
-        service="creation-sarl",
+        service="CREATION",
         a_la_date=LE_JOUR,
     )
 
@@ -221,7 +221,7 @@ class TestUnPorteurSuspendu:
             comptes=comptes,
             habilitations=habilitations,
             charge={},
-            service="creation-sarl",
+            service="CREATION",
             a_la_date=LE_JOUR,
         )
         assert [c.responsable for c in candidats] == ["C-900"]
@@ -241,7 +241,7 @@ class TestUnPorteurSuspendu:
             comptes=comptes,
             habilitations=habilitations,
             charge={},
-            service="creation-sarl",
+            service="CREATION",
             a_la_date=LE_JOUR,
         )
         assert candidats[0].disponible is False
@@ -256,7 +256,7 @@ class TestUnPorteurSuspendu:
             comptes=comptes,
             habilitations=habilitations,
             charge={},
-            service="creation-sarl",
+            service="CREATION",
             a_la_date=LE_JOUR,
         )
         assert candidats[0].disponible is True

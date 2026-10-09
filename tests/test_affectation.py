@@ -71,7 +71,7 @@ def _regle(code: str, predicat: dict, **surcharges) -> RegleDAffectation:
 def _candidat(responsable: str, **surcharges) -> Candidature:
     defauts = {
         "responsable": responsable,
-        "service": "creation-sarl",
+        "service": "CREATION",
         "region_demande": "Douala",
         "agence_responsable": "Douala",
         "competences": ("creation",),
@@ -87,7 +87,7 @@ def _dossier():
         deposee_le=L_INSTANT,
         nom="Abena Ndzana",
         telephone="699112233",
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         canal_prefere=Canal.WHATSAPP,
         consentement=Consentement(
             accorde=True,
@@ -433,7 +433,7 @@ class TestGrilleDuReferentiel:
         Un critère de compétence qui les bloquerait viderait la grille de tout
         candidat sur les demandes les plus fréquentes."""
         sans_exigence = _candidat(
-            "resp-1", competences=(), competence_requise="", service="tenue-comptable"
+            "resp-1", competences=(), competence_requise="", service="ADHESION"
         )
         assert evaluer_candidature(sans_exigence, grille, LE_JOUR).eligible
 
@@ -633,7 +633,7 @@ class TestLaRepartitionSousLeSeuil:
         return [
             Candidature(
                 responsable=n,
-                service="creation-sarl",
+                service="CREATION",
                 competences=("CHARGE_FORMALITES",),
                 competence_requise="CHARGE_FORMALITES",
                 dossiers_ouverts=charge.get(n, 0),
@@ -675,7 +675,7 @@ class TestLaRepartitionSousLeSeuil:
         """
         proche_charge = Candidature(
             responsable="alpha",
-            service="creation-sarl",
+            service="CREATION",
             region_demande="douala",
             agence_responsable="douala",
             competences=("CHARGE_FORMALITES",),
@@ -686,7 +686,7 @@ class TestLaRepartitionSousLeSeuil:
         )
         loin_et_vide = Candidature(
             responsable="beta",
-            service="creation-sarl",
+            service="CREATION",
             region_demande="douala",
             agence_responsable="yaounde",
             competences=("CHARGE_FORMALITES",),

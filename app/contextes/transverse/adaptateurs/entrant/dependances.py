@@ -48,6 +48,7 @@ from typing import Annotated, TypeVar
 from fastapi import Cookie, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session as SessionSql
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.contextes.tenants.api import (
@@ -102,7 +103,11 @@ from app.contextes.transverse.domaine.ports import (
 )
 from app.contextes.transverse.domaine.roles import Permission, Role, permissions_de
 from app.contextes.transverse.domaine.sessions import SessionInvalide
-from app.infrastructure.base_de_donnees import session_du_locataire
+from app.infrastructure.base_de_donnees import (
+    fermer_une_session,
+    ouvrir_une_session,
+    session_du_locataire,
+)
 from app.infrastructure.config import configuration
 from app.partage.horloge import maintenant
 from app.partage.locataire import courant, etabli, poser_le_mandat
@@ -373,6 +378,37 @@ def unite_de_travail(locataire: str | None = None) -> Iterator[Atelier]:
             _ATELIER_COURANT.reset(jeton)
 
 
+def ouvrir_l_atelier(locataire: str) -> tuple[Atelier, SessionSql | None]:
+    """Ouvre l'atelier de la requête. **Bloquant en base, immédiat en mémoire.**
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LA MOITIÉ QUI ATTEND, ISOLÉE POUR POUVOIR PARTIR DANS UN FIL
+
+    Voir `ouvrir_une_session` dans `infrastructure/base_de_donnees.py` pour la
+    mesure et la photo des piles : l'intergiciel vit sur la boucle d'événements, et
+    l'attente d'une connexion y arrête le serveur entier.
+
+    Rend la session à côté de l'atelier parce que c'est elle qu'il faudra fermer.
+    En mémoire il n'y a rien à fermer, et la session vaut `None`.
+
+    ⚠️ Aucune variable de contexte n'est posée ici : elle serait perdue au retour du
+    fil, et son jeton inutilisable ailleurs. Voir `unite_de_travail`, qui les pose.
+    """
+    if not configuration().en_base:
+        return _atelier_du_processus(), None
+    session = ouvrir_une_session(locataire)
+    return AtelierSql(session, locataire), session
+
+
+def fermer_l_atelier(session: SessionSql | None, erreur: BaseException | None) -> None:
+    """Valide ou annule l'atelier de la requête, et rend la connexion. **Bloquant.**
+
+    En mémoire, il n'y a pas de transaction à tenir : rien à faire.
+    """
+    if session is not None:
+        fermer_une_session(session, erreur)
+
+
 #: Ce que lit un client à qui l'on refuse l'entrée. Le message compte autant que le code :
 #: un client suspendu doit comprendre pourquoi il n'entre plus et savoir quoi faire, là où
 #: un 404 le laisserait croire à une panne.
@@ -532,8 +568,42 @@ class IntergicielUniteDeTravail(BaseHTTPMiddleware):
                 )
             locataire = tenant.slug
 
-        with etabli(locataire), unite_de_travail():
-            return await call_next(request)
+        # ─────────────────────────────────────────────────────────────────────
+        # ⚠️ L'ATTENTE PART DANS UN FIL, LES VARIABLES DE CONTEXTE RESTENT ICI.
+        #
+        # `dispatch` est asynchrone : tout ce qu'on y écrit s'exécute sur la
+        # **boucle d'événements**, qui est le moteur unique du serveur. Ouvrir la
+        # session ici revenait à y attendre une connexion du bassin.
+        #
+        # Mesuré le 30 septembre, pile de démonstration, un seul navigateur en
+        # séquentiel : dix connexions libres, puis **trente transactions ouvertes
+        # en trois secondes**, et plus une seule réponse pendant dix minutes. La
+        # photo des piles montre la boucle arrêtée dans `QueuePool.get`. Le
+        # verrouillage est total et se referme sur lui-même : la boucle attend une
+        # connexion, et seules les réponses qu'elle ne peut plus écrire en
+        # rendraient une.
+        #
+        # ⚠️ Les deux `run_in_threadpool` ne partagent **pas** le contexte de la
+        # boucle : une variable posée là-bas serait perdue, et son jeton
+        # inutilisable dans l'autre appel. C'est pourquoi `ouvrir_l_atelier` n'en
+        # pose aucune et que `_ATELIER_COURANT` est posée ici, sur la tâche de la
+        # requête, où les routes la liront.
+        #
+        # ⚠️ La fermeture est dans un `finally` : une session qui n'est pas rendue
+        # garde sa connexion ET sa transaction, et trente oublis vident le bassin.
+        # ─────────────────────────────────────────────────────────────────────
+        with etabli(locataire):
+            atelier, session = await run_in_threadpool(ouvrir_l_atelier, locataire)
+            jeton = _ATELIER_COURANT.set(atelier)
+            erreur: BaseException | None = None
+            try:
+                return await call_next(request)
+            except BaseException as echec:
+                erreur = echec
+                raise
+            finally:
+                _ATELIER_COURANT.reset(jeton)
+                await run_in_threadpool(fermer_l_atelier, session, erreur)
 
 
 async def acces_optionnel(
@@ -590,7 +660,24 @@ async def acces_optionnel(
     boutique = atelier()
     instant = maintenant()
     try:
-        session, compte, habilitations = verifier_session(
+        # ⚠️ TROIS LECTURES EN BASE, SUR LA BOUCLE D'ÉVÉNEMENTS, À CHAQUE REQUÊTE.
+        #
+        # Cette dépendance est asynchrone pour une raison documentée plus haut :
+        # une dépendance synchrone s'exécute avec une **copie** du contexte, et le
+        # mandat qu'elle pose n'atteindrait jamais le journal. Mais l'être la
+        # plaçait sur la boucle avec ses lectures, et le serveur entier attendait
+        # la base pour authentifier chaque appelant.
+        #
+        # La vérification part donc dans un fil ; tout ce qui pose une variable de
+        # contexte — `_acces_sous_mandat` plus haut, `resoudre_acces` plus bas —
+        # reste ici, sur la tâche de la requête. C'est la même coupure que pour
+        # l'intergiciel d'unité de travail, et pour la même raison.
+        #
+        # ⚠️ La session SQLAlchemy n'est pas sûre entre fils, et elle n'a pas à
+        # l'être ici : la requête n'en fait qu'un usage à la fois, et la boucle
+        # attend ce fil avant de reprendre.
+        session, compte, habilitations = await run_in_threadpool(
+            verifier_session,
             identifiant,
             comptes=boutique.comptes,
             sessions=boutique.sessions,

@@ -1,0 +1,79 @@
+# La paie déléguée au cabinet : ce qu'il faut savoir avant d'annoncer un prix.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CHAQUE QUESTION OUVRE UN FAIT POUR LES RÈGLES DE PRIX
+#
+# Voir `Docs/referentiel/tarification/README.md` : les réponses du questionnaire
+# deviennent des faits disponibles aux règles tarifaires, sans déploiement. Une
+# question qui ne sert ni au prix ni au travail ne doit donc pas figurer ici :
+# elle allonge l'entretien de qualification sans rien apporter.
+#
+# ⚠️ LES QUESTIONS SUIVENT CE QUE LE SYSTÈME CALCULE VRAIMENT
+#
+# Elles ne sont pas choisies par analogie avec un autre cabinet : chacune
+# correspond à une entrée dont `app/contextes/social` a réellement besoin pour
+# produire un bulletin et la déclaration mensuelle. L'effectif et les avantages
+# en nature entrent dans le calcul ; le groupe de risque décide de la cotisation
+# accidents du travail ; le numéro employeur conditionne le dépôt.
+# ─────────────────────────────────────────────────────────────────────────────
+
+service: PAIE
+version: "1"
+
+questions:
+  - code: salaries_a_traiter
+    libelle: Salariés à traiter chaque mois
+    type: ENTIER
+    unite: salariés
+    rang: 0
+    obligatoire: true
+    aide: >-
+      Le premier facteur de charge : un bulletin se produit, se contrôle et s'explique un par un. Compter les contrats en cours, y compris les temps partiels.
+
+  - code: numero_employeur_cnps
+    libelle: Numéro employeur CNPS
+    type: TEXTE
+    rang: 1
+    aide: >-
+      Laisser vide si l'entreprise n'est pas encore immatriculée à la CNPS : l'immatriculation est alors une démarche préalable, qui se chiffre à part.
+
+  - code: groupe_risque_cnps
+    libelle: Groupe de tarification du risque professionnel
+    type: ENUM
+    valeurs: [A, B, C, INCONNU]
+    rang: 2
+    obligatoire: true
+    aide: >-
+      ⚠️ Il est NOTIFIÉ par la CNPS, il ne se déduit pas de l'activité. Le saisir de travers coûte le triple ou le tiers de la cotisation accidents du travail. Répondre INCONNU tant que la notification n'a pas été vue.
+
+  - code: avantages_en_nature
+    libelle: Avantages en nature à intégrer
+    type: ENUM
+    valeurs: [AUCUN, LOGEMENT, VEHICULE, PLUSIEURS]
+    rang: 3
+    obligatoire: true
+    aide: >-
+      Logement, véhicule, domesticité, eau, électricité. Ils sont imposables et se réévaluent chaque mois : leur présence change le travail, pas seulement le calcul.
+
+  - code: elements_variables
+    libelle: Éléments variables d'un mois sur l'autre
+    type: ENUM
+    valeurs: [AUCUN, RARES, SYSTEMATIQUES]
+    rang: 4
+    obligatoire: true
+    aide: >-
+      Heures supplémentaires, primes de rendement, absences. Une paie sans variable se reconduit ; une paie à variables systématiques se ressaisit tous les mois.
+
+  - code: reprise_historique
+    libelle: Mois de l'exercice déjà payés hors du cabinet
+    type: ENTIER
+    unite: mois
+    rang: 5
+    obligatoire: true
+    aide: >-
+      Une reprise en cours d'année suppose de recharger les cumuls, faute de quoi la déclaration annuelle sera fausse. Elle se facture à part, comme un rattrapage.
+
+  - code: premiere_paie_souhaitee
+    libelle: Mois de la première paie confiée
+    type: DATE
+    rang: 6

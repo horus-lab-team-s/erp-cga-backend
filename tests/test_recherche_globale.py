@@ -273,7 +273,7 @@ class TestLesComptesEtLesDemandes:
             json={
                 "nom": "Abéna Ndzana",
                 "telephone": "699112233",
-                "service_souhaite": "creation-sarl",
+                "service_souhaite": "CREATION",
                 "canal_prefere": "APPEL",
             },
         )

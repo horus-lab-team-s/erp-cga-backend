@@ -71,8 +71,15 @@ _WARNING = "#b4690e"
 #: Le pied de page, identique sur tous les messages. L'agrément y figure parce
 #: qu'il est la seule chose qui distingue un CGA d'un cabinet ordinaire, et
 #: qu'un destinataire qui doute de l'expéditeur le cherche.
+#: ⚠️ **AUCUN TIRET CADRATIM DANS CE QUE LE CLIENT LIT.** La règle valait pour le
+#: document de conception, où la chaîne d'intégration la vérifie ; le cabinet l'a
+#: étendue à tous les messages le 30 septembre. Trente-sept en sortaient, dont
+#: trente-quatre venaient de ce pied et de son séparateur.
+#:
+#: Le nom et l'agrément sont désormais séparés par une virgule, qui dit la même
+#: chose sans le trait.
 _PIED = (
-    "CGA Broad Range Consulting Group — agrément MINFI/DGI n° 00000048<br />"
+    "CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048<br />"
     "Douala Akwa · Yaoundé Elig-Essono · Bafoussam"
 )
 
@@ -176,10 +183,14 @@ def _texte(gabarit_: Gabarit, valeurs: dict[str, str]) -> str:
         lignes.append(f"{_remplir(libelle, valeurs)} : {_remplir(adresse, valeurs)}\n")
     if gabarit_.avertissement is not None:
         lignes.append(_sans_balises(_remplir(gabarit_.avertissement, valeurs)) + "\n")
-    lignes.append("—")
+    # ⚠️ `-- ` est le séparateur de signature des courriels, posé par la RFC 3676 :
+    # les clients de messagerie le reconnaissent et replient ce qui suit. Un tiret
+    # cadratin ne leur dit rien, et le cabinet n'en veut nulle part.
+    lignes.append("-- ")
     lignes.append(
-        "CGA Broad Range Consulting Group — agrément MINFI/DGI n° 00000048"
+        "CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048"
     )
+    lignes.append("Douala Akwa · Yaoundé Elig-Essono · Bafoussam")
     return "\n".join(lignes)
 
 
@@ -212,7 +223,27 @@ def _html(gabarit_: Gabarit, valeurs: dict[str, str]) -> str:
             f"{_remplir(gabarit_.avertissement, valeurs)}</td></tr></table>"
         )
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ LE TEXTE DE PRÉVISUALISATION, CELUI QU'ON LIT SANS OUVRIR.
+    #
+    # Les messageries affichent, à côté de l'objet, les premiers mots trouvés
+    # dans le corps. Sans ce bloc, elles prenaient le bandeau : chaque message du
+    # cabinet s'annonçait « CGA Broad Range Consulting Group », dix-huit fois la
+    # même ligne, qui n'apprend rien à qui décide d'ouvrir ou non.
+    #
+    # Il porte donc le début du **premier paragraphe**, sans balises. Caché à
+    # l'affichage par les trois propriétés que les clients respectent, et suivi
+    # d'espaces insécables larges pour que la messagerie n'aille pas chercher la
+    # suite dans le bandeau.
+    # ─────────────────────────────────────────────────────────────────────────
+    apercu = _sans_balises(_remplir(gabarit_.paragraphes[0], valeurs))[:110]
+    prevu = (
+        f'<div style="display:none;max-height:0;overflow:hidden;'
+        f'mso-hide:all;">{apercu}{"&#8199;&#65279;" * 30}</div>'
+    )
+
     return f"""\
+{prevu}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" \
 style="background:{_SURFACE_ALT};padding:28px 12px;">
 <tr><td align="center">
@@ -229,7 +260,9 @@ CGA Broad Range Consulting Group</span></td></tr>
 {corps}
 </td></tr>
 <tr><td style="padding:18px 28px;border-top:1px solid {_LINE_200};\
-font-size:12px;line-height:1.6;color:{_INK_500};">{_PIED}</td></tr>
+font-size:12px;line-height:1.6;color:{_INK_500};">{_PIED}<br />\
+<span style="color:{_INK_500};">Ce message vous est adressé par le cabinet qui \
+tient votre dossier. Pour toute question, répondez-y simplement.</span></td></tr>
 </table>
 </td></tr>
 </table>"""
@@ -269,6 +302,180 @@ CATALOGUE: dict[str, Gabarit] = {
                 "au titre du service « {service} ».",
                 "Il reste une étape : définir votre mot de passe. Personne chez CGA "
                 "ne le connaîtra, et personne ne vous le demandera jamais.",
+            ),
+            action=("Définir mon mot de passe", "{lien}"),
+            avertissement=(
+                "Ce lien expire le {expire_le} et ne fonctionne qu'une fois. "
+                "Passé ce délai, demandez-en un nouveau depuis la page de connexion."
+            ),
+        ),
+        Gabarit(
+            code="creation.dossier_ouvert",
+            objet="Votre dossier {denomination} est ouvert",
+            titre="Nous commençons, {prenom}",
+            paragraphes=(
+                # ─────────────────────────────────────────────────────────────
+                # ⚠️ LE SEUL MESSAGE DES SEMAINES QUI SUIVENT.
+                #
+                # Entre son règlement et son immatriculation, la cliente ne
+                # recevait rien et ne pouvait rien consulter. Le canal prévu
+                # était la messagerie instantanée ; elle ne tient pas, la fenêtre
+                # de service se refermant vingt-quatre heures après son dernier
+                # mot, et une formalité durant des semaines.
+                #
+                # ⚠️ Ce message porte le lien de suivi, qui n'expire pas : sa
+                # durée de vie est celle du dossier. Elle le range, et il ouvre
+                # encore dans un mois.
+                #
+                # ⚠️ AUCUN DÉLAI N'EST ANNONCÉ. Les délais de greffe ne sont pas
+                # au référentiel, et « sous quinze jours » écrit ici serait une
+                # promesse que personne n'a signée.
+                # ─────────────────────────────────────────────────────────────
+                "Votre règlement est bien reçu, et le dossier de "
+                "<strong>{denomination}</strong> est ouvert. Nous préparons son "
+                "immatriculation.",
+                "Il nous faut maintenant vos pièces. Vous pouvez les envoyer "
+                "depuis votre suivi, en photographiant chaque document : la liste "
+                "s'y trouve, et vous y voyez à tout moment où en est votre "
+                "dossier.",
+                "Gardez ce message : le lien ci-dessous reste valable jusqu'à "
+                "l'immatriculation de votre société.",
+            ),
+            action=("Voir mon dossier et envoyer mes pièces", "{lien}"),
+            avertissement=(
+                "Ce lien vous est personnel : il ouvre votre dossier sans mot de "
+                "passe. Ne le transférez pas."
+            ),
+        ),
+        Gabarit(
+            code="proforma.acceptation",
+            objet="Votre accord sur la proposition {numero}",
+            titre="C'est noté, {prenom}",
+            paragraphes=(
+                # ─────────────────────────────────────────────────────────────
+                # ⚠️ ELLE VIENT D'ENGAGER SON ENTREPRISE, ET NE RECEVAIT RIEN.
+                #
+                # La page d'acceptation le dit en toutes lettres : « mon accord
+                # engage l'entreprise que je représente », et le domaine le
+                # confirme — une proforma acceptée « vaut contrat ».
+                #
+                # Vérifié sur la pile le 29 septembre : la boîte de la cliente est
+                # **inchangée** après l'acceptation. Elle n'a ni le montant
+                # qu'elle a accepté, ni la date, ni le nom qu'elle a déclaré. Le
+                # cabinet, lui, a tout.
+                #
+                # ⚠️ CE MESSAGE NE RÉCLAME RIEN. Il constate. La demande de
+                # règlement est un geste distinct, et les mêler ferait lire une
+                # facture là où il n'y a qu'un accusé.
+                # ─────────────────────────────────────────────────────────────
+                "Vous avez accepté la proposition <strong>{numero}</strong>, d'un "
+                "montant de <strong>{montant} FCFA</strong>, le {acceptee_le}.",
+                "Cet accord a été donné au nom de <strong>{identite}</strong>. "
+                "Conservez ce message : il est la trace de ce que vous avez "
+                "accepté, et de la date.",
+                "Le cabinet prépare la suite et vous recontacte. Si quelque chose "
+                "ne correspond pas à votre échange, répondez à ce message sans "
+                "attendre.",
+            ),
+            avertissement=(
+                "Ce message confirme votre accord. Il ne vaut pas facture : le "
+                "règlement vous sera demandé séparément."
+            ),
+        ),
+        Gabarit(
+            code="demande.accuse_de_depot",
+            # ⚠️ **LE SERVICE À L'OBJET, LA RÉFÉRENCE DANS LE CORPS.**
+            #
+            # L'objet portait `{reference}`, et donnait dans la boîte de
+            # réception : « Votre demande dos-cf776b28a0db44b4 nous est bien
+            # parvenue ». Vingt caractères hexadécimaux qu'aucune cliente ne lit,
+            # ne retient ni ne dicte au téléphone, à l'endroit précis où le
+            # message doit se reconnaître d'un coup d'œil. Vu en lisant la boîte
+            # d'une recette de bout en bout, pas dans le gabarit.
+            #
+            # Les trois autres messages du parcours nomment déjà ce dont ils
+            # parlent : la proposition par son numéro, le dossier par la société.
+            # Celui-ci était le seul à afficher un identifiant technique.
+            #
+            # La référence reste **dans le corps**, où elle sert : c'est elle que
+            # le cabinet demande au rappel.
+            objet="Votre demande concernant {service} nous est bien parvenue",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                # ─────────────────────────────────────────────────────────────
+                # ⚠️ CE MESSAGE NE PROMET QUE CE QUE LE PRODUIT TIENT.
+                #
+                # Le formulaire du site affiche « un responsable vous
+                # recontacte ». Jusqu'au 28 septembre, rien ne le confirmait par
+                # écrit : la cliente quittait la page et n'avait plus aucune
+                # trace de son geste. Entre son dépôt et le premier appel, elle
+                # ne pouvait que se demander si le formulaire avait marché.
+                #
+                # ⚠️ AUCUN DÉLAI N'EST ANNONCÉ. Le référentiel d'acquisition
+                # porte les délais de veille — ce qu'on se donne avant de
+                # s'alarmer — et non un engagement pris au client. Écrire « sous
+                # 24 heures » ici serait fabriquer une promesse que personne
+                # n'a signée, et la première demande déposée un vendredi soir la
+                # démentirait.
+                # ─────────────────────────────────────────────────────────────
+                # ─────────────────────────────────────────────────────────────
+                # ⚠️ **LA RÉFÉRENCE A ÉTÉ RETIRÉE D'ICI AUSSI.**
+                #
+                # La phrase disait : « Elle porte la référence
+                # dos-cf776b28a0db44b4 ; conservez-la, elle nous permet de
+                # retrouver votre dossier immédiatement. »
+                #
+                # C'est une promesse que le format ne tient pas. Seize
+                # caractères hexadécimaux ne se dictent pas au téléphone, ne se
+                # notent pas sans faute et ne se relisent pas. On demandait à la
+                # cliente de conserver quelque chose dont elle ne peut rien
+                # faire.
+                #
+                # Et c'était inutile : la phrase suivante dit que **le cabinet
+                # la rappelle sur son numéro**. Personne n'attend qu'elle cite
+                # une référence.
+                #
+                # ⚠️ Elle avait déjà été retirée de l'objet. L'y laisser dans le
+                # corps était un demi-geste : le même raisonnement valait des
+                # deux côtés, et je ne l'avais pas tiré jusqu'au bout.
+                # ─────────────────────────────────────────────────────────────
+                "Votre demande concernant <strong>{service}</strong> nous est "
+                "bien parvenue.",
+                "Un responsable l'examine et vous recontacte au "
+                "<strong>{telephone}</strong>. Vous n'avez rien à faire d'ici "
+                "là : si un document nous est nécessaire, il vous sera demandé "
+                "à ce moment.",
+            ),
+            avertissement=(
+                "Ce message confirme la réception de votre demande. Il ne vaut "
+                "ni devis ni engagement : le montant vous sera proposé après "
+                "examen."
+            ),
+        ),
+        Gabarit(
+            code="compte.activation_creation",
+            objet="Votre société {denomination} est immatriculée",
+            titre="Félicitations, {prenom}",
+            paragraphes=(
+                # ⚠️ UN GABARIT À PART, ET CE N'EST PAS UNE DUPLICATION.
+                #
+                # `compte.activation` ouvre sur « votre souscription X est
+                # encaissée ». Une fondatrice n'a pas souscrit : elle a fait
+                # immatriculer sa société, et son accès s'ouvre des semaines
+                # après son paiement, le jour où le NIU est délivré. Lui
+                # réemployer l'autre message lui aurait fait lire une phrase
+                # fausse — et, la référence n'existant pas, une double espace.
+                #
+                # Deux événements différents, deux messages. Ce que le catalogue
+                # interdit, c'est le même message écrit deux fois.
+                "<strong>{denomination}</strong> est immatriculée. Son numéro de "
+                "contribuable est <strong>{niu}</strong>, et son dossier est "
+                "désormais suivi par le cabinet.",
+                "Votre espace adhérent est ouvert : vos échéances, vos "
+                "justificatifs et les documents que le cabinet dépose pour vous "
+                "s'y trouvent. Il reste une étape : définir votre mot de passe. "
+                "Personne chez CGA ne le connaîtra, et personne ne vous le "
+                "demandera jamais.",
             ),
             action=("Définir mon mot de passe", "{lien}"),
             avertissement=(
@@ -448,6 +655,30 @@ CATALOGUE: dict[str, Gabarit] = {
                 "La suspension de votre accès à la plateforme a été levée.",
                 "Vous pouvez vous reconnecter. Les dossiers auxquels vous avez accès sont "
                 "ceux de vos habilitations en vigueur ; en cas de doute, adressez-vous au cabinet.",
+            ),
+        ),
+        # La proposition chiffrée après l'échange avec le responsable. ⚠️ C'est le
+        # SEUL courriel qui porte le lien d'acceptation : il part au moment où le
+        # lien est forgé, par le serveur, sans que le lien transite par personne.
+        # La relance, elle, n'en porte aucun (voir plus bas).
+        Gabarit(
+            code="proforma.envoi",
+            objet="Votre proposition {proforma} : {montant} FCFA",
+            titre="Bonjour {nom}",
+            paragraphes=(
+                # ⚠️ Pas le nom du service : le référentiel ne porte que son code
+                # (`CREATION`), et un code n'a rien à faire dans un courriel.
+                # Le détail de ce que le prix couvre est sur la page de la proforma.
+                "Suite à notre échange, voici notre proposition <strong>{proforma}</strong>, "
+                "d'un montant de <strong>{montant} FCFA</strong>.",
+                "Vous pouvez la lire en détail, puis l'accepter en ligne : aucun compte "
+                "n'est nécessaire. Si un point appelle une précision, répondez simplement "
+                "à ce message.",
+            ),
+            action=("Consulter ma proposition", "{lien}"),
+            avertissement=(
+                "Ce lien est personnel et reste valable jusqu'au {expire_le}. "
+                "Ne le transférez pas : il permet d'accepter la proposition."
             ),
         ),
         Gabarit(

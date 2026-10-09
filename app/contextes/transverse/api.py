@@ -97,6 +97,7 @@ from app.contextes.transverse.application.administration import (
     SuspensionRefusee,
     accorder,
     affecter_dossier,
+    creer_l_administrateur_d_un_tenant,
     fermer_habilitation,
     inviter_collaborateur,
     ouvrir_acces_adherent,
@@ -298,6 +299,7 @@ __all__ = [
     "habilitations_actives",
     # Pas 111 : savoir si l'adhérent a lu la relance qui lui a été envoyée.
     "depot_des_lectures",
+    "creer_l_administrateur_d_un_tenant",
     "inviter_collaborateur",
     "ouvrir_acces_adherent",
     "ouvrir_session",

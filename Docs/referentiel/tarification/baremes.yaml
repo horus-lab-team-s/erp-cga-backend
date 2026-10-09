@@ -13,7 +13,7 @@
 # incrément de version, ou d'une nouvelle période de validité.
 
 baremes:
-  - service: creation-sarl
+  - service: CREATION
     version: "2026.1"
     base: 250000
     applicable_du: 2026-01-01
@@ -27,7 +27,7 @@ baremes:
         Offre commerciale du centre, création de société à responsabilité limitée. Valeur de travail, à confirmer par la direction.
       source: Barème d'honoraires du centre, à transmettre
 
-  - service: tenue-comptable
+  - service: ADHESION
     version: "2026.1"
     base: 150000
     applicable_du: 2026-01-01
@@ -40,4 +40,28 @@ baremes:
     fondement:
       texte: >-
         Offre commerciale du centre, tenue comptable au forfait mensuel. Valeur de travail, à confirmer par la direction.
+      source: Barème d'honoraires du centre, à transmettre
+
+  - service: PAIE
+    version: "2026.1"
+    base: 60000
+    applicable_du: 2026-01-01
+    applicable_au: null
+    # ⚠️ L'amplitude la plus large des trois, et ce n'est pas une facilité.
+    #
+    # La base couvre un effectif ordinaire de PME. Or la charge d'une paie suit
+    # l'effectif presque linéairement : un bulletin se produit, se contrôle et
+    # s'explique un par un. Entre quatre salariés et quarante, le même service
+    # n'a pas le même coût, et l'écart ne se rattrape pas par un ajustement de
+    # quelques pour cent.
+    #
+    # Hors de l'intervalle, le motif devient obligatoire et la validation remonte
+    # d'un cran : c'est le mécanisme prévu pour les effectifs qui sortent du cas
+    # ordinaire, plutôt qu'une amplitude assez large pour ne rien contrôler.
+    baisse_maximale: 0.25
+    hausse_maximale: 1.00
+    statut: A_VALIDER
+    fondement:
+      texte: >-
+        Offre commerciale du centre, paie déléguée au forfait mensuel : bulletins, déclaration mensuelle des personnels employés, cotisations sociales. Valeur de travail, à confirmer par la direction.
       source: Barème d'honoraires du centre, à transmettre

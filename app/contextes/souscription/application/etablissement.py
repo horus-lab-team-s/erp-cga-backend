@@ -128,6 +128,7 @@ def _chiffrer(
             periodicite=service.periodicite,
             nature=service.nature,
             precision=service.unite,
+            prix_arrete=tarif.fixe,
         )
 
     formule = _formule(service, demande, prospect)
@@ -139,6 +140,7 @@ def _chiffrer(
         periodicite=service.periodicite,
         nature=service.nature,
         formule=formule.code,
+        prix_arrete=tarif.fixe,
         precision=(
             service.unite
             if tarif.montant is not None

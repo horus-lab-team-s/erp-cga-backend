@@ -360,3 +360,119 @@ class TestLesRoutes:
             .status_code
             == 403
         )
+
+
+class TestLesDossiersSansComptable:
+    """⚠️ UNE SOCIÉTÉ PEUT ÊTRE ADHÉRENTE, PAYER, ET N'ÊTRE TENUE PAR PERSONNE.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    Un comptable travaille sur un périmètre de NIU. Une société qui vient d'être
+    créée n'est dans aucun : ses pièces déposées lui sont **introuvables**, et
+    rien ne le signalait.
+
+    Mesuré sur la pile le 30 septembre 2026 : la cliente dépose son premier
+    justificatif, le comptable reçoit « pièce introuvable ». Le geste
+    d'affectation existe pourtant ; il manquait que quelqu'un soit prévenu.
+
+    ⚠️ **ON SIGNALE, ON N'AFFECTE PAS.** Qui reçoit un dossier neuf est une
+    décision d'organisation du cabinet.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def test_un_dossier_que_personne_ne_porte_est_nomme(self):
+        from app.contextes.pilotage.domaine.charge_et_production import (
+            dossiers_sans_comptable,
+        )
+
+        dossiers = {
+            "NIU-A": _dossier("NIU-A", 0),
+            "NIU-ORPHELIN": _dossier("NIU-ORPHELIN", 0),
+        }
+        orphelins = dossiers_sans_comptable([_porteur("C-004", ["NIU-A"])], dossiers)
+
+        assert [o.niu for o in orphelins] == ["NIU-ORPHELIN"]
+        assert orphelins[0].denomination == "DOSSIER NIU-ORPHELIN"
+
+    def test_un_charge_de_clientele_ne_tient_pas_lieu_de_comptable(self):
+        """⚠️ C'est le MÉTIER qui manque, pas un porteur quelconque. Un dossier
+        suivi côté commercial reste sans comptabilité."""
+        from app.contextes.pilotage.domaine.charge_et_production import (
+            dossiers_sans_comptable,
+        )
+
+        dossiers = {"NIU-B": _dossier("NIU-B", 0)}
+        porteurs = [_porteur("C-007", ["NIU-B"], role="CHARGE_CLIENTELE")]
+
+        assert [o.niu for o in dossiers_sans_comptable(porteurs, dossiers)] == ["NIU-B"]
+
+    def test_un_dossier_tenu_ne_remonte_pas(self):
+        from app.contextes.pilotage.domaine.charge_et_production import (
+            dossiers_sans_comptable,
+        )
+
+        dossiers = {"NIU-C": _dossier("NIU-C", 0)}
+        assert dossiers_sans_comptable([_porteur("C-004", ["NIU-C"])], dossiers) == []
+
+    def test_il_porte_ce_qui_s_y_accumule(self):
+        """⚠️ Un dossier orphelin et vide n'est pas le même problème qu'un
+        dossier orphelin où les pièces s'entassent. Sans ce chiffre, l'écran ne
+        peut pas trier l'urgent."""
+        from app.contextes.pilotage.domaine.charge_et_production import (
+            dossiers_sans_comptable,
+        )
+
+        dossiers = {"NIU-D": _dossier("NIU-D", 7)}
+        (orphelin,) = dossiers_sans_comptable([], dossiers)
+        assert orphelin.pieces_en_attente == 7
+
+
+class TestQuiPeutAffecterPeutSavoir:
+    """⚠️ IL AVAIT LE DROIT D'AGIR ET PAS CELUI DE SAVOIR.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    Le cabinet a désigné deux responsables de l'affectation d'un dossier à un
+    comptable : la direction et l'administrateur. `AFFECTER_DOSSIER` est bien
+    détenue par ces deux rôles, et par eux seuls.
+
+    Mais la liste des dossiers orphelins ne vivait que sur
+    `GET /pilotage/charge-et-production`, sous `LIRE_PILOTAGE`. Mesuré sur la
+    pile : **l'administrateur recevait 403** sur l'écran qui lui dit quoi
+    affecter.
+
+    ⚠️ Une route à part, et non `LIRE_PILOTAGE` élargie : celle-ci ouvrirait la
+    charge de chaque collaborateur, sa production nominative et les scores de
+    risque. Disproportionné pour lire une liste d'orphelins.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    CHEMIN = "/pilotage/dossiers-sans-comptable"
+
+    def test_l_administrateur_lit_la_liste_qu_il_doit_traiter(self, plateforme):
+        admin = _client(plateforme, "s.onana@cga-brcg.cm")
+        vue = admin.get(self.CHEMIN)
+        assert vue.status_code == 200, vue.text
+        assert isinstance(vue.json(), list)
+
+    def test_la_direction_aussi(self, plateforme):
+        direction = _client(plateforme, "b.mballa@cga-brcg.cm")
+        assert direction.get(self.CHEMIN).status_code == 200
+
+    def test_la_vue_de_pilotage_reste_fermee_a_l_administrateur(self, plateforme):
+        """⚠️ **LE POINT DE LA ROUTE SÉPARÉE.** S'il obtenait la vue entière, on
+        aurait élargi sa permission au lieu de lui donner ce qu'il lui faut."""
+        admin = _client(plateforme, "s.onana@cga-brcg.cm")
+        assert admin.get("/pilotage/charge-et-production").status_code == 403
+
+    def test_un_comptable_ne_la_lit_pas(self, plateforme):
+        """Il ne décide pas des affectations : la liste ne le concerne pas."""
+        comptable = _client(plateforme, "l.fotso@cga-brcg.cm")
+        assert comptable.get(self.CHEMIN).status_code == 403
+
+    def test_les_deux_routes_disent_la_meme_chose(self, plateforme):
+        """⚠️ Aucune duplication de règle : recalculer dans la route dédiée
+        donnerait deux définitions de « sans comptable », qui divergeraient au
+        premier changement."""
+        direction = _client(plateforme, "b.mballa@cga-brcg.cm")
+        par_la_vue = direction.get("/pilotage/charge-et-production").json()["sans_comptable"]
+        par_la_route = direction.get(self.CHEMIN).json()
+        assert [d["niu"] for d in par_la_vue] == [d["niu"] for d in par_la_route]

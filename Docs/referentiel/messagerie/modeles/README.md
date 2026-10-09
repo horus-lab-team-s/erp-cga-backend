@@ -44,6 +44,39 @@ Au format de la plateforme : `{{1}}`, `{{2}}`… Le nombre attendu est le **plus
 grand numéro cité**, pas le nombre de numéros distincts : un corps qui cite
 `{{1}}` et `{{3}}` en attend trois.
 
+### Trois règles de forme, refusées à la soumission
+
+Elles ne figuraient pas ici, et `cga_relance_proforma` en enfreignait une : son
+corps finissait sur `{{4}}` seul. Le refus serait arrivé **des semaines après
+l'écriture**, dans le vocabulaire de la plateforme, à quelqu'un qui n'avait pas
+écrit le texte. Le domaine les vérifie désormais au chargement — voir
+`ModeleDeMessage`.
+
+| Règle | Pourquoi |
+|---|---|
+| Le corps ne **commence** pas par un emplacement | Refusé à la soumission ; et le client lirait un message qui s'ouvre sur une valeur, sans phrase. |
+| Le corps ne **se termine** pas par un emplacement | Refusé à la soumission. Faites suivre l'emplacement d'une phrase, comme `cga_envoi_proforma` le fait pour son lien. |
+| Deux emplacements ne se **touchent** pas | Refusé, et le client lirait deux valeurs accolées sans séparateur. |
+
+⚠️ **Seules les règles dont on est sûr sont vérifiées.** Celles de catégorie, de
+longueur et de bouton ne le sont pas : les deviner ferait refuser des modèles
+valides, ce qui coûte plus cher que de les laisser passer.
+
+⚠️ **Un emplacement seul sur sa ligne se lit mal**, même quand la plateforme
+l'accepte. Une adresse jetée sans phrase ne dit pas au client ce qu'elle ouvre,
+et une valeur vide y laisserait une ligne blanche au milieu du message.
+`cga_relance_honoraires` était dans ce cas ; son `{{4}}` enchaîne désormais sur
+la phrase suivante, sans qu'aucun mot change. **Plus aucun modèle n'est dans ce
+cas**, et ce n'est pas vérifié automatiquement : la règle est nôtre, pas celle
+de la plateforme, et l'imposer au chargement ferait refuser un jour un modèle
+que la plateforme accepte.
+
+⚠️ **`cga_lien_activation` porte le risque de refus le plus sérieux du lot** :
+une adresse libre dans un modèle d'authentification, alors que cette catégorie
+est prévue pour un code à usage unique. Son `usage` dit quoi faire si le refus
+vient. Ce n'est pas un chemin critique : le lien d'activation part aussi par
+courriel, qui ne dépend d'aucune approbation.
+
 ## Le coût, pour mémoire
 
 | Ce qu'on envoie | Fenêtre ouverte | Fenêtre fermée |

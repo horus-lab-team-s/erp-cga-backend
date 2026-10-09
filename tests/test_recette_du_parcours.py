@@ -97,9 +97,14 @@ def _rendre_tout_du(moteur):
 
 
 class TestLeParcoursEntier:
-    """De la demande déposée sur la vitrine au sous-domaine qui répond."""
+    """De la demande déposée sur la vitrine au dossier payé.
 
-    def test_un_visiteur_devient_un_tenant(self, plateforme, moteur_test):
+    ⚠️ Ce parcours finissait « au sous-domaine qui répond ». Il ne finit plus
+    ainsi : une prestation vendue à une adhérente n'ouvre aucun locataire. Voir
+    l'étape 11.
+    """
+
+    def test_un_visiteur_devient_un_dossier_paye(self, plateforme, moteur_test):
         client = plateforme
 
         # 1 · Le visiteur remplit le formulaire public. Six champs, sans session.
@@ -109,7 +114,7 @@ class TestLeParcoursEntier:
                 "nom": "Station Bonabéri",
                 "telephone": "699112233",
                 "courriel": "gerant@station-bonaberi.cm",
-                "service_souhaite": "creation-sarl",
+                "service_souhaite": "CREATION",
                 "canal_prefere": "APPEL",
                 "message": "je veux créer une SARL",
             },
@@ -157,9 +162,13 @@ class TestLeParcoursEntier:
                 # peut donc pas s'en servir : c'est ce que le pas 21 a établi.
                 ("region_siege", "LITTORAL"),
                 ("activite", "station-service et boutique"),
+                # Version 2 : le nom et le siège de la future société, sans
+                # lesquels le dossier de formalité s'ouvrirait vide.
+                ("denomination_souhaitee", "STATION BONABÉRI SARL"),
+                ("siege", "Bonabéri, Douala"),
             ],
         )
-        assert second["avancement"]["repondues"] == 8, (
+        assert second["avancement"]["repondues"] == 10, (
             "la qualification est repartie de zéro entre deux appels"
         )
         assert second["complete"] is True, second["manquantes"]
@@ -270,36 +279,47 @@ class TestLeParcoursEntier:
         assert rejeu.status_code == 200, rejeu.text
         assert rejeu.json()["rejeu"] is True
 
-        # 10 · Un tour d'ordonnanceur publie l'événement, la saga ouvre le tenant.
+        # 10 · Un tour d'ordonnanceur publie l'événement.
         rapport = _tour()
         assert rapport.execute
         assert all(r.reussi for r in rapport.resultats), [
             r.compte_rendu for r in rapport.resultats if not r.reussi
         ]
 
-        # 11 · Le tenant existe **en base**, et pas seulement dans une mémoire.
+        # ── 11 · ⚠️ ET AUCUN LOCATAIRE N'EST OUVERT ─────────────────────────
+        #
+        # Ce cas finissait ici sur « le tenant existe en base, et son
+        # sous-domaine répond ». C'était le comportement, et il était faux.
+        #
+        # Une entrepreneuse qui achète la création de sa SARL recevait **son
+        # propre espace de plateforme**, isolé du cabinet, pendant que son
+        # entreprise entrait au portefeuille **du cabinet**. Deux locataires
+        # pour une seule cliente — et même en activant son compte, elle serait
+        # entrée dans un espace vide.
+        #
+        # Le cabinet a tranché le 27 septembre : une prestation se vend à une
+        # **adhérente**, dont le compte vit là où vit son dossier. Un locataire
+        # se vend à un autre centre de gestion, sous le service `PLATEFORME`.
         with moteur_test.connect() as connexion:
-            ligne = connexion.execute(
-                text("SELECT slug, statut, etape_atteinte FROM tenant")
+            combien = connexion.execute(text("SELECT count(*) FROM tenant")).scalar_one()
+        assert combien == 0, (
+            "une prestation vendue à une adhérente ne doit ouvrir aucun locataire"
+        )
+
+        # 12 · Et l'événement le DIT, plutôt que de le laisser deviner.
+        with moteur_test.connect() as connexion:
+            paiement = connexion.execute(
+                text(
+                    "SELECT donnees FROM boite_d_envoi WHERE nom = 'PaiementEncaissé'"
+                )
             ).one()
-        assert (ligne.slug, ligne.statut, ligne.etape_atteinte) == (
-            "station-bonaberi",
-            "ACTIF",
-            "PRET",
+        assert paiement.donnees["charge"]["ouvre_un_locataire"] is False
+        assert paiement.donnees["charge"]["service"] == "CREATION"
+
+        # 13 · Le dossier commercial, lui, est bien payé et le reste.
+        assert (
+            client.get(f"/acquisition/dossiers/{reference}").json()["etat"] == "PAYEE"
         )
-
-        # 12 · Et son sous-domaine répond **tout de suite**, sans redéploiement.
-        from app.contextes.transverse.adaptateurs.entrant.dependances import (
-            repertoire_des_tenants,
-        )
-
-        assert repertoire_des_tenants().par_slug("station-bonaberi") is not None
-
-        # 13 · Et un seul tenant, malgré la double confirmation.
-        with moteur_test.connect() as connexion:
-            assert (
-                connexion.execute(text("SELECT count(*) FROM tenant")).scalar_one() == 1
-            )
 
     def _qualifier(self, client, reference, reponses):
         reponse = client.post(
@@ -472,7 +492,7 @@ class TestLaRelanceDUneProformaSansReponse:
             nom="Boulangerie du Wouri",
             telephone="+237690112233",
             courriel=courriel,
-            service_souhaite="creation-sarl",
+            service_souhaite="CREATION",
             message=None,
             canal_prefere=prefere or Canal.APPEL,
             consentement=Consentement(
@@ -492,10 +512,10 @@ class TestLaRelanceDUneProformaSansReponse:
         proforma = emettre(
             numero=numero,
             dossier=reference,
-            service="creation-sarl",
+            service="CREATION",
             tarif=tarif,
             contenu=b"%PDF recette",
-            modele="creation-sarl",
+            modele="CREATION",
             version_modele="2026.1",
             a_l_instant=il_y_a_15j,
         ).transmise(il_y_a_15j)
@@ -689,7 +709,7 @@ class TestLeDossierQuiDort:
             # scénario à deux dossiers doit donc employer deux numéros.
             telephone=telephone,
             courriel=None,
-            service_souhaite="creation-sarl",
+            service_souhaite="CREATION",
             message=None,
             canal_prefere=Canal.APPEL,
             consentement=Consentement(
@@ -931,7 +951,13 @@ class TestLeReglementNotifieParLOperateur:
             )
         assert ouverture.donnees["charge"]["slug"] == self.SLUG
 
-        # 6 · La saga tourne : le tenant existe et son sous-domaine répond.
+        # 6 · ⚠️ LES TOURS PASSENT, ET AUCUN LOCATAIRE NE S'OUVRE.
+        #
+        # Ce cas vérifiait ici que le tenant existait. Depuis le 27 septembre,
+        # une prestation vendue à une adhérente n'en ouvre aucun : son compte
+        # vit chez le cabinet, là où vit son dossier. Ce qui compte désormais,
+        # c'est que les tours se passent **sans rien casser** — l'abonné doit
+        # s'arrêter proprement, pas lever.
         for _ in range(3):
             _rendre_tout_du(moteur_test)
             rapport = _tour()
@@ -939,15 +965,12 @@ class TestLeReglementNotifieParLOperateur:
                 r.compte_rendu for r in rapport.resultats if not r.reussi
             ]
         with moteur_test.connect() as connexion:
-            tenant = connexion.execute(
-                text("SELECT slug, statut FROM tenant WHERE slug = :s"),
-                {"s": self.SLUG},
-            ).one()
-        assert tenant.slug == self.SLUG
+            combien = connexion.execute(text("SELECT count(*) FROM tenant")).scalar_one()
+        assert combien == 0, "une prestation vendue n'ouvre aucun locataire"
 
-        # 7 · ⚠️ **La confirmation manuelle n'ouvre pas un second tenant.**
-        # Les deux chemins dérivent le même identifiant d'événement du dossier,
-        # donc une seule saga.
+        # 7 · ⚠️ **LA CONFIRMATION MANUELLE EST UN REJEU, ET RIEN DE PLUS.**
+        # Les deux chemins dérivent le même identifiant d'événement du dossier :
+        # le dossier ne se repaie pas, et aucun second événement n'est déposé.
         rejeu = client.post(
             f"/acquisition/proformas/{numero}/encaissement",
             json={"slug": self.SLUG, "reference_externe": "TARA-RECETTE-0001"},
@@ -956,8 +979,17 @@ class TestLeReglementNotifieParLOperateur:
         assert rejeu.json()["rejeu"] is True, rejeu.json()
         with moteur_test.connect() as connexion:
             assert (
-                connexion.execute(text("SELECT count(*) FROM tenant")).scalar_one() == 1
-            )
+                connexion.execute(text("SELECT count(*) FROM tenant")).scalar_one() == 0
+            ), "une prestation vendue n'ouvre aucun locataire, même rejouée"
+            assert (
+                connexion.execute(
+                    text(
+                        "SELECT count(*) FROM boite_d_envoi "
+                        "WHERE nom = 'PaiementEncaissé'"
+                    )
+                ).scalar_one()
+                == 1
+            ), "le rejeu a déposé un second événement"
 
     def test_un_reglement_ne_se_demande_pas_avant_l_acceptation(
         self, plateforme, moteur_test
@@ -1079,7 +1111,7 @@ class TestLeReglementNotifieParLOperateur:
             nom="Boulangerie du Wouri",
             telephone="+237690112233",
             courriel=None,
-            service_souhaite="creation-sarl",
+            service_souhaite="CREATION",
             message=None,
             canal_prefere=Canal.APPEL,
             consentement=Consentement(
@@ -1099,10 +1131,10 @@ class TestLeReglementNotifieParLOperateur:
         proforma = emettre(
             numero=numero,
             dossier=reference,
-            service="creation-sarl",
+            service="CREATION",
             tarif=tarif,
             contenu=b"%PDF recette",
-            modele="creation-sarl",
+            modele="CREATION",
             version_modele="2026.1",
             a_l_instant=instant,
         ).transmise(instant)
@@ -1187,20 +1219,44 @@ class TestLaNotificationQuiNArriveJamais:
                 if r.travail == "reconciliation-des-paiements"
             ]
 
-        # 4 · ⚠️ **L'espace s'ouvre, sans qu'aucune notification ne soit arrivée.**
+        # 4 · ⚠️ **LE DOSSIER EST PAYÉ, SANS QU'AUCUNE NOTIFICATION NE SOIT
+        # ARRIVÉE.** C'est tout l'objet du filet : l'argent est encaissé chez le
+        # prestataire, le rappel s'est perdu, et la réconciliation le rattrape.
+        #
+        # ⚠️ Ce cas vérifiait ici que le tenant existait. Depuis le 27 septembre,
+        # une prestation vendue à une adhérente n'en ouvre aucun — son compte
+        # vit chez le cabinet, là où vit son dossier.
         assert (
             client.get(f"/acquisition/dossiers/{reference}").json()["etat"] == "PAYEE"
         )
         with moteur_test.connect() as connexion:
-            tenant = connexion.execute(
-                text("SELECT slug FROM tenant WHERE slug = :s"), {"s": self.SLUG}
-            ).one()
-        assert tenant.slug == self.SLUG
+            combien = connexion.execute(text("SELECT count(*) FROM tenant")).scalar_one()
+        assert combien == 0, "une prestation vendue n'ouvre aucun locataire"
 
         # 5 · Le compte rendu du travail dit ce que le filet a repêché : c'est le
         # seul nombre qui apprend si l'adresse de rappel fonctionne encore, et il
         # doit être lisible sans ouvrir la base.
         assert any("1 repêché" in rendu for rendu in comptes_rendus), comptes_rendus
+
+        # ── 6 · ⚠️ LE DOSSIER PAYÉ RESTE RETROUVABLE ────────────────────────
+        #
+        # Il sort de la file « en cours », et c'est juste : il n'attend plus rien
+        # de personne, et l'y laisser le ferait traiter deux fois.
+        #
+        # Mais `?etat=PAYEE` passait par le même chemin et rendait toujours une
+        # liste **vide** : un filtre qui ne peut jamais rien rendre ne dit pas
+        # « il n'y en a pas », il ment, et l'on cherche le défaut ailleurs. C'est
+        # ce qui s'est passé le 27 septembre, en cherchant pourquoi aucune
+        # création payée n'apparaissait nulle part — alors que c'est justement là
+        # qu'on vérifie qu'un dossier de formalité s'est bien ouvert.
+        en_cours = client.get("/acquisition/dossiers").json()
+        assert reference not in [d["reference"] for d in en_cours], (
+            "un dossier payé n'a plus rien à faire dans la file en cours"
+        )
+        payes = client.get("/acquisition/dossiers", params={"etat": "PAYEE"})
+        assert payes.status_code == 200, payes.text
+        assert reference in [d["reference"] for d in payes.json()]
+        assert all(d["etat"] == "PAYEE" for d in payes.json())
 
     def test_sans_le_filet_le_client_attendrait_indefiniment(
         self, plateforme, moteur_test

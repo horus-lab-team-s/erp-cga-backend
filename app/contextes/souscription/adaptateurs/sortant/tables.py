@@ -38,6 +38,7 @@ __all__ = [
     "TableQualification",
     "TableRappelAPasser",
     "TableSuiviDeRelance",
+    "TableTarifFixe",
     "TableDossierCommercial",
     "TablePaiement",
     "TableSouscription",
@@ -351,3 +352,28 @@ class TableQualification(Cloisonne, Document, Base):
     dossier: Mapped[str] = mapped_column(String(64), primary_key=True)
     service: Mapped[str] = mapped_column(String(64), nullable=False)
     version_questionnaire: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class TableTarifFixe(Cloisonne, Document, Base):
+    """Une décision de prix du gérant.
+
+    ⚠️ Une ligne par DÉCISION, jamais mise à jour : corriger un prix, c'est en
+    fixer un nouveau à partir d'une date. L'historique dit qui a décidé quoi, et
+    c'est lui qu'on rejoue sur le catalogue.
+
+    Clé simple, comme le devis : l'identifiant est tiré au sort (`TF-` suivi
+    d'un UUID), donc unique par construction d'un cabinet à l'autre. La clé
+    composite de la proforma ne se justifie que pour un numéro lisible et
+    séquentiel.
+    """
+
+    __tablename__ = "tarif_fixe"
+    __table_args__ = (
+        Index("ix_tarif_fixe_service", "locataire", "service"),
+    )
+
+    identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
+    service: Mapped[str] = mapped_column(String(64), nullable=False)
+    a_partir_du: Mapped[date] = mapped_column(Date, nullable=False)
+    fixe_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+

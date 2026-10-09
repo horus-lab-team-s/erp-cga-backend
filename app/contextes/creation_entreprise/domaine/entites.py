@@ -158,6 +158,24 @@ class Fondateur(BaseModel):
     prenom: str
     courriel: str
     telephone: str
+
+    @property
+    def appellation(self) -> str:
+        """Ce qu'on écrit après « Bonjour ». Jamais vide.
+
+        ⚠️ **LA MÊME RÈGLE QUE `Compte.appellation`, ET POUR LA MÊME RAISON.**
+
+        Une demande de contact ne porte qu'UN champ de nom : le prénom d'un
+        fondateur est donc souvent vide, et `f"Bonjour {prenom}"` rend
+        « Bonjour ». C'est exactement ce qui est parti vers une adhérente le
+        28 septembre, suivi d'une demande d'argent.
+
+        ⚠️ **NE COMPOSEZ PAS LA SALUTATION À LA MAIN.** `nom` seul rend le bon
+        résultat aujourd'hui, et le jour où le formulaire portera deux champs il
+        rendra le mauvais. Un cas de `test_courriel.py` lit le code source et
+        refuse toute autre façon de remplir `prenom`.
+        """
+        return self.prenom or self.nom
     #: Nécessaire à la constitution — le CFCE exige une pièce d'identité valide.
     piece_identite: str | None = None
 
@@ -355,9 +373,98 @@ class DossierCreation(BaseModel):
 
     @property
     def immobile_depuis(self) -> date:
-        """La date du dernier mouvement — l'ouverture si rien n'a bougé.
+        """La date du dernier mouvement, l'ouverture si rien n'a bougé.
 
         C'est l'indicateur qui fait remonter un dossier dans le pipeline. Un
         dossier de création qui dort est un client qui part.
+
+        ─────────────────────────────────────────────────────────────────────
+        ⚠️ **UNE PIÈCE QUI ARRIVE EST UN MOUVEMENT**, et elle ne comptait pas.
+
+        Seuls les jalons étaient lus, c'est-à-dire les franchissements d'étape,
+        c'est-à-dire les gestes du cabinet. Depuis que la cliente dépose
+        elle-même par son lien scellé, elle peut envoyer cinq documents un
+        mardi sans qu'aucun jalon ne bouge : le pipeline continuait d'annoncer
+        « immobile depuis trois semaines », et le chargé de formalités relançait
+        en premier celle qui venait de répondre.
+
+        **Un indicateur qui ment est pire qu'un indicateur absent** : celui-ci
+        décide chaque matin de l'ordre des relances.
+
+        ⚠️ On lit les dates de pièces plutôt que de poser un jalon : un `Jalon`
+        est le franchissement d'une ÉTAPE, et en inventer un pour une pièce
+        fausserait l'histoire du dossier, que le panneau des jalons affiche tel
+        quel.
+
+        ⚠️ La colonne dénormalisée suit toute seule : elle est recalculée de
+        cette propriété à chaque écriture, jamais saisie (voir `tables.py`).
+        ─────────────────────────────────────────────────────────────────────
         """
+        mouvements = [self.dernier_geste_du_cabinet]
+        if self.derniere_piece_recue is not None:
+            mouvements.append(self.derniere_piece_recue)
+        return max(mouvements)
+
+    @property
+    def dernier_geste_du_cabinet(self) -> date:
+        """Le dernier franchissement d'étape, l'ouverture si rien n'a bougé."""
         return max((j.survenu_le for j in self.jalons), default=self.ouvert_le)
+
+    @property
+    def derniere_piece_recue(self) -> date | None:
+        """Le dernier dépôt de la cliente, ou `None` si elle n'a rien envoyé."""
+        recues = [p.fournie_le for p in self.pieces if p.fournie_le is not None]
+        return max(recues, default=None)
+
+    @property
+    def attend_le_cabinet(self) -> bool:
+        """La cliente a bougé la dernière, et personne ne lui a répondu.
+
+        ─────────────────────────────────────────────────────────────────────
+        ⚠️ **CETTE PROPRIÉTÉ RÉPARE UNE CONSÉQUENCE DE `immobile_depuis`.**
+
+        Compter le dépôt d'une cliente comme un mouvement a rendu l'indicateur
+        honnête et la priorité fausse. Le pipeline se lit du mouvement le plus
+        ancien au plus récent ; un dossier où elle vient d'envoyer cinq
+        documents affiche « sans mouvement depuis 1 j » et **tombe en bas de la
+        liste**, sous ceux où il ne se passe rien.
+
+        Mesuré : trois dossiers, celui où elle a déposé hier après trois
+        semaines de silence du cabinet passe DERNIER, derrière celui où
+        personne n'a rien fait.
+
+        Avant la correction il restait en tête, mais pour une mauvaise raison
+        et sous une étiquette qui mentait. Les deux comportements étaient
+        fautifs, différemment.
+
+        ⚠️ **CE QUI MANQUAIT EST LA QUESTION « QUI A BOUGÉ EN DERNIER ».** Un
+        dossier où personne n'agit et un dossier où la cliente attend une
+        réponse ne demandent pas le même geste, et le second est le plus
+        pressant : c'est exactement le client qui part, que cet indicateur
+        existe pour retenir.
+
+        Rien à stocker : les deux dates sont déjà là.
+
+        ⚠️ **COMPARAISON LARGE, ET NON STRICTE. C'EST LE POINT DÉLICAT.**
+
+        Les deux repères sont des DATES, sans heure. Une comparaison stricte
+        manquerait le cas le plus courant : dossier ouvert le matin, pièces
+        envoyées l'après-midi, puis trois semaines de silence. Les deux dates
+        sont égales, et la cliente n'est **jamais** signalée. C'est exactement
+        la situation que cette propriété existe pour attraper, et le premier
+        jet la laissait passer.
+
+        Le prix de la comparaison large : un dossier où le cabinet franchit une
+        étape le jour même du dépôt reste marqué « en attente » tant qu'aucune
+        étape n'est franchie un jour ultérieur. Ce n'est pas un mauvais signal :
+        un dossier qui n'avance plus après ce jour-là mérite qu'on le regarde.
+
+        ⚠️ Passer à l'horodatage réglerait l'ambiguïté et demanderait de changer
+        le type de `fournie_le`, donc les données déjà écrites. On ne le fait
+        pas pour une précision dont personne n'a exprimé le besoin ; si un jour
+        elle manque, c'est ici qu'il faudra revenir.
+        ─────────────────────────────────────────────────────────────────────
+        """
+        if self.clos or self.derniere_piece_recue is None:
+            return False
+        return self.derniere_piece_recue >= self.dernier_geste_du_cabinet

@@ -119,6 +119,8 @@ FENETRE_DE_SERVICE = timedelta(hours=24)
 
 #: Les emplacements d'un modèle, au format de la plateforme : `{{1}}`, `{{2}}`…
 _PARAMETRE = re.compile(r"\{\{(\d+)\}\}")
+#: Deux emplacements accolés, que la plateforme refuse : « {{1}}{{2}} ».
+_DEUX_EMPLACEMENTS_COLLES = re.compile(r"\}\}\s*\{\{")
 
 
 class MotifRefus(StrEnum):
@@ -281,6 +283,48 @@ class ModeleDeMessage(BaseModel):
                 f"modèle {self.nom} déclaré APPROUVE sans date d'approbation. "
                 "La date est ce qui permet de savoir si le texte envoyé est bien "
                 "celui qui a été soumis, ou s'il a été retouché depuis."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _le_corps_tient_le_format_de_la_plateforme(self) -> ModeleDeMessage:
+        """Les refus de soumission qu'on peut voir d'ici, et qu'on voyait trop tard.
+
+        ─────────────────────────────────────────────────────────────────────────
+        ⚠️ UN MODÈLE MAL FORMÉ NE SE DÉCOUVRE QU'À LA SOUMISSION.
+
+        Le README du dossier le dit déjà pour l'approbation : « un modèle non
+        approuvé fonctionne dans le bac à sable et échoue en production ». Un
+        modèle mal **formé**, lui, ne franchit même pas la soumission — et le
+        refus arrive des semaines après l'écriture, dans le vocabulaire de la
+        plateforme, à quelqu'un qui n'a pas écrit le texte.
+
+        Constaté le 29 septembre en relisant les sept modèles un à un :
+        `cga_relance_proforma` finissait sur « {{4}} » seul.
+
+        ⚠️ **ON NE VÉRIFIE QUE CE DONT ON EST SÛR.** Trois règles de forme, que la
+        plateforme applique sans ambiguïté. Les règles de catégorie, de longueur
+        et de bouton ne sont pas ici : les deviner ferait refuser des modèles
+        valides, ce qui coûte plus cher que de les laisser passer.
+        ─────────────────────────────────────────────────────────────────────────
+        """
+        corps = self.corps.strip()
+        if _PARAMETRE.match(corps):
+            raise ValueError(
+                f"modèle {self.nom} : le corps COMMENCE par un emplacement. La "
+                "plateforme le refuse à la soumission — et le client lirait un "
+                "message qui s'ouvre sur une valeur, sans phrase."
+            )
+        if corps and _PARAMETRE.search(corps) and corps.endswith("}}"):
+            raise ValueError(
+                f"modèle {self.nom} : le corps SE TERMINE par un emplacement. La "
+                "plateforme le refuse à la soumission. Faites suivre l'emplacement "
+                "d'une phrase, comme cga_envoi_proforma le fait pour son lien."
+            )
+        if _DEUX_EMPLACEMENTS_COLLES.search(corps):
+            raise ValueError(
+                f"modèle {self.nom} : deux emplacements se touchent. La plateforme "
+                "le refuse, et le client lirait deux valeurs accolées sans séparateur."
             )
         return self
 

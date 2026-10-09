@@ -74,10 +74,10 @@ def _tarif() -> TarifArrete:
     )
 
 
-def _proforma(numero="PRO-2026-0001", dossier="dos-1", transmise=True):
+def _proforma(numero="PRO-2026-0001", dossier="dos-1", transmise=True, service="CREATION"):
     p = emettre(
-        numero=numero, dossier=dossier, service="creation-sarl", tarif=_tarif(),
-        contenu=b"%PDF", modele="creation-sarl", version_modele="2026.1",
+        numero=numero, dossier=dossier, service=service, tarif=_tarif(),
+        contenu=b"%PDF", modele="CREATION", version_modele="2026.1",
         a_l_instant=T0,
     )
     return p.transmise(T0) if transmise else p
@@ -298,7 +298,7 @@ class TestPlanDuReferentiel:
 def _dossier(reference="dos-1"):
     demande = DemandeDeContact(
         identifiant="dc-1", deposee_le=T0, nom="Abena Ndzana",
-        telephone="699112233", service_souhaite="creation-sarl",
+        telephone="699112233", service_souhaite="CREATION",
         canal_prefere=Canal.APPEL,
         consentement=Consentement(accorde=False, recueilli_le=T0, version_du_texte="v1"),
     )
@@ -355,8 +355,105 @@ class TestEncaissement:
         charge = boite.a_publier()[0].charge
         assert set(charge) == {
             "tenant", "slug", "proforma", "version_proforma", "reference_externe",
+            # Pas 95 : la septième étape de l'ouverture crée le compte
+            # administrateur du client et lui envoie son lien. Sans son adresse,
+            # elle ne peut faire ni l'un ni l'autre — le tenant s'ouvrait et le
+            # client restait dehors. Le nom l'accompagne parce qu'un courriel qui
+            # commence par « Bonjour jp.nkoa » se lit comme une machine.
+            "courriel_titulaire", "nom_titulaire",
+            # ─────────────────────────────────────────────────────────────────
+            # ⚠️ AJOUTS DU 27 SEPTEMBRE, ET CHACUN A DÛ SE JUSTIFIER.
+            #
+            # L'encaissement ne déclenchait qu'une chose : l'ouverture d'un
+            # espace. Il en déclenche deux depuis qu'une CRÉATION payée ouvre
+            # aussi son dossier de formalité — le client a payé pour que sa
+            # société soit immatriculée, pas pour recevoir un accès.
+            #
+            # Le contexte qui ouvre ce dossier n'a pas le droit de lire la
+            # Souscription, et c'est voulu : le graphe l'interdit. L'événement
+            # est le mécanisme prévu pour franchir cette frontière, et il doit
+            # donc porter de quoi agir.
+            #
+            #   · `service` : sans lui, l'abonné ne sait pas s'il doit agir.
+            #   · `faits_fondateurs` : CINQ faits sur la douzaine recueillie —
+            #     dénomination, forme, capital, activité, siège. Les tranches de
+            #     chiffre d'affaires ou le nombre de salariés ont servi à
+            #     CHIFFRER : ils restent sur la proforma, qui les conserve.
+            #   · `telephone_titulaire` : il était écarté avec ce motif, « il ne
+            #     sert pas à créer un compte ». C'était juste. Le fondateur d'un
+            #     dossier de formalité porte un téléphone — c'est par là que le
+            #     greffe et le cabinet le joignent pendant l'immatriculation. Le
+            #     motif d'hier ne tient plus ; la règle, elle, n'a pas bougé.
+            # ─────────────────────────────────────────────────────────────────
+            "service", "telephone_titulaire",
+            # ⚠️ Ajouté le 27 septembre : toute vente n'ouvre pas un locataire.
+            # Dit explicitement plutôt que déduit d'un slug absent — un champ
+            # manquant est un défaut, pas une consigne.
+            "ouvre_un_locataire",
         }
-        assert "montant" not in charge
+        # Une CRÉATION se vend à une adhérente : elle n'ouvre aucun locataire.
+        assert charge["ouvre_un_locataire"] is False
+        # ⚠️ `faits_fondateurs` N'EST PAS LÀ, ET C'EST LA BONNE RÉPONSE.
+        #
+        # Cette proforma ne porte aucun fait fondateur — elle ne vend pas une
+        # création. La clé n'est donc pas posée : un événement ne transporte pas
+        # un dictionnaire vide pour la forme. Le cas d'à côté,
+        # `test_une_creation_emporte_ses_faits_fondateurs`, tient l'autre bord.
+        assert "faits_fondateurs" not in charge
+        # ⚠️ CE QUI RESTE INTERDIT, et c'est le sens de ce cas : ni le montant,
+        # ni le détail de la proforma. Un événement est recopié dans les
+        # journaux, les files et les sauvegardes ; ce qu'on y met y reste
+        # longtemps.
+        for absent in ("montant", "lignes", "debours"):
+            assert absent not in charge, f"« {absent} » n'a rien à faire dans l'événement"
+
+
+    def test_une_creation_emporte_ses_faits_fondateurs(self):
+        """L'autre bord : quand la proforma porte des faits, l'événement les porte.
+
+        ─────────────────────────────────────────────────────────────────────────
+        ⚠️ SANS EUX, LE DOSSIER DE FORMALITÉ S'OUVRIRAIT VIDE.
+
+        Le contexte qui ouvre ce dossier n'a pas le droit de lire la
+        Souscription : l'événement est son seul renseignement. Un client qui
+        vient de payer sa création et à qui l'on redemanderait le nom de sa
+        société aurait raison de trouver cela étrange.
+
+        ⚠️ Et **cinq faits seulement**. Recopier toute la qualification serait
+        plus simple, et ferait circuler le chiffre d'affaires prévisionnel du
+        client dans chaque journal et chaque sauvegarde.
+        ─────────────────────────────────────────────────────────────────────────
+        """
+        qualifiee = emettre(
+            numero="PRO-2026-0002", dossier="dos-1", service="CREATION",
+            tarif=_tarif(), contenu=b"%PDF", modele="CREATION",
+            version_modele="2026.1", a_l_instant=T0,
+            faits={
+                "denomination_souhaitee": "STATION BONABÉRI SARL",
+                "forme_juridique": "SARL",
+                "capital_social": "1000000",
+                "activite": "station-service",
+                "siege": "Bonabéri, Douala",
+                # Ceux-ci ont servi à CHIFFRER, et restent sur la proforma.
+                "chiffre_affaires_prevu": "DE_10M_A_50M",
+                "salaries_prevus": "3",
+            },
+        ).transmise(T0)
+        boite = BoiteDEnvoiMemoire()
+        self._encaisser(proforma=qualifiee, boite=boite)
+
+        charge = boite.a_publier()[0].charge
+        assert charge["service"] == "CREATION"
+        assert set(charge["faits_fondateurs"]) == {
+            "denomination_souhaitee", "forme_juridique",
+            "capital_social", "activite", "siege",
+        }
+        assert charge["faits_fondateurs"]["denomination_souhaitee"] == (
+            "STATION BONABÉRI SARL"
+        )
+        # ⚠️ Ce qui a servi au prix ne voyage pas.
+        assert "chiffre_affaires_prevu" not in charge["faits_fondateurs"]
+        assert "salaries_prevus" not in charge["faits_fondateurs"]
 
     def test_un_rejeu_ne_depose_rien_de_plus(self):
         """Le prestataire rejoue ses rappels, parfois plusieurs jours après."""
@@ -412,8 +509,12 @@ class TestParcoursComplet:
         )
 
         # 1 · Le client accepte, puis paie. Le rappel de l'opérateur arrive.
+        # ⚠️ `PLATEFORME` : la seule offre qui ouvre un locataire. Une prestation
+        # vendue à une adhérente n'en ouvre pas — voir
+        # `SERVICES_OUVRANT_UN_LOCATAIRE`. Ces deux cas éprouvent le mécanisme du
+        # locataire, pas la décision commerciale.
         resultat = encaisser_l_acceptation(
-            _dossier(), _proforma(),
+            _dossier(), _proforma(service="PLATEFORME"),
             boite=boite, slug="station-bonaberi", tenant="tnt-station",
             a_l_instant=T0 + timedelta(days=3), identifiant_evenement="ev-1",
             reference_externe="MTN-88213",
@@ -466,7 +567,7 @@ class TestParcoursComplet:
         )
 
         premier = encaisser_l_acceptation(
-            _dossier(), _proforma(), boite=boite, slug="station-bonaberi",
+            _dossier(), _proforma(service="PLATEFORME"), boite=boite, slug="station-bonaberi",
             tenant="tnt-station", a_l_instant=T0 + timedelta(days=3),
             identifiant_evenement="ev-1",
         )
@@ -474,7 +575,7 @@ class TestParcoursComplet:
 
         # Le prestataire renvoie sa notification, trois jours plus tard.
         rejeu = encaisser_l_acceptation(
-            premier.dossier, _proforma(), boite=boite, slug="station-bonaberi",
+            premier.dossier, _proforma(service="PLATEFORME"), boite=boite, slug="station-bonaberi",
             tenant="tnt-station", a_l_instant=T0 + timedelta(days=6),
             identifiant_evenement="ev-2",
         )
@@ -483,3 +584,83 @@ class TestParcoursComplet:
         assert rejeu.rejeu is True
         assert appels.count("stockage") == 1, "un second préfixe de stockage a été ouvert"
         assert executions.trouver(NOM_SAGA, "dos-1") is not None
+
+
+class TestUneVenteNOuvrePasToujoursUnLocataire:
+    """⚠️ LA DÉCISION DU 27 SEPTEMBRE, TENUE À L'ENDROIT OÙ ELLE SE PREND.
+
+    Toute proforma payée ouvrait un locataire — `tnt-{slug}` — quel que soit le
+    service vendu. Une entrepreneuse qui achetait la création de sa SARL
+    recevait donc **son propre espace de plateforme**, isolé du cabinet, pendant
+    que son entreprise entrait au portefeuille du cabinet. Deux locataires pour
+    une seule cliente, et un espace vide.
+
+    Une prestation se vend à une adhérente ; un locataire se vend à un autre
+    centre de gestion.
+    """
+
+    def test_une_prestation_vendue_n_ouvre_pas_de_locataire(self):
+        boite = BoiteDEnvoiMemoire()
+        encaisser_l_acceptation(
+            _dossier(), _proforma(service="CREATION"),
+            boite=boite, slug="couture-douala", tenant="tnt-couture",
+            a_l_instant=T0 + timedelta(days=3), identifiant_evenement="ev-1",
+            reference_externe="MTN-1",
+        )
+        assert boite.a_publier()[0].charge["ouvre_un_locataire"] is False
+
+    def test_la_plateforme_vendue_en_ouvre_un(self):
+        boite = BoiteDEnvoiMemoire()
+        encaisser_l_acceptation(
+            _dossier(), _proforma(service="PLATEFORME"),
+            boite=boite, slug="cabinet-voisin", tenant="tnt-voisin",
+            a_l_instant=T0 + timedelta(days=3), identifiant_evenement="ev-2",
+            reference_externe="MTN-2",
+        )
+        assert boite.a_publier()[0].charge["ouvre_un_locataire"] is True
+
+    def test_l_abonne_ne_touche_a_rien_quand_il_n_y_a_rien_a_ouvrir(self):
+        """⚠️ Il ne LÈVE pas non plus : « cette vente n'ouvre pas de locataire »
+        est une consigne, pas une charge incomplète."""
+        from app.contextes.tenants.application.ouverture_sur_paiement import (
+            ouvrir_sur_paiement,
+        )
+        from app.infrastructure.depots_orchestration import DepotExecutionsMemoire
+        from app.orchestration.boite_d_envoi import EvenementSortant
+
+        executions = DepotExecutionsMemoire()
+        resultat = ouvrir_sur_paiement(
+            EvenementSortant(
+                identifiant="ev-3", nom="PaiementEncaissé", cle="dos-1",
+                charge={"ouvre_un_locataire": False, "service": "CREATION"},
+            ),
+            provisionneur=object(),
+            executions=executions,
+            a_l_instant=T0,
+        )
+        assert resultat.sans_objet is True
+        assert resultat.a_progresse is False
+        assert resultat.tenant_utilisable is False
+        assert resultat.etapes_substituees == ()
+
+    def test_un_evenement_d_avant_la_distinction_ouvre_toujours_son_locataire(self):
+        """⚠️ ABSENT VAUT VRAI. Il en dort dans la boîte d'envoi, déposés avant
+        que cette clé n'existe : les ignorer laisserait un cabinet payé sans
+        espace, et personne ne saurait pourquoi."""
+        from app.contextes.tenants.application.ouverture_sur_paiement import (
+            ChargeIncomplete,
+            ouvrir_sur_paiement,
+        )
+        from app.infrastructure.depots_orchestration import DepotExecutionsMemoire
+        from app.orchestration.boite_d_envoi import EvenementSortant
+
+        with pytest.raises(ChargeIncomplete):
+            ouvrir_sur_paiement(
+                EvenementSortant(
+                    identifiant="ev-4", nom="PaiementEncaissé", cle="dos-1", charge={}
+                ),
+                provisionneur=object(),
+                executions=DepotExecutionsMemoire(),
+                a_l_instant=T0,
+            )
+

@@ -12,7 +12,9 @@ from app.contextes.souscription.adaptateurs.sortant.catalogue_modeles import (
 )
 from app.contextes.souscription.adaptateurs.sortant.catalogue_offre import (
     CATALOGUE,
+    CatalogueArrete,
     DepotServicesMemoire,
+    DepotTarifsFixesMemoire,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     LOCATAIRE_PAR_DEFAUT,
@@ -55,6 +57,7 @@ from app.contextes.souscription.adaptateurs.sortant.regles_affectation import (
     charger_la_grille_d_affectation,
 )
 from app.contextes.souscription.application.acquisition import (
+    NOM_DEMANDE_DEPOSEE,
     ResultatDepot,
     deposer_une_demande,
 )
@@ -194,6 +197,13 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     TransitionDossierRefusee,
     ouvrir_un_dossier,
 )
+from app.contextes.souscription.domaine.offre import (
+    FixationRefusee,
+    StatutTarif,
+    TarifFixe,
+    appliquer_les_fixations,
+    fixer,
+)
 from app.contextes.souscription.domaine.ports import (
     DepotDevis,
     DepotDossiersCommerciaux,
@@ -255,6 +265,13 @@ from app.contextes.souscription.domaine.tarification import (
 )
 
 __all__ = [
+    "CatalogueArrete",
+    "DepotTarifsFixesMemoire",
+    "FixationRefusee",
+    "StatutTarif",
+    "TarifFixe",
+    "appliquer_les_fixations",
+    "fixer",
     "Acceptation",
     "AppelJournalise",
     "AucunCanalJoignable",
@@ -365,6 +382,7 @@ __all__ = [
     "Reponse",
     "ReponseInvalide",
     "ResultatAffectation",
+    "NOM_DEMANDE_DEPOSEE",
     "ResultatDepot",
     "ResultatEchange",
     "ResultatEncaissement",

@@ -44,7 +44,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.contextes.comptabilite.domaine.cloture_mensuelle import (
     PeriodeVerrouillee,
@@ -189,6 +189,29 @@ class BrouillonEcriture(BaseModel):
     reference_externe: str | None = None
     lignes: list[LigneEcriture] = Field(min_length=2)
 
+    @field_validator("lignes", mode="before")
+    @classmethod
+    def _au_moins_deux_lignes(cls, valeur):
+        """⚠️ **LE REFUS SE DIT EN FRANÇAIS**, comme celui du déséquilibre.
+
+        `min_length=2` refusait bien, mais avec la phrase de pydantic : « List
+        should have at least 2 items after validation, not 1 », lue par un
+        comptable sur son écran de saisie. L'invariant voisin, lui, dit
+        « écriture AC/2 déséquilibrée : débit 100, crédit 90, écart 10 ».
+
+        ⚠️ `mode="before"` : il doit parler AVANT que `min_length` ne lève,
+        sinon pydantic gagne la course et rend sa phrase.
+
+        ⚠️ Le `min_length` reste : il documente la contrainte au schéma OpenAPI,
+        que la console lit pour composer ses formulaires.
+        """
+        if isinstance(valeur, (list, tuple)) and len(valeur) < 2:
+            raise ValueError(
+                "une écriture comptable porte au moins deux lignes, une au débit "
+                f"et une au crédit ; celle-ci n'en a que {len(valeur)}."
+            )
+        return valeur
+
 
 def verifier_l_environnement(
     brouillon: BrouillonEcriture,
@@ -299,6 +322,29 @@ class CorrectionDeBrouillon(BaseModel):
     piece_justificative: str | None = None
     reference_externe: str | None = None
     lignes: list[LigneEcriture] = Field(min_length=2)
+
+    @field_validator("lignes", mode="before")
+    @classmethod
+    def _au_moins_deux_lignes(cls, valeur):
+        """⚠️ **LE REFUS SE DIT EN FRANÇAIS**, comme celui du déséquilibre.
+
+        `min_length=2` refusait bien, mais avec la phrase de pydantic : « List
+        should have at least 2 items after validation, not 1 », lue par un
+        comptable sur son écran de saisie. L'invariant voisin, lui, dit
+        « écriture AC/2 déséquilibrée : débit 100, crédit 90, écart 10 ».
+
+        ⚠️ `mode="before"` : il doit parler AVANT que `min_length` ne lève,
+        sinon pydantic gagne la course et rend sa phrase.
+
+        ⚠️ Le `min_length` reste : il documente la contrainte au schéma OpenAPI,
+        que la console lit pour composer ses formulaires.
+        """
+        if isinstance(valeur, (list, tuple)) and len(valeur) < 2:
+            raise ValueError(
+                "une écriture comptable porte au moins deux lignes, une au débit "
+                f"et une au crédit ; celle-ci n'en a que {len(valeur)}."
+            )
+        return valeur
 
 
 def corriger_un_brouillon(

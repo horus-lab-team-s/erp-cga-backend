@@ -19,6 +19,7 @@ from enum import StrEnum
 
 from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, computed_field
+from starlette.concurrency import run_in_threadpool
 
 from app.contextes.comptabilite.adaptateurs.sortant.cloture_mensuelle_yaml import (
     charger_les_reglages_de_la_cloture_mensuelle,
@@ -471,8 +472,22 @@ def saisir_ecriture(
     format, et le comptable chercherait sa faute dans le mauvais champ.
     """
     exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
-    brouillon = BrouillonEcriture(**demande.model_dump())
     try:
+        # ⚠️ **LA CONSTRUCTION EST DANS LE `try`, ET ELLE N'Y ÉTAIT PAS.**
+        #
+        # `BrouillonEcriture` refuse une écriture à ligne unique par un
+        # `min_length=2`, qui lève à la construction. Celle-ci se faisait une
+        # ligne au-dessus du `try` : la `ValidationError` s'échappait et le
+        # comptable recevait **« Internal Server Error »** sur une écriture
+        # simplement incomplète.
+        #
+        # Le déséquilibre, lui, est vérifié plus tard par l'entité et tombait
+        # bien dans la reprise : deux invariants voisins, deux comportements.
+        # La reprise ci-dessous nomme pourtant les trois — « déséquilibre,
+        # ligne unique, montant nul » — donc l'intention était là.
+        #
+        # Trouvé en éprouvant les chemins d'erreur sur la pile, pas en relisant.
+        brouillon = BrouillonEcriture(**demande.model_dump())
         return enregistrer_une_ecriture(
             brouillon,
             journaux=_journaux.charger(),
@@ -1082,6 +1097,35 @@ async def reprendre(
             ),
         )
 
+    # ⚠️ TOUT CE QUI SUIT EST BLOQUANT, ET CETTE ROUTE EST ASYNCHRONE.
+    #
+    # Elle l'est pour une seule raison : `await fichier.read()`. Le reste — relire
+    # huit mégaoctets d'écritures, les confronter au plan, les écrire — ne rend
+    # jamais la main. Tenu sur la boucle d'événements, il figeait le serveur entier
+    # pendant toute la reprise. Voir `tests/test_boucle_non_bloquee.py`.
+    return await run_in_threadpool(
+        _reprendre_le_lot,
+        octets,
+        choisi,
+        entreprise=entreprise,
+        exercice=exercice,
+        journal=journal,
+        appliquer=appliquer,
+        par=acces.compte,
+    )
+
+
+def _reprendre_le_lot(
+    octets: bytes,
+    choisi,  # noqa: ANN001 — le profil du référentiel, typé par `_profils()`
+    *,
+    entreprise: str,
+    exercice: str,
+    journal: str | None,
+    appliquer: bool,
+    par: str,
+) -> RapportDeReprise:
+    """La reprise elle-même. **Bloquante, donc jamais sur la boucle.**"""
     plan = _plan.charger()
     try:
         lot = lire(
@@ -1105,6 +1149,6 @@ async def reprendre(
         exercice=_exercice_du_dossier(entreprise, exercice),
         periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
         depot=depot(entreprise),
-        par=acces.compte,
+        par=par,
         appliquer=appliquer,
     )

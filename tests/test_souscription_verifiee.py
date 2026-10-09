@@ -36,6 +36,7 @@ from app.contextes.souscription.api import VerificationDIdentite, activer_souscr
 from app.contextes.transverse.api import MOT_DE_PASSE_DEMO, NIU_DEMO, atelier, reinitialiser_atelier
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
+from tests.gerant_d_essai import fixer_les_prix_du_comptoir
 
 INSTANT = datetime(2026, 9, 14, 10, 0)
 #: SARL BATIMENT PLUS, un vrai dossier des données de démonstration.
@@ -55,6 +56,7 @@ def client(monkeypatch) -> Iterator[TestClient]:
     configuration.cache_clear()
     reinitialiser_atelier()
     reinitialiser_comptoir()
+    fixer_les_prix_du_comptoir()
     with horloge_figee(INSTANT):
         yield TestClient(creer_application())
     configuration.cache_clear()

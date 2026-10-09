@@ -85,7 +85,7 @@ def _interlocuteur(niu: str, jour: date) -> Interlocuteur | None:
                 role=h.role.value,
                 nommee_sur_le_dossier=h.portee is not None,
                 debut=h.debut,
-                nom=f"{compte.prenom} {compte.nom}",
+                nom=compte.nom_affiche,
                 courriel=compte.courriel,
                 telephone=compte.telephone,
             )

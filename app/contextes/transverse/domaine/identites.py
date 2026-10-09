@@ -116,7 +116,26 @@ class Compte(BaseModel):
 
     courriel: str = Field(min_length=3)
     nom: str = Field(min_length=1)
-    prenom: str = Field(min_length=1)
+    #: ⚠️ **PEUT ÊTRE VIDE, ET C'EST UNE CORRECTION DU 28 SEPTEMBRE.**
+    #
+    # Il exigeait un caractère. Or le produit ne connaît pas toujours de prénom :
+    # le formulaire public de la vitrine ne porte qu'UN champ de nom, et la
+    # demande de contact le conserve entier. Le dossier de formalité fait de
+    # même — `Fondateur.prenom` tolère le vide depuis toujours.
+    #
+    # Conséquence mesurée : l'ouverture de l'accès d'une fondatrice tombait en
+    # quarantaine après dix tentatives, sur « String should have at least 1
+    # character ». Sa société était immatriculée, au portefeuille, et elle
+    # n'avait aucun chemin vers son espace.
+    #
+    # Les deux remèdes possibles étaient pires : inventer un prénom en coupant
+    # le nom au premier espace — et l'étiquette du formulaire dit « Nom et
+    # prénom », dans cet ordre —, ou recopier le nom dans ce champ, c'est-à-dire
+    # ranger un faux en base. Le produit préfère ne pas savoir.
+    #
+    # ⚠️ Ce qui AFFICHE ce champ doit donc composer proprement : voir
+    # `nom_affiche`, et non une f-string qui laisserait une espace en tête.
+    prenom: str = ""
 
     #: Le locataire au sens multi-tenant : le cabinet. Le CGA est le tenant, ses
     #: adhérents sont des sous-entités — voir 05-securite-multitenant.md § 1.
@@ -124,6 +143,47 @@ class Compte(BaseModel):
 
     #: Opaque au domaine. `None` = compte jamais activé, voir l'en-tête.
     #:
+    @property
+    def nom_affiche(self) -> str:
+        """Le nom à montrer, sans espace parasite quand le prénom manque.
+
+        ⚠️ Une f-string `f"{prenom} {nom}"` rend «  MBIDA » pour un compte sans
+        prénom : une espace en tête qui se voit dans une liste triée, dans un
+        courriel, et dans un export. Une seule façon de composer, et elle est
+        ici.
+        """
+        return f"{self.prenom} {self.nom}".strip()
+
+    @property
+    def appellation(self) -> str:
+        """Ce qu'on écrit après « Bonjour ». Jamais vide.
+
+        ─────────────────────────────────────────────────────────────────────
+        ⚠️ POURQUOI CETTE PROPRIÉTÉ EXISTE, ET CE QU'ELLE A COÛTÉ
+
+        `prenom` a été relâché le 28 septembre pour laisser entrer une
+        fondatrice dont le formulaire public ne portait qu'un champ de nom.
+        C'était juste. Ce qui ne l'était pas : douze messages composaient leur
+        salutation sur `compte.prenom` brut, et deux seulement se rabattaient
+        sur le nom.
+
+        Le soir même, un rappel d'échéance réel est parti d'une pile de
+        démonstration. Il s'ouvrait sur :
+
+            Bonjour
+
+        Sans nom, avec une espace en trop. Un cabinet ne s'adresse pas ainsi à
+        quelqu'un qui lui confie sa comptabilité, et le message qui suivait
+        réclamait de l'argent.
+
+        ⚠️ **NE COMPOSEZ PAS LA SALUTATION À LA MAIN.** `compte.prenom or
+        compte.nom` rend le bon résultat, et c'est exactement ce que les douze
+        appelants n'ont pas écrit. Une propriété se trouve à l'autocomplétion,
+        une convention se perd. Le treizième courriel passera par ici.
+        ─────────────────────────────────────────────────────────────────────
+        """
+        return self.prenom or self.nom
+
     #: ⚠️ `exclude=True` : **jamais sérialisée**. Le défaut a existé — la route
     #: publique de définition du mot de passe rendait le compte, empreinte
     #: comprise, à un appelant non authentifié. Une empreinte Argon2 livrée est

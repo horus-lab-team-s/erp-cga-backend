@@ -66,7 +66,7 @@ def _demande(rang: int = 1) -> DemandeDeContact:
         deposee_le=T0,
         nom="Abena Ndzana",
         telephone=f"6991122{rang:02d}",
-        service_souhaite="creation-sarl",
+        service_souhaite="CREATION",
         canal_prefere=Canal.APPEL,
         consentement=Consentement(
             accorde=False, recueilli_le=T0, version_du_texte="v1"
@@ -85,7 +85,7 @@ def _equipe(porteur: str | None, *noms: str) -> list[Candidature]:
     return [
         Candidature(
             responsable=n,
-            service="creation-sarl",
+            service="CREATION",
             competences=("CHARGE_FORMALITES",),
             competence_requise="CHARGE_FORMALITES",
             dossiers_ouverts=1 if n == porteur else 0,
@@ -385,7 +385,7 @@ class TestPlusieursDossiersDansUnMemePassage:
             return [
                 Candidature(
                     responsable=n,
-                    service="creation-sarl",
+                    service="CREATION",
                     competences=("CHARGE_FORMALITES",),
                     competence_requise="CHARGE_FORMALITES",
                     dossiers_ouverts=charge.get(n, 0),

@@ -149,6 +149,7 @@ demarrer_api() {
   ( cd "$BACK" && CGA_PERSISTANCE=postgresql CGA_URL_BASE_DE_DONNEES="$URL" \
       CGA_MODE_DEMONSTRATION=true \
       CGA_ADRESSE_PUBLIQUE_SITE="http://localhost:$PORT_FRONT" \
+      CGA_ADRESSE_PUBLIQUE_VITRINE="http://localhost:$PORT_VITRINE" \
       CGA_ORIGINES_CORS="[\"http://localhost:$PORT_FRONT\",\"http://localhost:$PORT_VITRINE\"]" \
       setsid --fork python3 -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT_API" \
       > "$JOURNAUX/api.log" 2>&1 < /dev/null )

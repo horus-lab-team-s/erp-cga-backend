@@ -308,6 +308,10 @@ def generer_echeancier(
                     echeance=calculer_echeance(
                         type_obligation,
                         fin_de_periode=fin,
+                        # ⚠️ Le DÉBUT compte aussi : une obligation annuelle
+                        # civile ne peut pas être due avant que sa période ne
+                        # commence. Voir `calculer_echeance`.
+                        debut_de_periode=debut,
                         centre=entreprise.rattachement_au(fin),
                         cloture_exercice=exercice.cloture,
                     ),

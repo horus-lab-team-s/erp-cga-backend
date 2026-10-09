@@ -16,7 +16,7 @@ CE QUE CE FICHIER GARDE
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -476,22 +476,36 @@ class TestUneVersionLivreeAValider:
         )
 
     def test_la_direction_propose_et_arrete_seule_une_politique_du_cabinet(self):
+        """⚠️ LA DATE D'EFFET SE CALCULE, ELLE NE S'ÉCRIT PAS EN DUR.
+
+        Ce cas portait `2026-10-01`, qui était dans l'avenir le jour où il a été
+        écrit. Le 6 octobre, il a rougi : le produit refuse — à juste titre — une
+        version qui prendrait effet dans le passé, parce que les calculs déjà
+        rendus sur cette période changeraient sans que personne ne les relise.
+
+        Un cas qui dépend du jour où on le lance ne protège rien : il passe
+        pendant des semaines, puis il échoue un matin sans qu'aucun code n'ait
+        bougé, et on cherche la régression ailleurs. La date est donc prise
+        **relativement à aujourd'hui**, ce qui est aussi ce que fait la direction
+        quand elle arrête une politique.
+        """
         direction = _client(DIRECTION)
+        demain = (date.today() + timedelta(days=1)).isoformat()
         proposee = _proposer(
             direction,
             code="SEUIL_RISQUE_ELEVE",
             valeur=70,
-            applicable_du="2026-10-01",
+            applicable_du=demain,
             fondement={
                 "texte": "Décision du comité de direction",
-                "source": "Procès-verbal du 12/09/2026",
+                "source": "Procès-verbal du comité",
             },
         )
         assert proposee.status_code == 201, proposee.text
         assert _trancher(direction, proposee.json()["identifiant"]).json()["statut"] == "APPLIQUEE"
         assert (
             direction.get(
-                "/referentiel/parametres/SEUIL_RISQUE_ELEVE", params={"a_la_date": "2026-10-01"}
+                "/referentiel/parametres/SEUIL_RISQUE_ELEVE", params={"a_la_date": demain}
             ).json()["valeur"]
             == 70
         )

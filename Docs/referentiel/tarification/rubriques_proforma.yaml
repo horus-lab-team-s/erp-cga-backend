@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LA COMPOSITION DES PROFORMAS DU CENTRE
+#
+# Transcription fidèle des deux documents que le cabinet emploie réellement :
+#
+#   Docs/PROFORMA SARL SOUS SEING PRIVEE.pdf              (avec suivi, 505 000)
+#   Docs/PROFORMA SARL SOUS SEING PRIVEE SANS SUIVI 1.pdf (sans suivi, 300 000)
+#
+# ⚠️ RIEN N'EST INVENTÉ ICI. Chaque ligne, chaque montant et chaque intitulé de
+# rubrique vient de l'un des deux documents. Les sous-totaux n'y sont pas
+# recopiés : ils se calculent, et les recopier créerait une seconde vérité qui
+# finirait par diverger de la première.
+#
+# ⚠️ CE FICHIER PORTE DES PRIX, DONC DES DÉCISIONS.
+#
+# Le barème d'honoraires du centre n'a jamais été transmis, et `baremes.yaml` le
+# dit de ses propres valeurs. Ceux-ci sont différents : ils figurent sur des
+# documents que le cabinet envoie à ses clients. Ils sont donc marqués
+# `TRANSCRIT`, un état qui dit exactement cela : recopiés d'un document réel, pas
+# encore confirmés dans le système par la direction.
+#
+# POURQUOI DEUX VARIANTES ET NON UNE RÈGLE
+#
+# La différence entre les deux documents n'est pas additive : prendre le suivi
+# ajoute deux rubriques ET fait disparaître les frais de procédure. Écrire cette
+# règle ici supposerait qu'elle vaut pour toutes les formes juridiques à venir,
+# ce que personne n'a dit. Deux compositions nommées se vérifient d'un coup d'œil
+# contre les deux PDF ; une règle se croit sur parole.
+# ─────────────────────────────────────────────────────────────────────────────
+
+variantes:
+  - code: SARL_SOUS_SEING_AVEC_SUIVI
+    service: CREATION
+    forme_juridique: SARL
+    libelle: >-
+      Proforma de formalisation d'entreprise, de suivi fiscal / comptable / juridique (12 mois), adhésion et élaboration de la DSF, suivi contentieux fiscal et social
+    titre: PROFORMA DE FORMALISATION POUR UNE SARL
+    statut: TRANSCRIT
+    source: Docs/PROFORMA SARL SOUS SEING PRIVEE.pdf
+    applicable_du: 2026-01-01
+    rubriques:
+      - numero: I
+        intitule: PROCEDURE AU CFCE
+        lignes:
+          - libelle: Timbres Statuts (7 pages X 1500 FCFA X 6 exemplaires)
+            montant: 63000
+          - libelle: Caisse CFCE
+            montant: 41500
+          - libelle: Publication journal officiel
+            montant: 13500
+          - libelle: Frais d'ouverture et traitement dossier
+            montant: 30000
+          - libelle: Frais d'authentification
+            montant: 25000
+          - libelle: Chemises et impression
+            montant: 4000
+      - numero: II
+        intitule: PROCEDURE IMPOTS
+        lignes:
+          - libelle: Attestation d'immatriculation
+            montant: 3000
+          - libelle: Attestation de conformité fiscale
+            montant: 25000
+          - libelle: Insertion au Fichier National
+            montant: 25000
+      - numero: III
+        intitule: PROCEDURE CNPS
+        lignes:
+          - libelle: Obtention numéro CNPS de l'entreprise et d'un employé au moins
+            montant: 25000
+      - numero: IV
+        intitule: SUIVI ENTREPRISE SUR 12 MOIS (suivi fiscal, comptable, juridique)
+        lignes:
+          - libelle: Coût, 12 500 FCFA X 12 mois
+            montant: 150000
+      - numero: V
+        intitule: CONFECTION DECLARATION STATISTIQUE ET FISCALE (dsf)
+        lignes:
+          - libelle: Coût
+            montant: 100000
+
+  - code: SARL_SOUS_SEING_SANS_SUIVI
+    service: CREATION
+    forme_juridique: SARL
+    libelle: >-
+      Société à responsabilité limitée sous seing privé à capital compris entre 100 000 et 999 999 FCFA
+    titre: PROFORMA DE FORMALISATION POUR UNE SARL
+    statut: TRANSCRIT
+    source: Docs/PROFORMA SARL SOUS SEING PRIVEE SANS SUIVI 1.pdf
+    applicable_du: 2026-01-01
+    rubriques:
+      - numero: I
+        intitule: PROCEDURE AU CFCE
+        lignes:
+          - libelle: Timbres Statuts (7 pages X 1500 FCFA X 6 exemplaires)
+            montant: 63000
+          - libelle: Caisse CFCE
+            montant: 41500
+          - libelle: Publication journal officiel
+            montant: 13500
+          - libelle: Frais d'ouverture et traitement dossier
+            montant: 30000
+          - libelle: Frais d'authentification
+            montant: 25000
+          - libelle: Chemises et impression
+            montant: 4000
+      - numero: II
+        intitule: PROCEDURE IMPOTS
+        lignes:
+          - libelle: Attestation d'immatriculation
+            montant: 3000
+          - libelle: Attestation de conformité fiscale
+            montant: 25000
+          - libelle: Insertion au Fichier National
+            montant: 25000
+      - numero: III
+        intitule: PROCEDURE CNPS
+        lignes:
+          - libelle: Obtention numéro CNPS de l'entreprise et d'un employé au moins
+            montant: 25000
+      - numero: IV
+        intitule: FRAIS DE PROCEDURE
+        lignes:
+          - libelle: Coût
+            montant: 45000

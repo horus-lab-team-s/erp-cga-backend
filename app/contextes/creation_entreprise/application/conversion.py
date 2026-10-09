@@ -145,6 +145,27 @@ def convertir(
 
     entreprise = Entreprise(
         niu=niu,
+        # ⚠️ **LE RCCM ET LE CAPITAL ÉTAIENT JETÉS.**
+        #
+        # Cette fonction exige le RCCM pour convertir — « sans RCCM il n'y a pas
+        # de personne morale » — et n'en gardait que la DATE, pour situer la
+        # naissance. Le numéro lui-même restait au dossier de formalité, que
+        # seul le chargé de formalités ouvre.
+        #
+        # Conséquence, mesurée sur la pile : `GET /portefeuille/anomalies`
+        # signalait « rccm absent » sur une société dont nous détenions le
+        # numéro. Le comptable qui prépare une liasse, la banque qui le demande,
+        # l'attestation à produire : tous repassaient par le dossier de création
+        # d'une société déjà née, ou par un appel.
+        #
+        # Le capital subissait le même sort, alors qu'il est saisi à la
+        # qualification et qu'il figure aux statuts.
+        #
+        # ⚠️ Ils ne sont pas recopiés « au cas où » : ce sont les deux seuls
+        # champs que le dossier détient et que l'entreprise déclare. Tout le
+        # reste du dossier de formalité reste au dossier de formalité.
+        rccm=immatriculation.rccm,
+        capital=dossier.capital,
         denomination=dossier.denomination_souhaitee,
         forme_juridique=dossier.forme_juridique,
         date_creation=naissance,

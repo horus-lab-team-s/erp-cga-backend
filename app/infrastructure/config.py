@@ -74,6 +74,31 @@ class Configuration(BaseSettings):
     #: pas à un point d'entrée d'API.
     adresse_publique_site: str = "http://localhost:3000"
 
+    @property
+    def temoin_securise(self) -> bool:
+        """Le témoin de session ne doit-il circuler qu'en HTTPS ?
+
+        ⚠️ **DÉDUIT DE L'ADRESSE, JAMAIS ÉCRIT À LA MAIN.** Le drapeau `secure`
+        du témoin était codé `False`, avec un commentaire disant de le passer à
+        `True` en production. Personne ne le passe : un commentaire n'est pas un
+        mécanisme, et le jour de la mise en ligne le témoin de session serait
+        parti en clair sur le premier réseau partagé venu.
+
+        Il suit donc l'adresse publique de l'API : en développement elle est en
+        `http`, le témoin passe en clair et le navigateur l'accepte ; en
+        production elle est en `https` — la configuration le refuse autrement —
+        et le témoin devient chiffré sans que personne n'y pense.
+        """
+        return self.adresse_publique.startswith("https://")
+
+    #: L'adresse publique de la **vitrine**, distincte de celle de la console.
+    #:
+    #: ⚠️ C'est elle qui porte le lien d'une proforma : la page où le client lit et
+    #: accepte sa proposition vit sur la vitrine (`/proforma/{numero}`), parce que
+    #: le client n'a pas de compte. La console, elle, porte l'activation. Confondre
+    #: les deux enverrait au client un lien vers une page qui n'existe pas.
+    adresse_publique_vitrine: str = "http://localhost:3001"
+
     #: Où vivent les données. `memoire` amorce le jeu de démonstration et perd
     #: tout au redémarrage ; `postgresql` persiste.
     #:
@@ -235,13 +260,24 @@ class Configuration(BaseSettings):
     #:
     #: Une route synchrone de FastAPI s'exécute dans un fil du bac de threads,
     #: quarante par défaut : quarante requêtes peuvent donc demander une
-    #: connexion en même temps, par processus. Trente couvre largement le trafic
-    #: réel d'un cabinet tout en laissant de la marge.
+    #: connexion en même temps, par processus.
     #:
-    #: Et il faut compter au-dessus : `max_connections` de PostgreSQL vaut cent
-    #: par défaut, et **chaque processus** d'application tient son propre bassin.
-    #: Trois répliques à trente font quatre-vingt-dix, plus les migrations et les
-    #: connexions d'administration. Au-delà, c'est PostgreSQL qui refuse, et le
+    #: ⚠️ TRENTE N'EST PAS UNE MARGE SUR QUARANTE, C'EST UN PLAFOND SUBI.
+    #:
+    #: Cette note affirmait le contraire, et c'était faux de dix connexions. La
+    #: valeur ne vient pas du bac de threads, elle vient de la base :
+    #: `max_connections` de PostgreSQL vaut cent par défaut, **chaque processus**
+    #: tient son propre bassin, et le déploiement déclare trois répliques. Trois
+    #: fois trente font quatre-vingt-dix, migrations et connexions
+    #: d'administration comprises. Il n'y a pas la place pour quarante.
+    #:
+    #: Donc dix fils au plus attendent une connexion pendant une pointe. ⚠️ Cette
+    #: attente n'est supportable que parce qu'elle a lieu **dans un fil** : le jour
+    #: où elle est remontée sur la boucle d'événements, elle a immobilisé l'API
+    #: entière. Voir `tests/test_boucle_non_bloquee.py`, qui l'interdit désormais.
+    #:
+    #: Relever ces valeurs suppose de relever `max_connections` d'autant, ou de
+    #: placer un `pgbouncer` devant. Au-delà, c'est PostgreSQL qui refuse, et le
     #: message est alors bien moins clair que celui-ci.
     pool_taille: int = 10
     pool_debordement: int = 20
@@ -360,10 +396,20 @@ class Configuration(BaseSettings):
                 "écrits en clair, et une fuite de base livrerait tous les "
                 "seconds facteurs du cabinet."
             )
+        if self.adresse_publique.startswith("http://"):
+            fautes.append(
+                "CGA_ADRESSE_PUBLIQUE doit être en https : c'est elle qui décide "
+                "si le témoin de session circule chiffré (voir `temoin_securise`)."
+            )
         if self.adresse_publique_site.startswith("http://"):
             fautes.append(
                 "CGA_ADRESSE_PUBLIQUE_SITE doit être en https : les liens "
                 "d'activation portent un secret d'usage unique."
+            )
+        if self.adresse_publique_vitrine.startswith("http://"):
+            fautes.append(
+                "CGA_ADRESSE_PUBLIQUE_VITRINE doit être en https : le lien d'une "
+                "proforma porte le sceau qui permet de l'accepter."
             )
         if any(origine.startswith("http://") for origine in self.origines_cors):
             fautes.append(

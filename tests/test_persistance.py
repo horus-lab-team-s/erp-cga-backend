@@ -600,7 +600,27 @@ class TestApplicationSurPostgresql:
     def test_la_souscription_survit_au_redemarrage(self, application):
         """Devis, engagement, encaissement, ouverture d'accès — puis relecture
         hors de l'application."""
-        from app.contextes.transverse.api import unite_de_travail
+        from app.contextes.transverse.api import MOT_DE_PASSE_DEMO, unite_de_travail
+        from app.partage.horloge import maintenant
+
+        # ⚠️ LA GÉRANTE FIXE D'ABORD LE PRIX, PAR LA ROUTE, EN BASE. Un tarif « à
+        # valider » ne se paie plus en ligne : c'est le chemin réel, et la décision
+        # doit, elle aussi, survivre au redémarrage.
+        application.post(
+            "/transverse/session",
+            json={"courriel": "b.mballa@cga-brcg.cm", "mot_de_passe": MOT_DE_PASSE_DEMO},
+        )
+        fixation = application.post(
+            "/souscription/tarifs",
+            json={
+                "service": "ADHESION",
+                "formule": "LIBERATOIRE",
+                "montant": "12500",
+                "a_partir_du": maintenant().date().isoformat(),
+                "motif": "Barème 2026 confirmé par la gérante.",
+            },
+        )
+        assert fixation.status_code == 201, fixation.text
 
         devis = application.post(
             "/souscription/devis",
@@ -627,7 +647,6 @@ class TestApplicationSurPostgresql:
         # ouvre. La vérification elle-même doit survivre au redémarrage : c'est elle
         # qui dit, au journal, qui a ouvert ce dossier à ce payeur.
         assert encaissement["activee"] is False
-        from app.contextes.transverse.api import MOT_DE_PASSE_DEMO
 
         application.post(
             "/transverse/session",

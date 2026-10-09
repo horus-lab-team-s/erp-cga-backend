@@ -679,3 +679,125 @@ class TestDeclarationTVA:
             periode_fin=date(2026, 8, 31),
         )
         assert declaration.neant
+
+
+# ── Une société née en cours d'année ─────────────────────────────────────────────
+
+
+PATENTE = TypeObligation(
+    code="PATENTE",
+    portail=Portail.DGI_TELEDECLARATION,
+    libelle="Contribution des patentes",
+    periodicite=Periodicite.ANNUELLE_CIVILE,
+    jour_civil=28,
+    mois_civil=2,
+    payable_d_avance=True,
+)
+
+
+class TestUneObligationNeSeDatePasAvantSaPeriode:
+    """Ce qu'une fondatrice a lu sur son écran, le jour de son immatriculation.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    LE CONSTAT, LE 28 SEPTEMBRE
+
+    Le parcours entier venait d'être rejoué : demande, échange, proforma,
+    paiement, immatriculation, accès. Le dernier écran — le sien, `/mon-espace`,
+    sa propre société au milieu — affichait :
+
+        Contribution des patentes — En retard de 212 jours
+
+    Sa société avait été immatriculée le jour même. Elle n'existait pas le 28
+    février, et son exercice s'ouvre le 27 septembre.
+
+    ⚠️ Ce produit s'interdit de tranquilliser à tort. **Alarmer à tort est la
+    même faute retournée**, et celle-ci accueille la cliente à sa première
+    connexion — le seul moment où elle décide si cet espace lui dit vrai.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    # L'exercice réel de la société de la recette : ouvert le jour de sa
+    # création, clos au 31 décembre.
+    EXERCICE_PARTIEL = Exercice(
+        libelle="2026", ouverture=date(2026, 9, 27), cloture=date(2026, 12, 31)
+    )
+
+    def _nee_en_septembre(self) -> Entreprise:
+        creation = date(2026, 9, 27)
+        return _entreprise(
+            date_creation=creation,
+            regimes=[
+                StatutRegime(
+                    debut=creation,
+                    regime=RegimeFiscal.REEL,
+                    motif=MotifChangement.CREATION,
+                )
+            ],
+            rattachements=[
+                StatutRattachement(
+                    debut=creation,
+                    centre=CentreRattachement.CIME,
+                    motif=MotifChangement.CREATION,
+                )
+            ],
+            exercices=[self.EXERCICE_PARTIEL],
+        )
+
+    def test_la_patente_d_une_societe_de_septembre_n_echoit_pas_en_fevrier(self):
+        echeancier = generer_echeancier(
+            self._nee_en_septembre(),
+            [PATENTE],
+            self.EXERCICE_PARTIEL,
+            emploie_sur=SANS_SALARIES,
+            accuse_de=AUCUN_ACCUSE,
+        )
+        assert len(echeancier) == 1
+        patente = echeancier[0]
+        assert patente.echeance >= date(2026, 9, 27), (
+            "la patente est datée avant que la société n'existe : "
+            f"{patente.echeance}"
+        )
+
+    def test_elle_est_due_des_l_ouverture_de_la_periode(self):
+        # ⚠️ On ne fabrique aucun délai. Le référentiel ne dit pas combien de
+        # temps une société créée en cours d'année a pour s'acquitter de sa
+        # patente ; inventer « deux mois » serait écrire une règle fiscale dans
+        # du code. L'échéance est ramenée au premier jour où l'obligation peut
+        # exister, ni avant, ni plus loin.
+        echeancier = generer_echeancier(
+            self._nee_en_septembre(),
+            [PATENTE],
+            self.EXERCICE_PARTIEL,
+            emploie_sur=SANS_SALARIES,
+            accuse_de=AUCUN_ACCUSE,
+        )
+        assert echeancier[0].echeance == date(2026, 9, 27)
+
+    def test_elle_n_est_pas_en_retard_le_jour_de_l_immatriculation(self):
+        echeancier = generer_echeancier(
+            self._nee_en_septembre(),
+            [PATENTE],
+            self.EXERCICE_PARTIEL,
+            emploie_sur=SANS_SALARIES,
+            accuse_de=AUCUN_ACCUSE,
+        )
+        patente = echeancier[0]
+        assert not patente.en_retard(date(2026, 9, 27)), (
+            "sa première connexion lui annonce un retard sur une société "
+            "immatriculée le jour même"
+        )
+        # Et elle ne l'était pas non plus la veille de sa création.
+        assert not patente.en_retard(date(2026, 9, 26))
+
+    def test_une_annee_pleine_garde_la_date_statutaire(self):
+        # ⚠️ La garde ne déplace **que** ce qui tombait avant la période. Une
+        # société installée depuis 2020 doit sa patente au 28 février, et cela
+        # ne doit pas bouger d'un jour.
+        echeancier = generer_echeancier(
+            _entreprise(),
+            [PATENTE],
+            EXERCICE_2026,
+            emploie_sur=SANS_SALARIES,
+            accuse_de=AUCUN_ACCUSE,
+        )
+        assert echeancier[0].echeance == date(2026, 2, 28)

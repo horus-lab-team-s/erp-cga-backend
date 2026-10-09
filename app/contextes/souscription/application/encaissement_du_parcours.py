@@ -46,6 +46,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict
 
 from app.contextes.souscription.application.encaissement import Aboutissement
+from app.contextes.souscription.domaine.demande_de_contact import DemandeDeContact
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
@@ -57,6 +58,7 @@ from app.orchestration.boite_d_envoi import EvenementSortant, deposer
 __all__ = [
     "SuiteDeProforma",
     "NOM_EVENEMENT",
+    "SERVICES_OUVRANT_UN_LOCATAIRE",
     "BoiteOuDeposer",
     "EncaissementRefuse",
     "ResultatEncaissementDuParcours",
@@ -67,6 +69,37 @@ __all__ = [
 #: technique : c'est lui qui figurera dans les journaux qu'un exploitant lit à
 #: trois heures du matin.
 NOM_EVENEMENT = "PaiementEncaissé"
+
+#: Les services dont la vente ouvre un LOCATAIRE de la plateforme.
+#:
+#: ─────────────────────────────────────────────────────────────────────────────
+#: ⚠️ VIDE, ET C'EST UNE DÉCISION DU CABINET DU 27 SEPTEMBRE.
+#:
+#: Toute proforma payée ouvrait un locataire — `tnt-{slug}` — quel que soit le
+#: service vendu. Une entrepreneuse qui achetait la création de sa SARL recevait
+#: donc **son propre espace de plateforme**, isolé du cabinet, pendant que son
+#: entreprise entrait au portefeuille du cabinet. Les deux dans des locataires
+#: différents : même en activant son compte, elle serait entrée dans un espace
+#: vide.
+#:
+#: Une cliente qui achète une prestation est une **adhérente du cabinet**. Son
+#: compte vit là où vit son dossier. Un locataire, lui, se vend à un AUTRE
+#: centre de gestion qui achète la plateforme — cette offre n'est pas au
+#: catalogue, et cet ensemble est donc vide aujourd'hui.
+#:
+#: ⚠️ `PLATEFORME` NOMME CETTE OFFRE, ET ELLE N'EST PAS AU CATALOGUE.
+#:
+#: Aucun prospect ne peut donc l'acheter aujourd'hui : le catalogue publie cinq
+#: services, et celui-ci n'en fait pas partie. Le code est écrit ici pour que le
+#: mécanisme d'ouverture garde ses cas — un mécanisme câblé que plus aucun cas
+#: ne traverse pourrit en silence, et se découvre cassé le jour où l'on en a
+#: besoin.
+#:
+#: ⚠️ Le jour où le cabinet vend la plateforme, le service s'ajoute au catalogue
+#: **sous ce code exact**. C'est la leçon du 27 septembre : trois vocabulaires
+#: pour une même prestation avaient rendu le tunnel commercial sans issue.
+#: ─────────────────────────────────────────────────────────────────────────────
+SERVICES_OUVRANT_UN_LOCATAIRE: frozenset[str] = frozenset({"PLATEFORME"})
 
 
 class EncaissementRefuse(ValueError):
@@ -160,28 +193,114 @@ def encaisser_l_acceptation(
         identifiant_evenement,
         NOM_EVENEMENT,
         dossier.reference,
-        _charge(proforma, slug=slug, tenant=tenant, reference_externe=reference_externe),
+        _charge(
+            proforma,
+            slug=slug,
+            tenant=tenant,
+            reference_externe=reference_externe,
+            titulaire=dossier.demande,
+        ),
         a_l_instant,
     )
     return ResultatEncaissementDuParcours(dossier=paye, evenement=evenement)
 
 
 def _charge(
-    proforma: Proforma, *, slug: str, tenant: str, reference_externe: str
+    proforma: Proforma,
+    *,
+    slug: str,
+    tenant: str,
+    reference_externe: str,
+    titulaire: DemandeDeContact | None = None,
 ) -> dict[str, Any]:
     """Ce que l'événement transporte. Le strict nécessaire à l'ouverture.
 
     Voir l'en-tête : un événement qui transporte des données dont personne n'a
     besoin finit par en transporter qu'on ne voulait pas voir circuler. Les
     journaux, les files et les sauvegardes le recopient tous.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **L'ADRESSE DU TITULAIRE EST NÉCESSAIRE, ET ELLE MANQUAIT.**
+
+    La septième étape de l'ouverture crée le compte administrateur du client et
+    lui envoie son lien d'activation. Sans son adresse, elle ne peut faire ni
+    l'un ni l'autre : le tenant s'ouvrait, et le client restait dehors.
+
+    C'est le strict nécessaire, et rien de plus : **pas le téléphone**, qui ne
+    sert pas à créer un compte, et surtout **pas le montant ni le détail de la
+    proforma**. Un événement est recopié dans les journaux, les files et les
+    sauvegardes ; ce qu'on y met y reste longtemps.
+
+    ⚠️ Le nom et le prénom sont transportés parce qu'un courriel qui commence par
+    « Bonjour jp.nkoa » se lit comme une machine. L'adresse seule suffirait à
+    créer le compte ; elle ne suffit pas à écrire au client.
+    ─────────────────────────────────────────────────────────────────────────────
     """
-    return {
+    charge: dict[str, Any] = {
         "tenant": tenant,
         "slug": slug,
         "proforma": proforma.numero,
         "version_proforma": proforma.version,
         "reference_externe": reference_externe,
+        # ⚠️ LE SERVICE, PARCE QUE L'ENCAISSEMENT NE DÉCLENCHE PAS LA MÊME CHOSE
+        # SELON CE QUI A ÉTÉ VENDU.
+        #
+        # Une adhésion réglée ouvre un espace, et c'est tout. Une CRÉATION
+        # réglée doit en outre ouvrir un dossier de formalité : le client a payé
+        # pour que sa société soit immatriculée, pas pour recevoir un accès.
+        # Sans ce champ, l'abonné qui ouvre ce dossier devrait relire la
+        # Souscription — que le graphe des contextes lui interdit, et à juste
+        # titre : c'est le rôle de l'événement de porter ce qu'il faut savoir.
+        "service": proforma.service,
+        # ⚠️ DIT EXPLICITEMENT, ET NON DÉDUIT DE L'ABSENCE DE SLUG.
+        #
+        # L'abonné qui ouvre le locataire lève sur une charge incomplète, et il a
+        # raison : un champ manquant est un défaut, pas une consigne. « Cette
+        # vente n'ouvre pas de locataire » est une consigne, et elle s'écrit.
+        "ouvre_un_locataire": proforma.service in SERVICES_OUVRANT_UN_LOCATAIRE,
     }
+    # ⚠️ LES FAITS FONDATEURS, ET EUX SEULS.
+    #
+    # La qualification en recueille une douzaine ; cinq seulement servent à
+    # ouvrir un dossier de formalité, et ce sont ceux-là qui voyagent. Les
+    # tranches de chiffre d'affaires, le nombre de salariés ou les pièces déjà
+    # réunies ont servi à CHIFFRER : ils appartiennent à la proforma, qui les
+    # conserve, et n'ont rien à faire dans un événement recopié dans les
+    # journaux, les files et les sauvegardes.
+    #
+    # ⚠️ Aucun n'est fabriqué : absent de la qualification, absent de l'événement.
+    # L'abonné dira franchement ce qui lui manque plutôt que d'ouvrir un dossier
+    # au nom inventé.
+    fondateurs = {
+        cle: proforma.faits[cle]
+        for cle in (
+            "denomination_souhaitee",
+            "forme_juridique",
+            "capital_social",
+            "activite",
+            "siege",
+        )
+        if cle in proforma.faits
+    }
+    if fondateurs:
+        charge["faits_fondateurs"] = fondateurs
+    if titulaire is not None:
+        charge["courriel_titulaire"] = titulaire.courriel or ""
+        charge["nom_titulaire"] = titulaire.nom
+        # ⚠️ `prenom` n'existe pas sur une demande de contact : le nom y est
+        # entier. On ne fabrique donc pas de prénom, et le gabarit se rabat sur
+        # le nom — mieux vaut « Bonjour NKOA » qu'un prénom inventé.
+        #
+        # ⚠️ LE TÉLÉPHONE, AJOUTÉ LE 27 SEPTEMBRE, ET LA RAISON A CHANGÉ.
+        #
+        # Il était écarté ici avec ce motif : « il ne sert pas à créer un
+        # compte ». C'était juste tant que l'encaissement n'ouvrait qu'un espace.
+        # Depuis qu'il ouvre aussi un dossier de formalité, le fondateur de ce
+        # dossier porte un téléphone — c'est par là que le greffe et le cabinet
+        # le joignent pendant l'immatriculation. Le motif d'hier ne tient plus ;
+        # la règle, elle, n'a pas bougé : rien qui ne serve.
+        charge["telephone_titulaire"] = titulaire.telephone
+    return charge
 
 
 class SuiteDeProforma:

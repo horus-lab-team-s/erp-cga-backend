@@ -46,7 +46,7 @@ def _demande(**surcharges) -> dict:
     defauts = {
         "nom": "Abena Ndzana",
         "telephone": "699112233",
-        "service_souhaite": "creation-sarl",
+        "service_souhaite": "CREATION",
         "canal_prefere": "APPEL",
     }
     return {**defauts, **surcharges}
@@ -126,7 +126,7 @@ class TestConsoleProtegee:
             "/acquisition/dossiers/dos-1",
             "/acquisition/dossiers/en-souffrance",
             "/acquisition/motifs-de-classement",
-            "/acquisition/questionnaires/creation-sarl",
+            "/acquisition/questionnaires/CREATION",
         ],
     )
     def test_la_lecture_des_prospects_demande_une_session(self, client, chemin):
@@ -195,7 +195,7 @@ class TestPermissionsCommerciales:
 
 class TestQuestionnaireExpose:
     def test_il_n_est_pas_public(self, client):
-        assert client.get("/acquisition/questionnaires/creation-sarl").status_code in (
+        assert client.get("/acquisition/questionnaires/CREATION").status_code in (
             401,
             403,
         )
@@ -226,19 +226,39 @@ class TestMontage:
         acquisition = sorted(c for c in chemins if c.startswith("/acquisition"))
         assert acquisition == [
             "/acquisition/canaux",
+            # Pas 148 : le catalogue des documents de proforma, pour que
+            # l'écran ne recopie pas la liste des compositions.
+            "/acquisition/compositions-proforma",
             "/acquisition/demandes",
+            "/acquisition/devis/{reference}/rappel",
             "/acquisition/dossiers",
             "/acquisition/dossiers/en-souffrance",
             "/acquisition/dossiers/{reference}",
             "/acquisition/dossiers/{reference}/affectation",
             "/acquisition/dossiers/{reference}/chiffrage",
+            # Pas 93 : PROTÉGÉE, comme tout ce qui touche à un dossier nommé.
+            # Elle dit si l'espace du client est réellement utilisable — donc si
+            # le compte administrateur existe. C'est une information
+            # d'exploitation sur un client identifié : `LIRE_PROSPECT`.
+            "/acquisition/dossiers/{reference}/ouverture",
+            # Pas 137 : le seul geste qui engage l'échange sans qualification.
+            "/acquisition/dossiers/{reference}/premier-contact",
             "/acquisition/dossiers/{reference}/proforma",
             "/acquisition/dossiers/{reference}/qualification",
             "/acquisition/dossiers/{reference}/sans-suite",
+            # Pas 150 : corriger le service après l'échange, sans réécrire ce
+            # que la visiteuse a demandé.
+            "/acquisition/dossiers/{reference}/service",
             "/acquisition/motifs-de-classement",
             "/acquisition/proformas/{numero}/acceptation",
             "/acquisition/proformas/{numero}/consultation",
+            # Pas 148 : le PDF lui-même. Scellé pour la cliente, sous session pour
+            # le cabinet, dont le lien n'expire pas.
+            "/acquisition/proformas/{numero}/document",
+            "/acquisition/proformas/{numero}/document-interne",
             "/acquisition/proformas/{numero}/encaissement",
+            # Pas 136 : relire le lien pour le renvoyer, sans noter de transmission.
+            "/acquisition/proformas/{numero}/lien",
             "/acquisition/proformas/{numero}/reglement",
             "/acquisition/proformas/{numero}/transmission",
             "/acquisition/questionnaires/{service}",

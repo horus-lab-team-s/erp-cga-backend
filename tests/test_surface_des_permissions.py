@@ -52,6 +52,11 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Le seul point d'entrée du parcours. Un visiteur n'a pas de compte, et "
         "c'est justement ce que cette route existe pour changer."
     ),
+    ("POST", "/acquisition/devis/{reference}/rappel"): (
+        "Le prospect d'un devis au prix à confirmer demande qu'on l'appelle : il "
+        "n'a pas de compte. La référence du devis, longue et non devinable, le "
+        "protège ; les coordonnées viennent du devis, jamais de la requête."
+    ),
     ("POST", "/souscription/devis"): (
         "Établir un devis est le premier geste commercial : il précède le compte."
     ),
@@ -109,10 +114,29 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "ses données : un écran de création de compte doit pouvoir l'afficher."
     ),
     # ── Les liens signés : le sceau ou la référence tient lieu de preuve ──
+    ("GET", "/creations/{reference}/suivi"): (
+        "La fondatrice suit sa formalité sans compte, entre son règlement et son "
+        "immatriculation. Le sceau est l'authentification ; sceau faux, absent et "
+        "dossier inconnu rendent le même 404 (pas 140)."
+    ),
+    ("POST", "/creations/{reference}/suivi/pieces"): (
+        "Elle rattache le document qu'elle vient de téléverser à une pièce attendue. "
+        "Même sceau, et elle ne peut remplir qu'un code déjà présent à sa checklist."
+    ),
+    ("POST", "/collecte/fichiers-scelles"): (
+        "Le téléversement de ses pièces. Une formalité n'a pas de NIU, donc pas de "
+        "périmètre de dossier à vérifier : le sceau tient lieu de preuve, et les "
+        "gardes de taille, de type et de nom sont celles de la porte authentifiée."
+    ),
     ("GET", "/acquisition/proformas/{numero}/consultation"): (
         "Le client lit sa proforma avant de l'accepter, sans compte. Le lien signé est "
         "l'authentification, vérifié avant toute lecture : sans lui, un numéro existant "
         "et un numéro inventé reçoivent la même réponse (pas 67)."
+    ),
+    ("GET", "/acquisition/proformas/{numero}/document"): (
+        "Le PDF de ce que le client accepte, derrière le même sceau que la "
+        "consultation et vérifié dans le même ordre. Lire le détail chiffré sans "
+        "pouvoir lire le document signé n'aurait pas de sens (pas 148)."
     ),
     ("POST", "/acquisition/proformas/{numero}/acceptation"): (
         "Le client accepte par un lien signé, daté, à usage unique. Il n'a pas de "

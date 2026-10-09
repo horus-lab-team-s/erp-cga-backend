@@ -25,12 +25,14 @@ from app.contextes.souscription.adaptateurs.sortant.tables import (
     TableRappelAPasser,
     TableSouscription,
     TableSuiviDeRelance,
+    TableTarifFixe,
 )
 from app.contextes.souscription.domaine.devis import Devis
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.offre import TarifFixe
 from app.contextes.souscription.domaine.paiements import Paiement, StatutPaiement
 from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
@@ -44,6 +46,7 @@ from app.infrastructure.depot_document import DepotDocument
 
 __all__ = [
     "DepotDevisSql",
+    "DepotTarifsFixesSql",
     "DepotProformasSql",
     "DepotQualificationsSql",
     "DepotRappelsSql",
@@ -511,3 +514,27 @@ class DepotQualificationsSql(DepotDocument[Qualification]):
 
     def enregistrer(self, qualification: Qualification) -> None:
         self._poser(qualification)
+
+
+class DepotTarifsFixesSql(DepotDocument[TarifFixe]):
+    """Réalisation de `DepotTarifsFixes`. Voir `TableTarifFixe`."""
+
+    _table = TableTarifFixe
+    _entite = TarifFixe
+
+    def _cle(self, entite: TarifFixe) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: TarifFixe) -> dict[str, Any]:
+        return {
+            "service": entite.service,
+            "a_partir_du": entite.a_partir_du,
+            "fixe_le": entite.fixe_le,
+        }
+
+    def enregistrer(self, fixation: TarifFixe) -> None:
+        self._poser(fixation)
+
+    def lister(self) -> list[TarifFixe]:
+        return self._tous(self._requete().order_by(TableTarifFixe.fixe_le))
+

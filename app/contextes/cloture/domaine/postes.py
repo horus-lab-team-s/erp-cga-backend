@@ -98,13 +98,13 @@ PLAN_LIASSE: tuple[PosteLiasse, ...] = (
     ),
     PosteLiasse(
         code="BS",
-        libelle="Fournisseurs débiteurs — avances versées",
+        libelle="Fournisseurs débiteurs : avances versées",
         sens=SensPoste.ACTIF,
         prefixes=(),
     ),
     PosteLiasse(
         code="BT",
-        libelle="Trésorerie — actif",
+        libelle="Trésorerie active",
         sens=SensPoste.ACTIF,
         prefixes=("58",),
     ),
@@ -147,13 +147,13 @@ PLAN_LIASSE: tuple[PosteLiasse, ...] = (
     ),
     PosteLiasse(
         code="DH",
-        libelle="Clients créditeurs — avances reçues",
+        libelle="Clients créditeurs : avances reçues",
         sens=SensPoste.PASSIF,
         prefixes=(),
     ),
     PosteLiasse(
         code="DQ",
-        libelle="Trésorerie — passif",
+        libelle="Trésorerie passive",
         sens=SensPoste.PASSIF,
         prefixes=("56",),
     ),

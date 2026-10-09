@@ -67,7 +67,9 @@ __all__ = [
     "Cloisonne",
     "Document",
     "creer_les_tables",
+    "fermer_une_session",
     "moteur",
+    "ouvrir_une_session",
     "session_courante",
     "session_du_locataire",
 ]
@@ -182,17 +184,32 @@ class Cloisonne:
         return mapped_column(String(64), nullable=False)
 
 
-@contextmanager
-def session_du_locataire(locataire: str) -> Iterator[Session]:
-    """Une session dont **toute** requête ORM est filtrée sur ce locataire.
+def ouvrir_une_session(locataire: str) -> Session:
+    """Ouvre la session cloisonnée et emprunte sa connexion. **Bloquant.**
 
-    Le filtre est posé par un écouteur `do_orm_execute`, avec
-    `with_loader_criteria` : il s'applique aux entités chargées, y compris par
-    relation, et il ne peut pas être oublié puisqu'il n'est jamais écrit.
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI CETTE MOITIÉ EXISTE SÉPARÉMENT
 
-    Validation et annulation sont portées ici : une session qui sort du bloc sans
-    `commit` est annulée. Laisser une transaction ouverte tenir des verrous sur
-    une table du journal d'audit bloquerait toutes les écritures suivantes.
+    Elle fait deux choses qui **attendent** : emprunter une connexion au bassin, et
+    poser le locataire sur la transaction. Tant que les deux vivaient à l'intérieur
+    du gestionnaire de contexte, tout appelant les exécutait là où il se trouvait.
+
+    L'intergiciel d'unité de travail, lui, se trouve sur la **boucle d'événements**.
+    Mesuré le 30 septembre sur la pile de démonstration : trente requêtes tenaient
+    les trente connexions du bassin, la trente-et-unième attendait dans
+    `QueuePool.get`, et cette attente **bloquait la boucle**. Plus aucune réponse ne
+    partait, donc plus aucune connexion n'était rendue : le serveur se verrouillait
+    lui-même. Une photo des piles l'a montré, la boucle arrêtée dans
+    `threading.wait`.
+
+    Séparée, cette moitié peut être exécutée dans un fil de la réserve. L'attente y
+    est inoffensive : elle occupe un fil, pas le moteur du serveur.
+
+    ⚠️ Aucune variable de contexte n'est posée ici, et c'est la raison d'être de la
+    coupure. Une variable posée dans un fil de la réserve est perdue au retour, et
+    son jeton de restitution est **inutilisable** dans un autre contexte. Les
+    variables appartiennent à l'appelant, qui les pose là où il vit.
+    ─────────────────────────────────────────────────────────────────────────────
     """
     session = _fabrique()()
 
@@ -220,16 +237,61 @@ def session_du_locataire(locataire: str) -> Iterator[Session]:
                 )
             )
 
+    return session
+
+
+def fermer_une_session(session: Session, erreur: BaseException | None) -> None:
+    """Valide ou annule, puis rend la connexion au bassin. **Bloquant.**
+
+    ⚠️ La fermeture est dans un `finally` **du côté de l'appelant** : une session
+    qui n'est pas fermée garde sa connexion et sa transaction ouvertes, et trente
+    oublis suffisent à vider le bassin. C'est la seconde moitié de la coupure
+    décrite dans `ouvrir_une_session`, et elle attend elle aussi — `commit` parle
+    au serveur.
+
+    `erreur` décide : une sortie normale valide, une sortie par exception annule.
+    Le paramètre est explicite plutôt que déduit, parce que l'appelant qui vit sur
+    la boucle ne peut pas transmettre son état d'exception autrement.
+    """
+    try:
+        if erreur is None:
+            session.commit()
+        else:
+            session.rollback()
+    finally:
+        session.close()
+
+
+@contextmanager
+def session_du_locataire(locataire: str) -> Iterator[Session]:
+    """Une session dont **toute** requête ORM est filtrée sur ce locataire.
+
+    Le filtre est posé par un écouteur `do_orm_execute`, avec
+    `with_loader_criteria` : il s'applique aux entités chargées, y compris par
+    relation, et il ne peut pas être oublié puisqu'il n'est jamais écrit.
+
+    Validation et annulation sont portées ici : une session qui sort du bloc sans
+    `commit` est annulée. Laisser une transaction ouverte tenir des verrous sur
+    une table du journal d'audit bloquerait toutes les écritures suivantes.
+
+    ⚠️ **À N'EMPLOYER QUE HORS DE LA BOUCLE D'ÉVÉNEMENTS.** Ce bloc attend une
+    connexion là où il est écrit. Appelé depuis du code asynchrone, il arrête le
+    serveur entier — voir `ouvrir_une_session`. Le code asynchrone emploie les deux
+    moitiés et place l'attente dans un fil.
+    """
+    session = ouvrir_une_session(locataire)
     jeton = _SESSION_COURANTE.set(session)
     try:
         yield session
-        session.commit()
-    except Exception:
-        session.rollback()
+        # Une validation qui échoue part dans la reprise ci-dessous, qui annule :
+        # c'est l'ordre d'origine, et il compte. Une transaction laissée ouverte
+        # après un `commit` refusé tiendrait ses verrous jusqu'à l'expiration.
+        fermer_une_session(session, None)
+    except Exception as erreur:
+        fermer_une_session(session, erreur)
         raise
     finally:
         _SESSION_COURANTE.reset(jeton)
-        session.close()
 
 
 class Document:

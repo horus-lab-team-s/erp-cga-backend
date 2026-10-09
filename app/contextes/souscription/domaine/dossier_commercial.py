@@ -135,8 +135,23 @@ TRANSITIONS: Mapping[EtatDossier, frozenset[EtatDossier]] = {
     EtatDossier.AFFECTEE: frozenset(
         {EtatDossier.AFFECTEE, EtatDossier.EN_CONVERSATION, EtatDossier.SANS_SUITE}
     ),
+    # ⚠️ Vers `CHIFFRÉE` SANS PASSER PAR `QUALIFIÉE`, et l'arête a son voyageur.
+    #
+    # `QUALIFIÉE` ne s'atteint que par une qualification, qui exige un
+    # questionnaire au référentiel. `FORMATION`, `DOMICILIATION` et `PONCTUEL`
+    # n'en ont pas : leurs dossiers restaient bloqués ici pour toujours, après
+    # avoir été proposés sur le site public et avoir mobilisé un responsable.
+    #
+    # Les faire passer par `QUALIFIÉE` aurait été un mensonge : rien n'a été
+    # qualifié. Ce qui les chiffre, c'est le **prix arrêté par le gérant**, daté
+    # et motivé — voir `_prix_ferme_du_service`. C'est lui qui emprunte l'arête,
+    # et c'est la condition que ce tableau pose à chacune d'elles.
+    #
+    # ⚠️ Le contrôle reste entier : un service SANS prix ferme ne trouve ici
+    # aucun chemin, parce que rien ne l'emprunte. Le chiffrage le refuse tant que
+    # la qualification n'est pas complète, et le dira.
     EtatDossier.EN_CONVERSATION: frozenset(
-        {EtatDossier.QUALIFIEE, EtatDossier.SANS_SUITE}
+        {EtatDossier.QUALIFIEE, EtatDossier.CHIFFREE, EtatDossier.SANS_SUITE}
     ),
     EtatDossier.QUALIFIEE: frozenset(
         {EtatDossier.CHIFFREE, EtatDossier.EN_CONVERSATION, EtatDossier.SANS_SUITE}
@@ -164,6 +179,13 @@ TRANSITIONS: Mapping[EtatDossier, frozenset[EtatDossier]] = {
 REAFFECTATIONS_MAXIMALES = 3
 
 
+#: Les états où le service se reprend encore : avant toute qualification.
+#: Voir `DossierCommercial.retenir_le_service`.
+_AVANT_QUALIFICATION: frozenset[EtatDossier] = frozenset(
+    {EtatDossier.DEPOSEE, EtatDossier.AFFECTEE, EtatDossier.EN_CONVERSATION}
+)
+
+
 class DossierCommercial(BaseModel):
     """Ce que le cabinet fait d'une demande, de son dépôt à son paiement."""
 
@@ -185,6 +207,23 @@ class DossierCommercial(BaseModel):
     #: Un tuple, et non une liste : le modèle est figé, et une liste par défaut
     #: resterait modifiable sur place malgré le gel.
     rattachees: tuple[DemandeDeContact, ...] = ()
+
+    #: Le service que le CABINET retient, quand il diffère de celui demandé.
+    #:
+    #: ⚠️ **POURQUOI UN SECOND CHAMP PLUTÔT QU'UNE CORRECTION DE LA DEMANDE.**
+    #:
+    #: La demande est portée « sans être modifiée jamais » (voir l'en-tête) :
+    #: c'est la trace de ce que la visiteuse a dit, et la réécrire effacerait
+    #: le fait qu'elle s'est trompée de case, qui est une information utile au
+    #: cabinet comme au site.
+    #:
+    #: `None` tant que personne n'a repris son choix : le service est alors
+    #: celui qu'elle a demandé. Voir `service`.
+    service_retenu: str | None = None
+
+    #: Pourquoi le cabinet a retenu autre chose. Obligatoire au geste, conservé
+    #: pour que personne n'ait à deviner six mois plus tard.
+    motif_du_service_retenu: str | None = None
 
     etat: EtatDossier = EtatDossier.DEPOSEE
 
@@ -271,6 +310,26 @@ class DossierCommercial(BaseModel):
     #: en mémoire. Une colonne de plus serait une migration, un index à décider
     #: et une occasion de divergence, pour une lecture qui ne coûte rien.
     signale_le: datetime | None = None
+
+    #: ─────────────────────────────────────────────────────────────────────────
+    #: Quand l'accusé de dépôt est parti sur l'adresse de la cliente.
+    #:
+    #: ⚠️ **C'EST LA GARDE D'IDEMPOTENCE DE L'ACCUSÉ, PAS UNE STATISTIQUE.**
+    #:
+    #: Le relais publie **au moins une fois**. Sans ce marqueur, une remise
+    #: rejouée après une coupure enverrait un second « nous avons bien reçu
+    #: votre demande » identique au premier, pour un dépôt unique — et la
+    #: cliente se demanderait si elle a rempli le formulaire deux fois.
+    #:
+    #: ⚠️ **Il ne se remet PAS à `None` sur transition**, contrairement à
+    #: `signale_le`. Il ne dit pas « ce dossier attend depuis » mais « ce fait
+    #: a eu lieu », et un fait ne se dé-produit pas. L'effacer à l'affectation
+    #: ferait repartir l'accusé au premier rejeu suivant.
+    #:
+    #: ⚠️ Non promu en colonne : rien ne le requête, il est lu sur un dossier
+    #: déjà chargé par sa référence.
+    #: ─────────────────────────────────────────────────────────────────────────
+    accuse_de_depot_le: datetime | None = None
 
     # ── Ce que le dossier sait dire de lui-même ─────────────────────────────
 
@@ -488,6 +547,82 @@ class DossierCommercial(BaseModel):
         if self.responsable is None or self.responsable in self.responsables_passes:
             return self.responsables_passes
         return (*self.responsables_passes, self.responsable)
+
+    @property
+    def service(self) -> str:
+        """Le service sur lequel le cabinet travaille.
+
+        ⚠️ **C'EST CETTE PROPRIÉTÉ QUE LE TRAVAIL LIT**, jamais
+        `demande.service_souhaite`, qui reste ce qu'elle a demandé. La
+        distinction n'est pas cosmétique : l'accusé de réception cite ses mots
+        à elle, le questionnaire et le chiffrage suivent ce que le cabinet a
+        retenu.
+        """
+        return self.service_retenu or self.demande.service_souhaite
+
+    def retenir_le_service(
+        self, code: str, *, motif: str, a_l_instant: datetime
+    ) -> DossierCommercial:
+        """Le cabinet retient un autre service que celui demandé.
+
+        ─────────────────────────────────────────────────────────────────────────
+        ⚠️ **LE CHOIX DE LA VISITEUSE N'ÉTAIT PAS CORRIGEABLE, ET C'EST UN
+        CUL-DE-SAC.**
+
+        Elle coche une case sur un formulaire public, avant tout échange. C'est
+        précisément ce que le responsable découvre en l'appelant : elle a coché
+        « prestation ponctuelle » et il lui faut une adhésion. Sans ce geste, le
+        dossier est coincé — le questionnaire est celui du mauvais service, le
+        chiffrage aussi — et sa seule sortie est le classement sans suite, qui
+        perd l'échange et oblige la cliente à tout redéposer.
+
+        ⚠️ **PAS APRÈS LA QUALIFICATION.** Les réponses recueillies l'ont été à
+        un questionnaire donné ; changer le service les rendrait fausses sans
+        que rien ne le dise. Le cas réel se produit de toute façon avant : un
+        service sans questionnaire ne peut pas être qualifié, donc le dossier
+        attend en conversation.
+
+        ⚠️ **NI VERS LE MÊME SERVICE.** Rejouer le geste sans rien changer
+        écrirait un motif qui ne correspond à aucune décision.
+
+        ⚠️ Le domaine ne vérifie pas que le code existe au catalogue : il ne le
+        connaît pas, et l'adaptateur qui reçoit la requête le contrôle déjà.
+        ─────────────────────────────────────────────────────────────────────────
+        """
+        if not motif.strip():
+            raise TransitionDossierRefusee(
+                f"dossier {self.reference} : retenir un autre service demande un "
+                "motif. C'est la seule trace de la raison, et elle se relit au "
+                "litige comme à la revue."
+            )
+        if code == self.service:
+            raise TransitionDossierRefusee(
+                f"dossier {self.reference} : le service retenu est déjà « {code} »."
+            )
+        if self.etat not in _AVANT_QUALIFICATION:
+            raise TransitionDossierRefusee(
+                f"dossier {self.reference} à l'état {self.etat.value} : le service "
+                "ne se reprend plus. Les réponses recueillies l'ont été au "
+                "questionnaire du service précédent, et les garder sous un autre "
+                "service les rendrait fausses sans que rien ne le dise."
+            )
+        # ⚠️ **`depuis_le` N'EST PAS TOUCHÉ**, et c'est délibéré.
+        #
+        # Il dit « depuis quand le dossier est dans l'état où il se trouve », et
+        # c'est sur lui que porte la veille. Reprendre le service ne change pas
+        # l'état : le dossier attend toujours sa qualification. Le remettre à
+        # l'instant rajeunirait un dossier qui attend depuis trois semaines et le
+        # sortirait de la liste de relance, alors que rien n'a avancé pour la
+        # cliente.
+        #
+        # ⚠️ Le geste n'emprunte pas `_passer_a` pour la même raison : ce chemin
+        # existe pour les changements d'état, et il réécrit `depuis_le`.
+        return self.model_copy(
+            update={
+                "service_retenu": code,
+                "motif_du_service_retenu": motif.strip(),
+            }
+        )
 
     def premier_contact(self, a_l_instant: datetime) -> DossierCommercial:
         """Un premier échange est enregistré, quel que soit le canal.

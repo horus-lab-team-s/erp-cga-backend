@@ -52,9 +52,17 @@ from app.contextes.souscription.domaine.offre import (
     Periodicite,
     Service,
     Tarif,
+    TarifFixe,
+    appliquer_les_fixations,
 )
+from app.contextes.souscription.domaine.ports import DepotTarifsFixes
 
-__all__ = ["CATALOGUE", "DepotServicesMemoire"]
+__all__ = [
+    "CATALOGUE",
+    "CatalogueArrete",
+    "DepotServicesMemoire",
+    "DepotTarifsFixesMemoire",
+]
 
 _DEPUIS_2026 = date(2026, 1, 1)
 _DEPUIS_2024 = date(2024, 1, 1)
@@ -63,7 +71,7 @@ _DEPUIS_2024 = date(2024, 1, 1)
 CATALOGUE: list[Service] = [
     Service(
         code="ADHESION",
-        libelle="Suivi comptable et fiscal — adhésion au centre agréé",
+        libelle="Suivi comptable et fiscal, adhésion au centre agréé",
         nature=NatureService.ABONNEMENT,
         periodicite=Periodicite.MENSUELLE,
         unite="FCFA par mois",
@@ -142,6 +150,43 @@ CATALOGUE: list[Service] = [
         ],
     ),
     Service(
+        code="PAIE",
+        libelle="Paie déléguée",
+        nature=NatureService.ABONNEMENT,
+        periodicite=Periodicite.MENSUELLE,
+        unite="FCFA par mois",
+        resume=(
+            "Bulletins de paie, cotisations CNPS et déclaration mensuelle des "
+            "personnels employés, à partir de vos contrats de travail."
+        ),
+        # ─────────────────────────────────────────────────────────────────────
+        # ⚠️ `ouvre_un_dossier=False`, ET CE N'EST PAS UN OUBLI.
+        #
+        # Seule l'adhésion ouvre un accès au dossier, parce que c'est elle qui
+        # crée la relation de suivi. La paie est une prestation : le cabinet
+        # produit les bulletins et la déclaration, le client les reçoit. Lui
+        # ouvrir au passage la comptabilité du dossier serait accorder par effet
+        # de bord ce que la matrice des habilitations n'accorde pas.
+        #
+        # ⚠️ Le rôle ADHERENT ne détient pas `LIRE_COMPTABILITE`, qu'exigent
+        # toutes les routes de `app/contextes/social`. Un bulletin porte des
+        # rémunérations nominatives, et ce refus est délibéré. Le jour où le
+        # cabinet voudra que son client consulte ses bulletins en ligne, ce sera
+        # une décision sur la matrice, prise pour elle-même, et pas la
+        # conséquence silencieuse d'une ligne de catalogue.
+        # ─────────────────────────────────────────────────────────────────────
+        ouvre_un_dossier=False,
+        tarifs=[
+            Tarif(
+                montant=Decimal(50_000),
+                du=_DEPUIS_2024,
+                au=_DEPUIS_2026,
+                motif="⚠️ Tarif reconstitué — voir l'en-tête du module",
+            ),
+            Tarif(montant=Decimal(60_000), du=_DEPUIS_2026),
+        ],
+    ),
+    Service(
         code="DOMICILIATION",
         libelle="Domiciliation commerciale",
         nature=NatureService.ANNUEL,
@@ -160,7 +205,7 @@ CATALOGUE: list[Service] = [
     ),
     Service(
         code="FORMATION",
-        libelle="Formation — session interentreprises",
+        libelle="Formation en session interentreprises",
         nature=NatureService.PONCTUEL,
         periodicite=Periodicite.UNIQUE,
         unite="FCFA par personne",
@@ -212,3 +257,45 @@ class DepotServicesMemoire:
         sont datés. Un service retiré de l'offre devra porter les siennes, et
         c'est ici que le filtre s'ajoutera."""
         return list(self._services)
+
+
+class DepotTarifsFixesMemoire:
+    """Réalisation en mémoire de `DepotTarifsFixes`, pour les tests."""
+
+    def __init__(self) -> None:
+        self._fixations: list[TarifFixe] = []
+
+    def enregistrer(self, fixation: TarifFixe) -> None:
+        self._fixations.append(fixation)
+
+    def lister(self) -> list[TarifFixe]:
+        return sorted(self._fixations, key=lambda f: f.fixe_le)
+
+
+class CatalogueArrete:
+    """Le catalogue, tel que le gérant l'a arrêté.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE CATALOGUE EN CODE RESTE LA BASE ; LES DÉCISIONS DU GÉRANT S'Y AJOUTENT.
+
+    Le code porte la structure de l'offre : les prestations, les formules, leurs
+    bornes, ce qu'elles comprennent. Le gérant porte les PRIX : chacune de ses
+    décisions est conservée en base, et rejouée à chaque lecture. Réécrire le
+    catalogue à chaque décision ferait perdre qui a fixé quoi, et quand.
+
+    Tant qu'aucune décision n'est prise, tous les tarifs restent `A_VALIDER` :
+    ils s'affichent comme indicatifs et ne se paient pas.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def __init__(
+        self, catalogue: DepotServicesMemoire, fixations: DepotTarifsFixes
+    ) -> None:
+        self._catalogue = catalogue
+        self._fixations = fixations
+
+    def charger(self, a_la_date: date) -> list[Service]:
+        return appliquer_les_fixations(
+            self._catalogue.charger(a_la_date), self._fixations.lister()
+        )
+

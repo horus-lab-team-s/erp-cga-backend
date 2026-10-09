@@ -52,8 +52,8 @@ def _proforma(numero="PRO-2026-0001", dossier="dos-1"):
         arrete_le=T0,
     )
     return emettre(
-        numero=numero, dossier=dossier, service="creation-sarl", tarif=tarif,
-        contenu=b"%PDF", modele="creation-sarl", version_modele="2026.1", a_l_instant=T0,
+        numero=numero, dossier=dossier, service="CREATION", tarif=tarif,
+        contenu=b"%PDF", modele="CREATION", version_modele="2026.1", a_l_instant=T0,
     ).transmise(T0)
 
 

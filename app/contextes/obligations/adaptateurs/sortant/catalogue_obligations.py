@@ -74,7 +74,7 @@ CATALOGUE_OBLIGATIONS: list[TypeObligation] = [
         # ⚠️ Guichet à confirmer (question ouverte Q20) : les retenues sur salaires et
         # les cotisations se déclarent ensemble sur le DIPE. Une donnée, pas une règle.
         portail=Portail.DGI_TELEDECLARATION,
-        libelle="Retenues sur salaires — IRPP et taxes assises",
+        libelle="Retenues sur salaires : IRPP et taxes assises",
         periodicite=Periodicite.MENSUELLE,
         jour_limite=15,
         exige_salaries=True,
@@ -95,7 +95,7 @@ CATALOGUE_OBLIGATIONS: list[TypeObligation] = [
     TypeObligation(
         code="IGS",
         portail=Portail.DGI_TELEDECLARATION,
-        libelle="Impôt général synthétique — versement trimestriel",
+        libelle="Impôt général synthétique, versement trimestriel",
         periodicite=Periodicite.TRIMESTRIELLE,
         jour_limite=15,
         regimes_concernes=[RegimeFiscal.IGS],

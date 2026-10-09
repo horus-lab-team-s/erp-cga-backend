@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
+from datetime import datetime
 from email.message import EmailMessage
 
 import pytest
@@ -70,6 +72,46 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "lien": "https://www.cga-brcg.cm/activation?jeton=abc",
         "expire_le": "23 août 2026 à 10h00",
         "souscription": "SOUS-2026-0007",
+    },
+    "creation.dossier_ouvert": {
+        # Recopié de `abonne_de_souscription._annoncer_l_ouverture`.
+        "prenom": "Sylvie NGONO",
+        "denomination": "NGONO COUTURE SARL",
+        "lien": "https://www.cga-brcg.cm/fr/mon-dossier/CRE-dos-0412?s=abc",
+    },
+    "proforma.acceptation": {
+        # Recopié de `routes_acquisition._accuser_l_acceptation`.
+        "prenom": "Sylvie NGONO",
+        "numero": "PRO-2026-0042",
+        "montant": "250\u202f000",
+        "acceptee_le": "29/09/2026 à 16h03",
+        "identite": "La gérante",
+    },
+    "demande.accuse_de_depot": {
+        # Recopié de `abonne_d_accuse_de_depot.accuser_le_depot`.
+        "prenom": "Sylvie NGONO",
+        # ⚠️ **LA VRAIE FORME, ET NON UNE PLUS JOLIE.**
+        #
+        # Ce contexte portait « dos-2026-0412 », qui se lit bien et n'existe pas :
+        # la route forge `f"dos-{uuid4().hex[:16]}"` (`routes_acquisition.py`).
+        # La garde des identifiants techniques ne se déclenchait donc pas, et le
+        # défaut réel — un objet de courriel affichant
+        # « Votre demande dos-cf776b28a0db44b4 nous est bien parvenue » — passait
+        # sous elle sans bruit.
+        #
+        # Un contexte de test plus présentable que la production ne vérifie que
+        # les cas qu'on aurait de toute façon écrits juste.
+        "reference": "dos-cf776b28a0db44b4",
+        "service": "Création d'entreprise",
+        "telephone": "+237699001122",
+    },
+    "compte.activation_creation": {
+        # Recopié de `abonne_acces_adherent._envoyer_le_lien`.
+        "prenom": "Sylvie",
+        "denomination": "SYLVIE COUTURE SARL",
+        "niu": "M091122334455X",
+        "lien": "https://www.cga-brcg.cm/activation?jeton=abc",
+        "expire_le": "05/10/2026 à 12h29",
     },
     "compte.invitation": {
         "prenom": "Awa",
@@ -137,6 +179,14 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "ton": "ferme",
         "depuis_jours": "8",
         "derniere": "False",
+    },
+    # Recopié de `_envoyer_la_proforma_par_courriel` (routes_acquisition.py).
+    "proforma.envoi": {
+        "nom": "Station Bonabéri",
+        "proforma": "PRO-2026-0001",
+        "montant": "350\u202f000",
+        "lien": "https://www.cga-brcgroup.com/fr/proforma/PRO-2026-0001?v=1&e=x&s=y",
+        "expire_le": "22/10/2026",
     },
 }
 
@@ -425,7 +475,11 @@ class TestConfigurationDeProduction:
             "environnement": "production",
             "persistance": "postgresql",
             "smtp_hote": "smtp.exemple.cm",
+            # ⚠️ L'adresse de l'API en https : c'est elle qui décide si le témoin
+            # de session circule chiffré (`Configuration.temoin_securise`).
+            "adresse_publique": "https://api.cga-brcg.cm",
             "adresse_publique_site": "https://www.cga-brcg.cm",
+            "adresse_publique_vitrine": "https://www.cga-brcgroup.com",
             "origines_cors": ["https://www.cga-brcg.cm"],
             "cle_chiffrement": base64.b64encode(bytes(32)).decode("ascii"),
         }
@@ -565,3 +619,235 @@ class TestAucunCodeDemandeN_estAbsentDuCatalogue:
             "poster, et le geste métier qui l'a déclenché échouerait au premier "
             "envoi réel."
         )
+
+
+class TestLaSalutationNEstJamaisVide:
+    """« Bonjour  », et le message qui suit réclamait de l'argent.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    CE QUI S'EST PASSÉ, ET CE QUE LA SUITE N'A PAS VU
+
+    `Compte.prenom` a été relâché à `""` le 28 septembre, pour laisser entrer une
+    fondatrice dont le formulaire public ne porte qu'UN champ de nom. La
+    correction était juste, et la suite entière est restée verte.
+
+    Le soir même, un rappel d'échéance réel est parti de la pile de démonstration
+    vers une adhérente. Il s'ouvrait sur :
+
+        Bonjour
+
+    Rien, et une espace en trop. Douze messages composaient leur salutation sur
+    `compte.prenom` brut ; deux seulement se rabattaient sur le nom, et c'étaient
+    les deux écrits le même jour que la correction.
+
+    ⚠️ **Une suite verte ne prouve que ce qu'elle mesure.** Celle-ci ne mesurait
+    pas la salutation. Ces deux cas la mesurent : l'un sur le modèle, l'autre sur
+    le code source, parce que le treizième appelant n'est pas encore écrit.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def test_un_compte_sans_prenom_garde_une_appellation(self):
+        from app.contextes.transverse.api import Compte
+
+        compte = Compte(
+            identifiant="A-essai",
+            courriel="sylvie@exemple.cm",
+            nom="Sylvie NGONO",
+            locataire="cga-brcg",
+            cree_le=datetime(2026, 9, 28, 12, 0),
+        )
+        assert compte.prenom == ""
+        assert compte.appellation == "Sylvie NGONO"
+        # Et rien qui commence ou finisse par une espace, nulle part.
+        assert compte.nom_affiche == "Sylvie NGONO"
+
+    def test_un_compte_avec_prenom_est_appele_par_son_prenom(self):
+        from app.contextes.transverse.api import Compte
+
+        compte = Compte(
+            identifiant="A-essai",
+            courriel="awa@exemple.cm",
+            nom="MBIDA",
+            prenom="Awa",
+            locataire="cga-brcg",
+            cree_le=datetime(2026, 9, 28, 12, 0),
+        )
+        assert compte.appellation == "Awa"
+        assert compte.nom_affiche == "Awa MBIDA"
+
+    def test_aucun_appelant_ne_compose_la_salutation_a_la_main(self):
+        """⚠️ LA GARDE QUI TIENT DANS LE TEMPS.
+
+        Le cas précédent prouve que la propriété est bonne ; il ne prouve pas
+        qu'on s'en sert. Celui-ci lit le code source : un contexte de courriel
+        qui remplit `prenom` autrement que par `appellation` est refusé, y
+        compris `compte.prenom or compte.nom` — qui rend pourtant le bon
+        résultat, mais qu'il faut penser à écrire.
+        """
+        import pathlib
+        import re
+
+        racine = pathlib.Path(__file__).resolve().parent.parent / "app"
+
+        # ⚠️ La SEULE exemption, et elle est nommée : ce module écrit le champ
+        # `prenom` d'un salarié dans SA colonne de base. Ce n'est pas une
+        # salutation, et y appliquer un repli sur le nom rangerait un faux.
+        EXEMPTES = {"contextes/social/adaptateurs/sortant/depots.py"}
+
+        # ⚠️ Une CHAÎNE d'attributs est acceptée, tant qu'elle finit par
+        # `appellation` : `dossier.fondateur.appellation` est aussi juste que
+        # `compte.appellation`. La première version n'admettait qu'un point, et
+        # refusait un appelant correct — une garde qui refuse le bon geste finit
+        # par se faire contourner.
+        autorises = re.compile(r'"prenom":\s*([\w.]+\.appellation|demande\.nom)\b')
+        fautifs = []
+        for fichier in sorted(racine.rglob("*.py")):
+            chemin = str(fichier.relative_to(racine))
+            if chemin in EXEMPTES:
+                continue
+            for numero, ligne in enumerate(fichier.read_text().splitlines(), 1):
+                if '"prenom":' not in ligne or autorises.search(ligne):
+                    continue
+                fautifs.append(f"{chemin}:{numero} — {ligne.strip()}")
+
+        assert not fautifs, (
+            "Ces appelants composent la salutation à la main. Un compte sans "
+            "prénom leur fera écrire « Bonjour  ». Employez "
+            "`compte.appellation`.\n  " + "\n  ".join(fautifs)
+        )
+
+
+class TestAucunIdentifiantTechnique:
+    """⚠️ NI À L'OBJET, NI DANS LE CORPS.
+
+    L'accusé de dépôt portait « Votre demande dos-cf776b28a0db44b4 nous est bien
+    parvenue ». Vingt caractères hexadécimaux qu'aucune cliente ne lit, ne
+    retient ni ne dicte au téléphone, à l'endroit précis où le message doit se
+    reconnaître d'un coup d'œil. Vu en lisant la boîte d'une recette de bout en
+    bout : aucun test ne regardait ce que l'objet devenait une fois rendu.
+
+    ⚠️ **ON MESURE LE RENDU, PAS LE GABARIT.** `{reference}` dans le gabarit ne
+    dit pas ce qu'il vaudra : c'est la substitution qui révèle l'identifiant.
+
+    Ce qui reste permis : un numéro fait pour être dicté, comme `PRO-2026-0049`.
+    Ce qui ne l'est pas : un préfixe technique suivi d'hexadécimal.
+    """
+
+    #: Un préfixe alphabétique court, éventuellement redoublé (`CRE-dos-`), suivi
+    #: d'au moins huit caractères hexadécimaux. C'est la LONGUEUR qui distingue un
+    #: identifiant interne d'un mot ordinaire porteur d'un tiret.
+    TECHNIQUE = re.compile(r"\b[a-zA-Z]{3,6}-(?:[a-z]{3}-)?[0-9a-f]{8,}\b")
+
+    def test_aucun_objet_rendu_n_en_porte(self):
+        fautifs = [
+            (code, rendre(g, CONTEXTES_DES_APPELANTS[code]).objet)
+            for code, g in CATALOGUE.items()
+            if self.TECHNIQUE.search(rendre(g, CONTEXTES_DES_APPELANTS[code]).objet)
+        ]
+        assert not fautifs, "identifiant technique à l'objet :\n  " + "\n  ".join(
+            f"{code} : {objet}" for code, objet in fautifs
+        )
+
+    def test_aucun_corps_rendu_n_en_porte_non_plus(self):
+        """⚠️ **L'OBJET N'ÉTAIT QU'UNE MOITIÉ DU GESTE.**
+
+        La première version de cette garde ne regardait que l'objet. Le corps de
+        l'accusé de dépôt gardait « Elle porte la référence dos-cf776b28a0db44b4
+        ; conservez-la, elle nous permet de retrouver votre dossier
+        immédiatement. »
+
+        C'est une promesse que le format ne tient pas : seize caractères
+        hexadécimaux ne se dictent pas au téléphone, ne se notent pas sans faute
+        et ne se relisent pas. Et c'était inutile, la phrase suivante disant que
+        le cabinet rappelle la cliente sur son numéro.
+
+        ⚠️ Le HTML est contrôlé aussi : l'échappement peut couper une chaîne
+        autrement, et ce qui passe en texte ne passe pas forcément en HTML.
+        """
+        fautifs = []
+        for code, g in CATALOGUE.items():
+            rendu = rendre(g, CONTEXTES_DES_APPELANTS[code])
+            for ou, corps in (("texte", rendu.texte), ("html", rendu.html)):
+                trouves = set(self.TECHNIQUE.findall(corps))
+                fautifs += [f"{code} ({ou}) : {x}" for x in sorted(trouves)]
+        assert not fautifs, "identifiant technique dans un corps :\n  " + "\n  ".join(
+            fautifs
+        )
+
+    def test_la_garde_reconnait_bien_ce_qu_elle_cherche(self):
+        """⚠️ Une garde qui ne se déclenche jamais ne garde rien.
+
+        On lui montre la chaîne exacte qui a motivé ce fichier, et deux objets du
+        parcours qui doivent rester permis.
+        """
+        assert self.TECHNIQUE.search("Votre demande dos-cf776b28a0db44b4 nous est parvenue")
+        assert self.TECHNIQUE.search("Dossier CRE-dos-cf776b28a0db44b4 ouvert")
+        assert not self.TECHNIQUE.search("Votre proposition PRO-2026-0049 : 505 000 FCFA")
+        assert not self.TECHNIQUE.search("Votre dossier NGONO COUTURE SARL est ouvert")
+
+
+class TestAucunTiretCadratin:
+    """Le cabinet n'en veut nulle part dans ce qu'un client lit.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    LA RÈGLE EXISTAIT, ELLE NE COUVRAIT QUE LE DOCUMENT DE CONCEPTION
+
+    La chaîne d'intégration refuse depuis longtemps le tiret cadratin dans
+    `architecture-multitenant-cga.html`, avec sa raison : « il s'y glisse sans
+    qu'on le voie en relecture, il ressemble à un trait d'union un peu long ».
+
+    Le 30 septembre, le cabinet l'a étendue à **tous les messages**. Mesuré :
+    trente-sept en sortaient, dont trente-quatre venaient du pied de page et de
+    son séparateur, répétés sur les dix-huit gabarits.
+
+    ⚠️ **ON MESURE LE RENDU, PAS LE SOURCE.** Un gabarit peut porter un cadratin
+    dans son commentaire sans que le client le voie ; et il peut en recevoir un
+    par une valeur interpolée, que la lecture du source ne montrerait pas. Ce
+    sont les octets envoyés qui comptent.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def test_aucun_gabarit_n_en_envoie_dans_son_texte(self):
+        fautifs = []
+        for code, gabarit_ in CATALOGUE.items():
+            rendu = rendre(gabarit_, CONTEXTES_DES_APPELANTS[code])
+            for ligne in rendu.texte.splitlines():
+                if "—" in ligne:
+                    fautifs.append(f"{code} · {ligne.strip()}")
+        assert not fautifs, "tiret cadratin dans le texte reçu :\n  " + "\n  ".join(fautifs)
+
+    def test_ni_dans_son_html(self):
+        fautifs = [
+            code
+            for code, gabarit_ in CATALOGUE.items()
+            if "—" in rendre(gabarit_, CONTEXTES_DES_APPELANTS[code]).html
+        ]
+        assert not fautifs, f"tiret cadratin dans le HTML de : {fautifs}"
+
+    def test_ni_dans_un_objet(self):
+        """⚠️ L'objet est la SEULE ligne que tout le monde lit, y compris ceux qui
+        n'ouvrent pas le message."""
+        fautifs = [code for code, g in CATALOGUE.items() if "—" in g.objet]
+        assert not fautifs, f"tiret cadratin dans l'objet de : {fautifs}"
+
+    def test_ni_dans_les_modeles_whatsapp(self):
+        """Le même client, l'autre canal."""
+        import pathlib
+
+        import yaml
+
+        racine = pathlib.Path(__file__).resolve().parent.parent
+        dossier = racine / "Docs" / "referentiel" / "messagerie" / "modeles"
+        fautifs = [
+            m["nom"]
+            for f in sorted(dossier.glob("*.yaml"))
+            if "—" in (m := yaml.safe_load(f.read_text()))["corps"]
+        ]
+        assert not fautifs, f"tiret cadratin dans le corps de : {fautifs}"
+
+    def test_la_signature_emploie_le_separateur_des_courriels(self):
+        """⚠️ `-- ` est posé par la RFC 3676 : les clients de messagerie le
+        reconnaissent et replient ce qui suit. Un cadratin ne leur dit rien."""
+        rendu = rendre(CATALOGUE["compte.invitation"], CONTEXTES_DES_APPELANTS["compte.invitation"])
+        assert "\n-- \n" in rendu.texte
+        assert "agrément MINFI/DGI n° 00000048" in rendu.texte

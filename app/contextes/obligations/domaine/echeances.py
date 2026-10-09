@@ -210,6 +210,7 @@ def calculer_echeance(
     fin_de_periode: date,
     centre: CentreRattachement,
     cloture_exercice: date | None = None,
+    debut_de_periode: date | None = None,
 ) -> date:
     """La date limite de cette obligation, pour cette période et ce dossier.
 
@@ -242,6 +243,32 @@ def calculer_echeance(
             type_obligation.mois_civil or 1,
             type_obligation.jour_civil or 1,
         )
+        # ─────────────────────────────────────────────────────────────────────
+        # ⚠️ UNE ÉCHÉANCE NE PRÉCÈDE PAS LE DÉBUT DE LA PÉRIODE QU'ELLE COUVRE.
+        #
+        # La date statutaire d'une obligation annuelle civile est fixe — la
+        # patente se règle en début d'année, pour l'année. Appliquée telle
+        # quelle à une entreprise créée en cours d'année, elle tombe **avant sa
+        # naissance**.
+        #
+        # Constaté le 28 septembre, sur l'écran d'une fondatrice dont la société
+        # avait été immatriculée le jour même :
+        #
+        #     Contribution des patentes — En retard de 212 jours
+        #
+        # Elle n'existait pas en février. Ce produit s'interdit de tranquilliser
+        # à tort ; alarmer à tort est la même faute retournée, et celle-ci
+        # accueille la cliente dès sa première connexion.
+        #
+        # ⚠️ ON NE FABRIQUE AUCUN DÉLAI. Le délai légal accordé à une entreprise
+        # créée en cours d'année n'est pas au référentiel, et l'inventer — deux
+        # mois, trente jours — serait écrire une règle fiscale dans du code.
+        # L'échéance est simplement ramenée au **premier jour où l'obligation
+        # peut exister**, c'est-à-dire au début de la période. Elle est due, elle
+        # n'est pas en retard.
+        # ─────────────────────────────────────────────────────────────────────
+        if debut_de_periode is not None and base < debut_de_periode:
+            base = debut_de_periode
 
     else:  # PONCTUELLE
         base = fin_de_periode

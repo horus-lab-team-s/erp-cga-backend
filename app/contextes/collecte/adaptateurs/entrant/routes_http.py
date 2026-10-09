@@ -22,6 +22,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from starlette.concurrency import run_in_threadpool
 
 from app.contextes.collecte.adaptateurs.sortant.depots_memoire import (
     PieceIntrouvable,
@@ -545,12 +546,43 @@ async def deposer_fichier(
     fichier: UploadFile = File(..., description="Le document numérisé ou photographié"),
 ) -> DepotFichier:
     exiger_dossier(acces, Permission.DEPOSER_PIECE, entreprise)
+    return await _ranger_le_fichier(fichier)
 
+
+async def _ranger_le_fichier(fichier: UploadFile) -> DepotFichier:
+    """Lit, contrôle et range. **Partagé par les trois portes**, et c'est l'objet.
+
+    ⚠️ Les gardes recopiées dans trois routes divergent : l'une reçoit une
+    correction, les autres non, et c'est la moins surveillée qui reste ouverte.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LA LECTURE EST ASYNCHRONE, LE RANGEMENT NE L'EST PAS
+
+    Une route déclarée `async` s'exécute **sur la boucle d'événements**, qui est le
+    moteur unique du serveur. La lecture du corps y est à sa place : elle attend le
+    réseau et rend la main. Le rangement, lui, ne rend rien — il hache jusqu'à
+    vingt mégaoctets et les écrit sur disque. Tenu sur la boucle, il figeait toutes
+    les autres requêtes pendant ce temps.
+
+    Le même défaut, sous sa forme la plus grave, a immobilisé l'API de démonstration
+    le 30 septembre 2026 : voir `tests/test_boucle_non_bloquee.py`.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
     # ⚠️ Lecture bornée. `await fichier.read()` sans borne charge en mémoire
     # tout ce que l'appelant envoie — un seul envoi de plusieurs gigaoctets
     # suffit alors à tuer le processus. On lit une unité de plus que la limite,
     # pour distinguer « exactement à la limite » de « au-delà ».
     contenu = await fichier.read(TAILLE_MAXIMALE + 1)
+    return await run_in_threadpool(_ranger_le_contenu, contenu, fichier.filename)
+
+
+def _ranger_le_contenu(contenu: bytes, nom_declare: str | None) -> DepotFichier:
+    """Contrôle et range ce qui a été lu. **Bloquant, donc jamais sur la boucle.**
+
+    Les refus restent des `HTTPException` : levée dans un fil de la réserve, elle
+    remonte au cadre exactement comme depuis la boucle, et le client reçoit le même
+    code. Les déplacer ici ne change donc rien à l'API.
+    """
     if len(contenu) > TAILLE_MAXIMALE:
         raise HTTPException(
             status_code=413,
@@ -585,9 +617,67 @@ async def deposer_fichier(
         # ⚠️ Le nom est **assaini** : il est choisi par l'appelant et finira dans
         # un en-tête `Content-Disposition`. Un nom porteur de retour chariot y
         # injecterait un en-tête de son choix.
-        nom_fichier=_nom_assaini(fichier.filename),
+        nom_fichier=_nom_assaini(nom_declare),
         deja_present=deja,
     )
+
+
+@routeur.post(
+    "/fichiers-scelles",
+    summary="Déposer un fichier depuis un lien signé, sans compte",
+    status_code=201,
+    responses={
+        404: {"description": "Lien invalide"},
+        413: {"description": "Fichier trop volumineux"},
+        415: {"description": "Type de document refusé"},
+    },
+)
+async def deposer_fichier_scelle(
+    reference: str = Query(..., description="La référence que le lien désigne"),
+    s: str = Query("", description="Le sceau du lien reçu par courriel"),
+    fichier: UploadFile = File(..., description="Le document photographié"),
+) -> DepotFichier:
+    """Le même dépôt que `/fichiers`, ouvert par un sceau plutôt qu'une session.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI UNE SECONDE PORTE, ET NON UN ASSOUPLISSEMENT DE LA PREMIÈRE
+
+    `/fichiers` exige `DEPOSER_PIECE` **sur un NIU**. Une société en création n'en
+    a pas : le sien n'existera qu'à l'immatriculation. Élargir cette route-là
+    aurait obligé à y rendre le NIU facultatif, c'est-à-dire à affaiblir la garde
+    de toutes les pièces du cabinet pour un cas qui n'est pas le leur.
+
+    ⚠️ **CE QUE LE SCEAU PROUVE.** Que le cabinet a émis ce lien : nul ne le
+    calcule sans la clé. Il ne prouve pas qui le présente — même arbitrage que
+    pour l'acceptation d'une proforma, et même raison : demander un mot de passe
+    pour envoyer la photo d'une carte d'identité ferait abandonner la moitié des
+    dossiers.
+
+    ⚠️ **LA COLLECTE NE SAIT PAS CE QUE `reference` DÉSIGNE**, et c'est voulu. Le
+    graphe ne l'autorise pas à voir la Création d'entreprise. Elle vérifie un
+    sceau et range un fichier ; c'est le contexte qui a émis le lien qui saura
+    quoi faire de l'empreinte rendue.
+
+    ⚠️ **LES MÊMES GARDES QUE L'AUTRE PORTE, SANS EXCEPTION** : taille bornée à la
+    lecture, type déterminé par le contenu et non par l'extension, nom assaini.
+    Une porte ouverte sans session est la dernière où l'on voudrait les relâcher.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    from app.infrastructure.config import configuration
+    from app.partage.sceau import SceauInvalide, exiger_le_sceau
+
+    try:
+        exiger_le_sceau(
+            reference,
+            s,
+            secret=configuration().cle_chiffrement or "secret-de-developpement",
+        )
+    except SceauInvalide as refus:
+        # ⚠️ 404 et non 403 : un refus qui distingue « lien faux » de « référence
+        # inconnue » permettrait d'énumérer les dossiers en lisant les réponses.
+        raise HTTPException(status_code=404, detail=str(refus)) from refus
+
+    return await _ranger_le_fichier(fichier)
 
 
 @routeur.get(
@@ -636,6 +726,112 @@ def telecharger_fichier(acces: AccesRequis, identifiant: str) -> Response:
             # ⚠️ Un justificatif n'a rien à faire dans un cache partagé : il est
             # nominatif, et le cloisonnement ne vaut plus rien si un mandataire
             # le sert à la requête suivante.
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@routeur.post(
+    "/fichiers-de-formalite",
+    summary="Déposer le fichier d'une pièce de formalité, côté cabinet",
+    status_code=201,
+    responses={
+        403: {"description": "Habilitation insuffisante"},
+        413: {"description": "Fichier trop volumineux"},
+        415: {"description": "Type de document refusé"},
+    },
+)
+async def deposer_fichier_de_formalite(
+    acces: AccesRequis,
+    fichier: UploadFile = File(..., description="Le document reçu du client"),
+) -> DepotFichier:
+    """Le même dépôt, pour un collaborateur qui reçoit une pièce hors du portail.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ CE QUE LE CABINET N'AVAIT PAS, ET QUE LA CLIENTE AVAIT.
+
+    Depuis le pas 141, la fondatrice dépose ses pièces par son lien signé, et le
+    document est rangé. Un collaborateur qui reçoit la même pièce autrement — par
+    messagerie, au guichet, par courriel — ne pouvait que **cocher une case** :
+    `POST /creations/{reference}/pieces` accepte une empreinte, et rien ne la
+    produisait de son côté.
+
+    Le dossier portait donc deux sortes de pièces reçues : celles qu'elle avait
+    envoyées, avec leur document, et celles que le cabinet avait cochées, sans.
+    Six mois plus tard, on ne sait plus laquelle est laquelle.
+
+    ⚠️ **PAS DE NIU, ET C'EST TOUT LE PROBLÈME.** `/fichiers` exige
+    `DEPOSER_PIECE` **sur un dossier d'entreprise**, ce qu'une société en
+    création n'est pas encore. Cette porte-ci demande la permission qui gouverne
+    les formalités, sans périmètre de dossier : il n'y en a pas.
+
+    ⚠️ **UNE TROISIÈME PORTE, ET LE MÊME CORPS.** Les trois partagent
+    `_ranger_le_fichier` : taille bornée, type déterminé par le contenu, nom
+    assaini. Des gardes recopiées divergent, et c'est la moins surveillée qui
+    reste ouverte.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger(acces, Permission.SUIVRE_FORMALITE)
+    return await _ranger_le_fichier(fichier)
+
+
+@routeur.get(
+    "/fichiers/{empreinte}",
+    summary="Le document d'une pièce sans dossier, par son empreinte",
+    responses={404: {"description": "Aucun document sous cette empreinte"}},
+)
+def telecharger_par_empreinte(acces: AccesRequis, empreinte: str) -> Response:
+    """Rend un fichier que le magasin détient, sans passer par une pièce.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI CETTE SECONDE PORTE EXISTE
+
+    `/pieces/{identifiant}/fichier` demande un **identifiant de pièce**, donc une
+    pièce rattachée à un dossier d'entreprise, donc un NIU. Les pièces d'une
+    **formalité de création** n'en ont pas : la société n'existe pas encore, et
+    `PieceConstitution` ne garde que l'empreinte du fichier au magasin.
+
+    Conséquence, constatée le 30 septembre en relisant le parcours : la
+    fondatrice déposait sa carte d'identité par son lien signé, le fichier
+    arrivait au magasin, l'empreinte était inscrite à son dossier — et
+    **personne ne pouvait l'ouvrir**. La fonction était à moitié bâtie.
+
+    ⚠️ **L'EMPREINTE N'EST PAS UNE AUTORISATION.** Elle est imprévisible, mais on
+    n'appuie pas un contrôle d'accès sur l'imprévisibilité d'un identifiant. La
+    route exige une session et `LIRE_PIECE`, comme sa voisine. Ce qu'elle ne peut
+    pas faire, c'est vérifier un périmètre de dossier : il n'y en a pas encore.
+    C'est pourquoi elle ne sert **que** ce que le magasin détient déjà, et
+    n'apprend rien sur ce qu'elle ne trouve pas.
+
+    ⚠️ Les mêmes en-têtes que l'autre porte, sans exception : `attachment` et
+    `nosniff` empêchent qu'un fichier déposé s'exécute dans le domaine du
+    cabinet, et `no-store` qu'un justificatif nominatif dorme dans un cache
+    partagé.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger(acces, Permission.LIRE_PIECE)
+    from app.contextes.collecte.adaptateurs.sortant.magasin_local import CleInvalide
+
+    magasin = magasin_fichiers()
+    try:
+        contenu = magasin.lire(empreinte)
+    # ⚠️ `CleInvalide` AVEC LES AUTRES, et non à part. Le magasin refuse déjà toute
+    # clé qui n'est pas une empreinte SHA-256 ; sans cette reprise, une empreinte
+    # tronquée rendait **500** au lieu de 404 — constaté en la coupant à la main.
+    #
+    # Une clé mal formée et une clé inconnue reçoivent la même réponse : distinguer
+    # les deux dirait à un curieux que sa forme est bonne, et lui apprendrait par
+    # où chercher.
+    except (CleInvalide, KeyError, FileNotFoundError) as absent:
+        raise HTTPException(
+            status_code=404, detail="Le document est introuvable au magasin."
+        ) from absent
+    return Response(
+        content=contenu,
+        media_type=magasin.type_mime(empreinte),
+        headers={
+            "Content-Disposition": f'attachment; filename="{_nom_assaini(empreinte[:16])}"',
+            "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
         },
     )
@@ -751,7 +947,7 @@ def _prevenir_les_adherents(demande: DemandePiece, reference: str | None) -> int
             "piece.rectificative_demandee",
             destinataire=compte.courriel,
             contexte={
-                "prenom": compte.prenom,
+                "prenom": compte.appellation,
                 "reference": reference or demande.piece_a_rectifier or "",
                 "motif": demande.motif,
             },

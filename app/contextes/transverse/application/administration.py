@@ -163,6 +163,123 @@ def inviter_collaborateur(
     return compte, jeton, secret
 
 
+#: Ce que le journal d'audit inscrit comme acteur quand personne n'est là.
+#:
+#: ⚠️ **Un acteur nommé, jamais un champ vide.** L'ouverture d'un tenant est
+#: déclenchée par un événement, pas par un humain : il n'y a ni session, ni
+#: compte, ni collaborateur derrière. Laisser l'acteur vide rendrait la ligne
+#: d'audit inexploitable — on ne saurait pas si l'information manque ou si le
+#: geste vient du système.
+ACTEUR_OUVERTURE = "système:ouverture-de-tenant"
+
+
+def creer_l_administrateur_d_un_tenant(
+    *,
+    locataire: str,
+    identifiant_compte: str,
+    identifiant_habilitation: str,
+    identifiant_jeton: str,
+    courriel: str,
+    nom: str,
+    prenom: str,
+    depuis: date,
+    comptes: DepotComptes,
+    habilitations: DepotHabilitations,
+    jetons: DepotJetons,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+    telephone: str | None = None,
+) -> tuple[Compte, Jeton, str] | None:
+    """Le PREMIER administrateur d'un tenant neuf, créé par la saga d'ouverture.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **POURQUOI CETTE FONCTION EXISTE À CÔTÉ DE `inviter_collaborateur`**
+
+    Celle-ci lui est presque identique, et la différence est tout le sujet :
+    `inviter_collaborateur` exige un `Acces` porteur de `GERER_COMPTES`. Or, dans
+    un tenant qui vient de naître, **personne ne porte cette permission** : le
+    compte qui la porterait est précisément celui qu'on crée.
+
+    C'est le problème d'amorçage classique, et le projet le résout déjà ainsi
+    pour le premier cabinet — `amorcage.py` écrit les comptes directement.
+
+    ⚠️ **ELLE NE RECOPIE AUCUNE RÈGLE.** Adresse libre, enregistrement de
+    l'habilitation, émission du jeton : les trois passent par les mêmes
+    fonctions que l'invitation ordinaire. Recopier leur corps ici produirait une
+    seconde version des invariants, qui divergerait au premier changement.
+
+    ⚠️ **ELLE EST IDEMPOTENTE, ET C'EST NON NÉGOCIABLE.**
+
+    Le relais publie au moins une fois : un rappel d'opérateur rejoué, une
+    reprise après incident, deux instances derrière un répartiteur. Sans cette
+    garde, chaque arrivée créerait un second compte et enverrait un second lien
+    d'activation au client — qui se demanderait lequel est le bon.
+
+    Elle rend donc `None` quand le compte existe déjà, au lieu de lever : la saga
+    doit pouvoir constater que le travail est fait.
+
+    ⚠️ **LE RÔLE EST `ADMINISTRATEUR`, ET LA PORTÉE EST TOTALE.** C'est le
+    titulaire du tenant : il devra créer ses propres collaborateurs et leur
+    donner des portées restreintes. Lui en donner une le rendrait incapable
+    d'ouvrir son cabinet.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    if comptes.par_courriel(courriel.strip().lower()) is not None:
+        # Rejeu : le compte est là, son lien est parti. Rien à faire.
+        return None
+
+    compte = Compte(
+        identifiant=identifiant_compte,
+        courriel=courriel,
+        nom=nom,
+        prenom=prenom,
+        locataire=locataire,
+        telephone=telephone,
+        etat=EtatCompte.EN_ATTENTE_ACTIVATION,
+        cree_le=a_l_instant,
+    )
+    comptes.enregistrer(compte)
+    journal.ajouter(
+        horodatage=a_l_instant,
+        acteur=ACTEUR_OUVERTURE,
+        action="compte.cree",
+        objet_type="compte",
+        objet_id=compte.identifiant,
+        apres={
+            "courriel": compte.courriel,
+            "role_initial": Role.ADMINISTRATEUR,
+            # ⚠️ Écrit dans l'audit : c'est ce qui explique, deux ans plus tard,
+            # pourquoi ce compte n'a été créé par personne.
+            "motif": "premier administrateur, à l'ouverture du tenant",
+        },
+    )
+
+    habilitation = Habilitation(
+        identifiant=identifiant_habilitation,
+        compte=compte.identifiant,
+        role=Role.ADMINISTRATEUR,
+        # `None` : tout le portefeuille. Voir l'en-tête — une portée restreinte
+        # empêcherait le titulaire d'ouvrir son propre cabinet.
+        portee=None,
+        debut=depuis,
+        motif=MotifHabilitation.RECRUTEMENT,
+        accordee_par=ACTEUR_OUVERTURE,
+        precision="Titulaire du tenant, créé à l'ouverture.",
+    )
+    _enregistrer_habilitation(habilitation, habilitations, journal, ACTEUR_OUVERTURE, a_l_instant)
+
+    jeton, secret = emettre_jeton(
+        compte,
+        TypeJeton.INVITATION,
+        identifiant_jeton=identifiant_jeton,
+        jetons=jetons,
+        journal=journal,
+        a_l_instant=a_l_instant,
+        emis_par=ACTEUR_OUVERTURE,
+    )
+    return compte, jeton, secret
+
+
 def ouvrir_acces_adherent(
     *,
     identifiant_compte: str,

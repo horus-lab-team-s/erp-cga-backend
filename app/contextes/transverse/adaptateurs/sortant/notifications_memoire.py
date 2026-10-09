@@ -44,6 +44,20 @@ __all__ = ["CODES_MESSAGES", "MessageRetenu", "ServiceNotificationMemoire"]
 CODES_MESSAGES: dict[str, str] = {
     "compte.invitation": "Invitation d'un collaborateur — lien valable 14 jours",
     "compte.activation": "Bienvenue, définissez votre mot de passe — lien 7 jours",
+    # Pas 140 : entre son règlement et son immatriculation, elle n'avait rien.
+    "creation.dossier_ouvert": (
+        "Dossier de formalité ouvert, avec le lien de suivi qui n'expire pas"
+    ),
+    # Pas 138 : elle engageait son entreprise et ne recevait rien.
+    "proforma.acceptation": "Accusé d'acceptation d'une proposition commerciale",
+    # Pas 134 : entre le dépôt du formulaire et le premier appel, la cliente
+    # n'avait aucune trace écrite de son geste.
+    "demande.accuse_de_depot": "Accusé de réception d'une demande de contact",
+    # Pas 133 : une fondatrice n'a pas souscrit, elle a fait immatriculer sa
+    # société — et son accès s'ouvre le jour du NIU, pas celui du paiement.
+    "compte.activation_creation": (
+        "Votre société est immatriculée, définissez votre mot de passe — lien 7 jours"
+    ),
     "compte.reinitialisation": "Réinitialisation du mot de passe — lien 2 heures",
     "compte.mot_de_passe_change": "Confirmation d'un changement de mot de passe",
     "compte.suspendu": "Votre accès a été suspendu",
@@ -55,6 +69,8 @@ CODES_MESSAGES: dict[str, str] = {
     "compte.second_facteur_enrole": "Un second facteur a été enrôlé sur votre compte",
     "compte.second_facteur_reinitialise": "Votre second facteur a été réinitialisé",
     "relance.proforma": "Relance d'une proposition transmise et sans réponse",
+    # La proposition elle-même, envoyée au client dès que le responsable l'a émise.
+    "proforma.envoi": "Votre proposition est prête, avec le lien pour la consulter",
     "piece.rectificative_demandee": "Le cabinet demande une facture rectificative",
     # Pas 111 : la relance des pièces qui manquent au mois, composée par le comptable.
     "piece.relance": "Les pièces qui manquent pour terminer votre mois",

@@ -94,6 +94,20 @@ def engager(
     principale = _ligne_principale(propose)
     service = service_par_code(services.charger(aujourd_hui), principale.service)
 
+    # ⚠️ AUCUN PAIEMENT SUR UN PRIX QUE LE GÉRANT N'A PAS FIXÉ.
+    #
+    # Le montant débité est celui du devis, recopié du barème le jour du devis ;
+    # le devis a recopié en même temps si ce prix était arrêté. Un prix encore
+    # « à valider » vient du catalogue de démonstration : l'encaisser engagerait
+    # le cabinet sur un montant que personne chez lui n'a décidé.
+    for ligne in propose.lignes:
+        if ligne.chiffree and not ligne.prix_arrete:
+            raise EngagementRefuse(
+                f"le tarif de « {ligne.libelle} » n'a pas encore été arrêté par le "
+                "cabinet : il s'affiche à titre indicatif et ne se règle pas en ligne. "
+                "Le cabinet vous contacte pour vous confirmer son prix."
+            )
+
     dossier = niu or propose.prospect.niu
     if service.ouvre_un_dossier and not dossier:
         raise EngagementRefuse(

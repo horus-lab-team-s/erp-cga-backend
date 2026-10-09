@@ -116,7 +116,7 @@ def lire_les_acces(acces: AccesRequis, niu: str) -> list[AccesDUnAdherent]:
     return [
         AccesDUnAdherent(
             compte=c.identifiant,
-            nom=f"{c.prenom} {c.nom}",
+            nom=c.nom_affiche,
             courriel=c.courriel,
             telephone=c.telephone,
             etat=c.etat,
@@ -194,7 +194,7 @@ def renvoyer_un_lien(
         # ⚠️ L'adresse du compte, jamais une adresse reçue : voir l'en-tête du domaine.
         destinataire=titulaire.courriel,
         contexte={
-            "prenom": titulaire.prenom,
+            "prenom": titulaire.appellation,
             "denomination": dossier.denomination,
             "par": acces.nom_complet,
             "geste": geste,

@@ -42,6 +42,8 @@ from collections.abc import Mapping
 from typing import Any
 
 __all__ = [
+    "ETAPES_SANS_OBJET",
+    "manques_reels",
     "CLE_SUBSTITUEES",
     "avec_substitution",
     "ouverture_reellement_complete",
@@ -70,11 +72,40 @@ def avec_substitution(contexte: Mapping[str, Any], etape: str) -> Mapping[str, A
     return {**contexte, CLE_SUBSTITUEES: tuple(deja)}
 
 
+#: Les étapes dont la substitution **n'empêche pas** le client d'entrer.
+#:
+#: ⚠️ `SCHEMA_CREE` EST LÀ PARCE QU'ELLE N'A PLUS D'OBJET.
+#:
+#: La décision D3 — un schéma PostgreSQL par tenant — a été **révisée** après
+#: lecture du code : le cloisonnement est porté par une colonne `locataire` et
+#: par les politiques de lignes de PostgreSQL. Voir
+#: `Docs/architecture/12-socle-multi-tenant.md`.
+#:
+#: Il n'y a donc aucun schéma à créer, et l'étape est substituée sur **toutes**
+#: les installations. La compter comme un manque rendrait `utilisable` faux pour
+#: l'éternité : l'écran dirait « l'espace n'est pas utilisable » à un client qui a
+#: son compte, son lien et son stockage. C'est le contraire du but.
+#:
+#: ⚠️ L'étape n'est pas RETIRÉE de `EtapeOuverture` : les contextes de saga déjà
+#: écrits en base portent `SCHEMA_CREE` dans `franchies`, et l'ôter demanderait
+#: une reprise de données. C'est une décision de conception à prendre avec le
+#: cabinet, pas un effet de bord.
+ETAPES_SANS_OBJET: frozenset[str] = frozenset({"SCHEMA_CREE"})
+
+
+def manques_reels(contexte: Mapping[str, Any]) -> tuple[str, ...]:
+    """Les étapes substituées qui empêchent VRAIMENT le client d'entrer."""
+    return tuple(e for e in substituees(contexte) if e not in ETAPES_SANS_OBJET)
+
+
 def ouverture_reellement_complete(contexte: Mapping[str, Any]) -> bool:
     """Le tenant est-il utilisable, et pas seulement marqué actif ?
 
     ⚠️ **Ce n'est pas la même question que « la saga est-elle terminée ».** Une
-    saga peut se terminer avec trois étapes substituées : le tenant existe en
-    base, son sous-domaine répond, et il n'a ni schéma, ni stockage, ni compte.
+    saga peut se terminer avec des étapes substituées : le tenant existe en base,
+    son sous-domaine répond, et il n'a ni stockage ni compte administrateur.
+
+    ⚠️ **Les étapes sans objet ne comptent pas comme des manques.** Voir
+    `ETAPES_SANS_OBJET` : les compter rendrait `utilisable` faux pour l'éternité.
     """
-    return not substituees(contexte)
+    return not manques_reels(contexte)

@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 
 from app.contextes.souscription.adaptateurs.sortant.catalogue_modeles import (
     CatalogueDeModeles,
@@ -212,8 +213,33 @@ class TestModele:
         """Et non le nombre de numéros distincts. Un corps qui cite {{1}} et
         {{3}} en attend trois, dont un inutilisé : la plateforme les compte
         ainsi."""
-        assert _modele(corps="a {{1}} b {{3}}").parametres_attendus == 3
+        # ⚠️ Une phrase après le dernier emplacement : le corps ne peut plus se
+        # terminer par un « {{n}} », la plateforme le refusant à la soumission.
+        # Le propos de ce cas est le COMPTAGE, pas le format.
+        assert _modele(corps="a {{1}} b {{3}} c").parametres_attendus == 3
         assert _modele(corps="sans emplacement").parametres_attendus == 0
+
+    def test_un_corps_qui_finit_par_un_emplacement_est_refuse(self):
+        """⚠️ LE REFUS QU'ON NE VOYAIT QU'À LA SOUMISSION.
+
+        `cga_relance_proforma` finissait sur « {{4}} » seul. La plateforme aurait
+        refusé le modèle — des semaines après son écriture, dans son vocabulaire à
+        elle, à quelqu'un qui n'avait pas écrit le texte. Relevé le 29 septembre
+        en relisant les sept modèles un à un, ce que rien n'imposait de faire.
+        """
+        with pytest.raises(ValidationError) as echec:
+            _modele(corps="Votre proforma est prête : {{1}}")
+        assert "SE TERMINE" in str(echec.value)
+
+    def test_un_corps_qui_commence_par_un_emplacement_est_refuse(self):
+        with pytest.raises(ValidationError) as echec:
+            _modele(corps="{{1}}, votre dossier avance.")
+        assert "COMMENCE" in str(echec.value)
+
+    def test_deux_emplacements_colles_sont_refuses(self):
+        """Le client lirait deux valeurs accolées, sans séparateur."""
+        with pytest.raises(ValidationError):
+            _modele(corps="Bonjour {{1}}{{2}}, votre dossier avance.")
 
     def test_il_rend_son_corps_rempli(self):
         rendu = _modele().rendre(("Abena", "la création d'une SARL"))
@@ -476,6 +502,16 @@ class TestCatalogueDuReferentiel:
     def catalogue(self):
         return CatalogueDeModeles.depuis(CATALOGUE)
 
+    def test_les_sept_tiennent_le_format_de_la_plateforme(self, catalogue):
+        """⚠️ La contre-épreuve qui donne sa valeur à la garde de forme.
+
+        Les trois cas de `TestModele` prouvent qu'elle refuse ; celui-ci prouve
+        qu'elle laisse passer ce que le cabinet a réellement écrit. Une garde qui
+        refuserait tout serait verte là-bas et rendrait le référentiel
+        inchargeable — ce que le chargement même vérifie ici.
+        """
+        assert len(catalogue.tous()) == 7
+
     def test_les_sept_modeles_du_document_sont_la(self, catalogue):
         """Sept modèles à faire approuver, nommés par le document de conception.
         En oublier un se découvrirait au moment de s'en servir, hors fenêtre,
@@ -596,7 +632,7 @@ class TestLeFilFaitAvancerLeDossier:
             deposee_le=T0,
             nom="Abena Ndzana",
             telephone="699112233",
-            service_souhaite="creation-sarl",
+            service_souhaite="CREATION",
             canal_prefere=Canal.WHATSAPP,
             consentement=Consentement(
                 accorde=True, recueilli_le=T0, version_du_texte="v1"
@@ -678,7 +714,7 @@ class TestLeFilFaitAvancerLeDossier:
             deposee_le=T0,
             nom="Abena Ndzana",
             telephone="699112233",
-            service_souhaite="creation-sarl",
+            service_souhaite="CREATION",
             canal_prefere=Canal.WHATSAPP,
             consentement=Consentement(
                 accorde=True, recueilli_le=T0, version_du_texte="v1"

@@ -118,6 +118,83 @@ def _sonder_la_base() -> str | None:
 
 MOTIF_INDISPONIBLE = _sonder_la_base()
 
+#: La clé du verrou de session. Arbitraire, mais **stable** : deux exécutions
+#: doivent demander la même, sans quoi le verrou ne sert à rien.
+_CLE_DU_VERROU = 7_260_930_149
+
+
+def pytest_configure(config):  # noqa: ARG001
+    """Prend un verrou exclusif sur la base d'essai, pour toute la session.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **DEUX SUITES SUR LA MÊME BASE SE DÉTRUISENT, ET SILENCIEUSEMENT.**
+
+    `moteur_test` fait `drop_all` puis `create_all` **à chaque cas**. C'est voulu
+    et c'est sain pour une suite seule : chaque cas part d'un schéma neuf. Mais
+    deux exécutions simultanées se démolissent mutuellement, une session
+    supprimant les tables pendant que l'autre les lit.
+
+    Ce que ça donne : des dizaines d'échecs « relation "compte" n'existe pas »,
+    répartis au hasard, qui ne se reproduisent jamais quand on rejoue les
+    fichiers isolément. On les croit imaginaires, on relance, et on recommence.
+    C'est arrivé quatre fois en une journée avant que la cause soit vue.
+
+    ⚠️ **ON REFUSE DE DÉMARRER, ON N'ATTEND PAS.** Attendre la fin de l'autre
+    donnerait vingt minutes de silence sans que personne sache pourquoi. Le refus
+    dit ce qui se passe et quoi faire.
+
+    ⚠️ La connexion est gardée ouverte pour toute la session : un verrou consultatif
+    de session tombe quand sa connexion se ferme. Elle est rangée sur l'objet de
+    configuration pour que rien ne la ramasse.
+
+    ⚠️ Sans base, on ne verrouille rien : `exige_postgresql` saute déjà les cas
+    concernés, et `pytest_terminal_summary` le dit à voix haute.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    if MOTIF_INDISPONIBLE is not None:
+        return
+    moteur = create_engine(URL_BASE_TEST, pool_pre_ping=True)
+    connexion = moteur.connect()
+    # ⚠️ `cast(... as bigint)` et non `:cle::bigint` : `pg_try_advisory_lock`
+    # n'existe pas en `numeric`, et la syntaxe à deux-points se confond avec un
+    # paramètre nommé — l'appel échouait à l'analyse, avant même la base.
+    obtenu = connexion.execute(
+        text("select pg_try_advisory_lock(cast(:cle as bigint))"),
+        {"cle": _CLE_DU_VERROU},
+    ).scalar()
+    if not obtenu:
+        connexion.close()
+        moteur.dispose()
+        pytest.exit(
+            "UNE AUTRE SUITE TOURNE DÉJÀ SUR CETTE BASE.\n"
+            f"  base : {URL_BASE_TEST}\n"
+            "  Chaque cas y recrée le schéma entier : deux suites en parallèle se\n"
+            "  détruisent, et les échecs qui en résultent ne se reproduisent pas\n"
+            "  isolément. Attendre la fin de l'autre, ou viser une autre base par\n"
+            "  CGA_URL_BASE_DE_DONNEES_TEST.",
+            returncode=2,
+        )
+    # Gardées vivantes : le verrou meurt avec sa connexion.
+    config._verrou_base = (moteur, connexion)
+
+
+def pytest_unconfigure(config):
+    """Rend le verrou. Le faire explicitement plutôt que compter sur la sortie du
+    processus : une session interrompue laisserait sinon planer un doute."""
+    garde = getattr(config, "_verrou_base", None)
+    if garde is None:
+        return
+    moteur, connexion = garde
+    try:
+        connexion.execute(
+            text("select pg_advisory_unlock(cast(:cle as bigint))"),
+            {"cle": _CLE_DU_VERROU},
+        )
+        connexion.commit()
+    finally:
+        connexion.close()
+        moteur.dispose()
+
 @pytest.fixture(autouse=True)
 def limitation_neuve():
     """Le compteur de débit repart à zéro avant chaque cas.
@@ -147,6 +224,43 @@ def limitation_neuve():
     vider_le_limiteur()
     yield
     vider_le_limiteur()
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):  # noqa: ARG001
+    """Dire FORT qu'une base absente a vidé la suite de sa substance.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ CE QUI S'EST PASSÉ TROIS FOIS LE 30 SEPTEMBRE
+
+    L'instance locale vit dans un répertoire temporaire et « se jette » — c'est
+    écrit, et c'est voulu. Quand elle disparaît, `exige_postgresql` saute les
+    fichiers qui en dépendent, la suite rend **exit 0**, et la dernière ligne
+    annonce :
+
+        3542 passed, 387 skipped
+
+    Trois cent quatre-vingt-sept cas — tout ce qui touche à la persistance, au
+    cloisonnement et aux parcours de bout en bout — n'avaient rien vérifié. Lu
+    vite, « 3542 passed » ressemble à un succès.
+
+    La chaîne d'intégration a un garde pour cela : « aucun test n'a été sauté ».
+    En local, rien ne prévenait. Ce résumé-ci est ce garde, à sa place : il ne
+    fait pas échouer la suite — sauter est légitime quand on travaille sans base —
+    mais il rend l'omission impossible à ne pas voir.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    if MOTIF_INDISPONIBLE is None:
+        return
+    sautes = len(terminalreporter.stats.get("skipped", []))
+    terminalreporter.write_sep("=", "BASE ABSENTE : LA SUITE N'A PAS TOUT VÉRIFIÉ", red=True)
+    terminalreporter.write_line(
+        f"  {sautes} cas sautés faute de PostgreSQL sur {URL_BASE_TEST}",
+        red=True,
+    )
+    terminalreporter.write_line(f"  Motif : {MOTIF_INDISPONIBLE}", red=True)
+    terminalreporter.write_line(
+        '  Démarrer l\'instance : eval "$(outils/postgres-local.sh start)"', red=True
+    )
 
 
 #: À poser en `pytestmark` dans tout fichier qui exige une vraie base.

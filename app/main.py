@@ -115,7 +115,9 @@ from app.contextes.vitrine.adaptateurs.entrant.routes_http import (
     routeur as routeur_vitrine,
 )
 from app.infrastructure.base_de_donnees import moteur
+from app.infrastructure.charge import IntergicielMesureDeCharge
 from app.infrastructure.config import configuration
+from app.infrastructure.entetes import IntergicielEntetesDeSecurite
 from app.infrastructure.roles import DiagnosticDuRole, diagnostiquer
 
 _journal = logging.getLogger("cga.sante")
@@ -274,40 +276,66 @@ def _inscrire_les_sondes() -> None:
     le sonder deviendrait le point par lequel tout se charge, et l'on veut
     précisément pouvoir consulter l'état de la plateforme **quand elle va mal**.
 
-ONZE SERVICES SUR QUATORZE, ET LES TROIS AUTRES LE DISENT
+QUATORZE SERVICES SUR QUATORZE, DEPUIS LE PAS 135
 
-    ⚠️ **Cette phrase disait huit, et elle avait vieilli.** Elle affirmait que la
-    Collecte, le Pilotage et les Tenants « n'ont aucune configuration propre dont
-    l'absence les empêcherait de travailler ». C'était vrai quand elle a été écrite ;
-    ces trois services ont pris depuis un magasin de fichiers, sept réglages et une
-    liste de noms réservés, sans que personne ne revienne ici. Un commentaire qui
-    explique une absence doit être relu le jour où l'absence cesse, et rien ne le
-    rappelle : c'est le pas 121 qui l'a constaté, en interrogeant le registre.
+    ⚠️ **Cette phrase a vieilli DEUX FOIS, et elle s'en était prévenue elle-même.**
 
-    Restent trois services sans sonde, et pour une bonne raison :
+    Elle disait huit, puis onze. À huit, elle affirmait que la Collecte, le Pilotage
+    et les Tenants « n'ont aucune configuration propre dont l'absence les
+    empêcherait de travailler » : vrai quand elle a été écrite, faux dès que ces
+    trois services ont pris un magasin de fichiers, sept réglages et une liste de
+    noms réservés. Elle concluait alors : « un commentaire qui explique une absence
+    doit être relu le jour où l'absence cesse, et rien ne le rappelle ».
 
-    * la **Clôture** et la **Création d'entreprise** n'ont aucune ressource à elles.
-      Elles lisent la Comptabilité, le Portefeuille et la base. Leur inventer une sonde
-      qui relirait la ressource d'un autre créerait deux vérités sur une même question ;
-      le graphe des dépendances dit déjà ce qui tombe avec quoi ;
-    * le **Social** lit les barèmes, mais ils appartiennent au Référentiel : c'est son
-      dépôt que le Social emprunte par l'`api`. La sonde du Référentiel les couvre depuis
-      le pas 121, et une seconde sonde sur le même fichier finirait par diverger.
+    C'est arrivé une seconde fois. À onze, elle affirmait ceci, qui était juste :
+
+        « la Clôture et la Création d'entreprise n'ont aucune ressource à elles ;
+          le Social lit les barèmes, mais ils appartiennent au Référentiel, dont la
+          sonde les couvre. Leur inventer une sonde qui relirait la ressource d'un
+          autre créerait deux vérités sur une même question. »
+
+    ⚠️ **Ce qui a changé n'est pas le raisonnement, c'est ce qu'il portait.**
+
+    * la **Création d'entreprise** a maintenant des ressources à elle : la checklist
+      des pièces par forme juridique, et trois codes de capital minimum qu'elle est
+      seule à demander au référentiel ;
+    * la **Clôture** ne persiste toujours rien, mais elle a un **contrat** : deux
+      codes d'abattement CGA que personne d'autre ne lit ;
+    * le **Social** n'a pas de ressource nouvelle. C'est la **question** qui est
+      nouvelle. La sonde du Référentiel demande « le fichier se charge-t-il, et
+      porte-t-il quelque chose » ; celle du Social demande « porte-t-il les onze
+      valeurs nommées sans lesquelles aucun bulletin ne sort ». Un référentiel de
+      soixante paramètres auquel manque `CNPS_PLAFOND_MENSUEL` répond oui à la
+      première et non à la seconde.
+
+    Ce n'est donc pas deux vérités sur une question, c'est une vérité sur une
+    question que personne ne posait. Et elle compte : les trois contextes se
+    **rabattent en silence** quand le paramètre manque — un constat non bloquant
+    pour la Création, une phrase au fond d'un dossier pour la Clôture. Le bon choix
+    au guichet, et l'invisibilité totale depuis l'exploitation.
 
     ⚠️ Le **répertoire** des Tenants reste vérifié par le Transverse : il appartient à la
     passerelle, et le test d'architecture a refusé qu'il en soit autrement. La sonde du
     contexte N surveille autre chose : les noms que la plateforme se garde. Voir
     `sonde_du_transverse` et `sonde_des_tenants`.
 
-    `SANS_SONDE` existe pour cela, et le registre le distingue de `REPOND`.
+    ⚠️ **`SANS_SONDE` reste, bien qu'aucun service ne s'y trouve plus.** Il n'est
+    pas devenu inutile : il est ce que le registre répond le jour où quelqu'un
+    retire une sonde, ou l'inscrit sous un nom mal orthographié. Le distinguer de
+    `REPOND` est ce qui empêche d'affirmer la santé d'un service qu'on n'interroge
+    pas — la sonde complaisante que le pas 12 a supprimée.
     ─────────────────────────────────────────────────────────────────────────────
     """
+    from app.contextes.cloture.adaptateurs.entrant.sonde import sonde_de_la_cloture
     from app.contextes.collecte.adaptateurs.entrant.sonde import sonde_de_la_collecte
     from app.contextes.comptabilite.adaptateurs.entrant.sonde import (
         sonde_de_la_comptabilite,
     )
     from app.contextes.conformite.adaptateurs.entrant.sonde import (
         sonde_de_la_conformite,
+    )
+    from app.contextes.creation_entreprise.adaptateurs.entrant.sonde import (
+        sonde_de_la_creation_d_entreprise,
     )
     from app.contextes.obligations.adaptateurs.entrant.sonde import (
         sonde_des_obligations,
@@ -319,6 +347,7 @@ ONZE SERVICES SUR QUATORZE, ET LES TROIS AUTRES LE DISENT
     from app.contextes.referentiel.adaptateurs.entrant.sonde import (
         sonde_du_referentiel,
     )
+    from app.contextes.social.adaptateurs.entrant.sonde import sonde_du_social
     from app.contextes.souscription.adaptateurs.entrant.sonde import (
         sonde_de_la_souscription,
     )
@@ -340,6 +369,32 @@ ONZE SERVICES SUR QUATORZE, ET LES TROIS AUTRES LE DISENT
     inscrire_une_sonde("collecte", sonde_de_la_collecte)
     inscrire_une_sonde("pilotage", sonde_du_pilotage)
     inscrire_une_sonde("tenants", sonde_des_tenants)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ LES TROIS DERNIERS, QUI ÉTAIENT `SANS_SONDE` PAR DÉCISION ÉCRITE.
+    #
+    # La décision disait : « la Clôture et la Création d'entreprise n'ont aucune
+    # ressource à elles ; le Social lit les barèmes, mais ils appartiennent au
+    # Référentiel, dont la sonde les couvre. Leur inventer une sonde qui relit la
+    # ressource d'un autre créerait deux vérités sur une même question. »
+    #
+    # Elle est révisée, et pour une raison précise : **ces trois sondes ne posent
+    # pas la question du Référentiel.** La sienne demande « le fichier se
+    # charge-t-il, et porte-t-il quelque chose ». Les leurs demandent « porte-t-il
+    # les valeurs NOMMÉES sans lesquelles je ne produis plus rien ».
+    #
+    # Un référentiel de soixante paramètres auquel manque `CNPS_PLAFOND_MENSUEL`
+    # est vert pour la première question et en panne pour la seconde. Ce n'est pas
+    # deux vérités sur une question, c'est une vérité sur une question que
+    # personne ne posait.
+    #
+    # ⚠️ Et c'est là que ça compte : les trois contextes se rabattent en silence
+    # quand le paramètre manque — un constat non bloquant pour la Création, une
+    # phrase dans un dossier pour la Clôture. Le bon choix au guichet, et
+    # l'invisibilité totale depuis l'exploitation.
+    # ─────────────────────────────────────────────────────────────────────────
+    inscrire_une_sonde("creation_entreprise", sonde_de_la_creation_d_entreprise)
+    inscrire_une_sonde("social", sonde_du_social)
+    inscrire_une_sonde("cloture", sonde_de_la_cloture)
 
 
 def _inscrire_les_travaux_periodiques() -> None:
@@ -370,6 +425,9 @@ def _inscrire_les_travaux_periodiques() -> None:
     du parcours au délai d'ouverture.
     ─────────────────────────────────────────────────────────────────────────────
     """
+    from app.contextes.souscription.adaptateurs.entrant.abonne_d_affectation import (
+        abonne_d_affectation,
+    )
     from app.contextes.souscription.adaptateurs.entrant.abonne_de_relance import (
         abonne_de_relance,
     )
@@ -389,6 +447,7 @@ def _inscrire_les_travaux_periodiques() -> None:
         travail_de_veille,
         veiller,
     )
+    from app.contextes.souscription.api import NOM_DEMANDE_DEPOSEE
     from app.contextes.souscription.application.balayage_de_relance import NOM_RELANCE
     from app.contextes.transverse.adaptateurs.entrant.routes_orchestration import (
         Atelier,
@@ -423,6 +482,59 @@ def _inscrire_les_travaux_periodiques() -> None:
     # existent et l'événement part en « publié sans abonné » : compté, jamais remis,
     # et aucun client relancé.
     inscrire_un_abonne(NOM_RELANCE, abonne_de_relance)
+
+    # ⚠️ **L'affectation à l'arrivée.** Le dépôt d'une demande publie
+    # `DemandeDéposée` ; sans cet abonné, l'événement part en « publié sans abonné »
+    # et chaque dossier attend qu'un humain clique sur « affecter », pendant que le
+    # client attend l'appel qu'on lui a promis.
+    inscrire_un_abonne(NOM_DEMANDE_DEPOSEE, abonne_d_affectation)
+
+    # ⚠️ **Et l'accusé de réception, sur le même événement.** La cliente recevait
+    # deux messages dans tout le parcours : sa proposition commerciale, puis son
+    # accès. Le premier arrive après l'échange avec l'expert — des jours plus
+    # tard. Entre son dépôt et le premier appel, elle n'avait aucune trace écrite
+    # de son geste, et c'est le silence le plus long du parcours.
+    #
+    # ⚠️ Deux abonnés sur `DemandeDéposée`, et ils ne se commandent pas :
+    # l'accusé ne nomme aucun responsable, précisément pour partir même quand
+    # l'affectation n'a trouvé personne. Voir `inscrire_un_abonne`.
+    from app.contextes.souscription.adaptateurs.entrant.abonne_d_accuse_de_depot import (
+        abonne_d_accuse_de_depot,
+    )
+
+    inscrire_un_abonne(NOM_DEMANDE_DEPOSEE, abonne_d_accuse_de_depot)
+
+    # ⚠️ **Le dossier de formalité, ouvert dès l'encaissement.** Le site vend une
+    # société immatriculée ; jusqu'ici, une création payée n'ouvrait qu'un accès
+    # à l'ERP, et le dossier qui mène au RCCM n'existait que si un collaborateur
+    # pensait à l'ouvrir à la main depuis un autre écran. Le client avait payé ;
+    # le travail n'avait pas commencé, et rien ne le signalait.
+    #
+    # ⚠️ Deux abonnés sur `PaiementEncaissé`, et c'est prévu : l'ouverture du
+    # tenant et celle du dossier de formalité sont deux réactions distinctes au
+    # même fait. Voir `inscrire_un_abonne`.
+    from app.contextes.creation_entreprise.adaptateurs.entrant.abonne_de_souscription import (
+        abonne_de_souscription,
+    )
+    from app.contextes.souscription.application.encaissement_du_parcours import (
+        NOM_EVENEMENT as NOM_PAIEMENT_ENCAISSE,
+    )
+
+    inscrire_un_abonne(NOM_PAIEMENT_ENCAISSE, abonne_de_souscription)
+
+    # ⚠️ **L'accès de la fondatrice, une fois sa société immatriculée.** Une
+    # prestation vendue fait une ADHÉRENTE du cabinet, et la portée d'une
+    # adhérente est le dossier de son entreprise : son accès demande un NIU, qui
+    # n'existe qu'à la conversion. Sans cette ligne, la cliente paie, sa société
+    # naît, entre au portefeuille — et elle n'a aucun chemin vers son espace.
+    from app.contextes.creation_entreprise.adaptateurs.entrant.routes_http import (
+        NOM_ENTREPRISE_CREEE,
+    )
+    from app.contextes.transverse.adaptateurs.entrant.abonne_acces_adherent import (
+        abonne_d_acces_adherent,
+    )
+
+    inscrire_un_abonne(NOM_ENTREPRISE_CREEE, abonne_d_acces_adherent)
 
     # ⚠️ **La veille des dossiers, et volontairement sans abonné.** Elle dépose des
     # `DossierEnSouffrance` que le relais publiera, et aucun code ne s'y abonne
@@ -478,6 +590,16 @@ def creer_application() -> FastAPI:
     # ouvrir de transaction, ni atteindre la vérification Argon2 dont elle
     # cherche justement à saturer le processeur. Voir `limitation.py`.
     application.add_middleware(IntergicielLimitationDebit)
+    # ⚠️ Les en-têtes de sécurité en DERNIER déclarés, donc posés en premier sur
+    # le chemin de la réponse : ils doivent accompagner TOUTE réponse, y compris
+    # le refus de la limitation de débit et les erreurs. Voir `entetes.py`.
+    application.add_middleware(IntergicielEntetesDeSecurite)
+    # ⚠️ LA MESURE DE CHARGE EN DERNIER DÉCLARÉE, donc **la plus extérieure** :
+    # elle doit chronométrer TOUT ce que la requête traverse — la limitation de
+    # débit, l'unité de travail, la route. Déclarée plus haut, elle ne mesurerait
+    # que la part qu'elle enveloppe, et annoncerait des latences plus courtes que
+    # celles que le collaborateur subit. Voir `charge.py`.
+    application.add_middleware(IntergicielMesureDeCharge)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.origines_cors,

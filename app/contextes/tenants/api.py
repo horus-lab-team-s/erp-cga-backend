@@ -52,10 +52,18 @@ from app.contextes.tenants.domaine.resolution import (
 from app.contextes.tenants.domaine.slug import MotifRejet, SlugInvalide
 from app.contextes.tenants.domaine.slug import valider as _valider_la_forme
 from app.contextes.tenants.domaine.substitution import (
+    ETAPES_SANS_OBJET,
+    avec_substitution,
+    manques_reels,
     ouverture_reellement_complete,
     substituees,
 )
-from app.contextes.tenants.domaine.tenant import NatureTenant, StatutTenant, Tenant
+from app.contextes.tenants.domaine.tenant import (
+    EtapeOuverture,
+    NatureTenant,
+    StatutTenant,
+    Tenant,
+)
 from app.infrastructure.config import configuration
 
 
@@ -134,6 +142,10 @@ __all__ = [
     "Tenant",
     "Verdict",
     "abonner_l_ouverture",
+    "EtapeOuverture",
+    "ETAPES_SANS_OBJET",
+    "avec_substitution",
+    "manques_reels",
     "ouverture_reellement_complete",
     "ouvrir_sur_paiement",
     "saga_d_ouverture",

@@ -98,7 +98,7 @@ class OuvertureAccesTransverse:
             "compte.activation",
             destinataire=compte.courriel,
             contexte={
-                "prenom": compte.prenom,
+                "prenom": compte.appellation,
                 "denomination": souscription.prospect.denomination,
                 "service": souscription.libelle,
                 "lien": f"{self._adresse}/activation?jeton={secret}",

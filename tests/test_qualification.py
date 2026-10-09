@@ -412,7 +412,18 @@ class TestQuestionnairesDuReferentiel:
         return RepertoireDeQuestionnaires.depuis(QUALIFICATION)
 
     def test_ils_se_chargent(self, repertoire):
-        assert repertoire.services() == ["creation-sarl", "tenue-comptable"]
+        # ⚠️ `services()` REND LA LISTE TRIÉE, et l'attendu doit l'être aussi.
+        # Renommés le 27 septembre d'après le catalogue — `creation-sarl` est
+        # devenu `CREATION`, `tenue-comptable` est devenu `ADHESION` —, les deux
+        # services ont changé d'ordre alphabétique au passage.
+        #
+        # ⚠️ LA LISTE EST FERMÉE, ET C'EST SON OBJET. Un questionnaire ajouté au
+        # référentiel fait rougir ce cas, ce qui oblige à dire si le service
+        # correspondant est réellement commandable de bout en bout. `PAIE` est
+        # entrée le 30 septembre avec son barème et son code au catalogue ; voir
+        # `test_paie_au_catalogue.py`, qui vérifie que les trois pièces tiennent
+        # ensemble.
+        assert repertoire.services() == ["ADHESION", "CREATION", "PAIE"]
 
     def test_chacun_produit_un_schema_valide(self, repertoire):
         """Éprouvé au chargement, répété ici : un ENUM sans valeurs ne doit pas
@@ -440,7 +451,7 @@ class TestQuestionnairesDuReferentiel:
     ):
         """En tranche et non en montant : un prévisionnel au franc près est une
         fausse précision, et le régime fiscal se décide par seuils."""
-        question = repertoire.prendre("creation-sarl").question(
+        question = repertoire.prendre("CREATION").question(
             "chiffre_affaires_prevu"
         )
         assert question.type is TypeFait.ENUM
@@ -449,7 +460,7 @@ class TestQuestionnairesDuReferentiel:
     def test_la_creation_demande_la_forme_juridique_en_premier(self, repertoire):
         """L'ordre compte : demander le capital social avant la forme juridique
         fait interrompre le responsable par le client."""
-        ordonnees = repertoire.prendre("creation-sarl").ordonnees
+        ordonnees = repertoire.prendre("CREATION").ordonnees
         assert ordonnees[0].code == "forme_juridique"
         codes = [q.code for q in ordonnees]
         assert codes.index("associes") < codes.index("capital_social")
@@ -462,7 +473,7 @@ class TestQuestionnairesDuReferentiel:
         chaque critère échoue en silence."""
         from app.contextes.portefeuille.domaine.charge import SCHEMA_CHARGE
 
-        pose = {q.code for q in repertoire.prendre("tenue-comptable").questions}
+        pose = {q.code for q in repertoire.prendre("ADHESION").questions}
         manquants = SCHEMA_CHARGE.codes - pose
         assert not manquants, (
             f"la grille de charge évalue {sorted(manquants)}, que le "
@@ -481,7 +492,7 @@ class TestQuestionnairesDuReferentiel:
             repertoire.prendre("formation-fiscale")
 
     def test_une_qualification_reelle_se_remplit_de_bout_en_bout(self, repertoire):
-        questionnaire = repertoire.prendre("creation-sarl")
+        questionnaire = repertoire.prendre("CREATION")
         qualification = ouvrir_une_qualification("dos-1", questionnaire)
         reponses = {
             "forme_juridique": "SARL",
@@ -492,6 +503,10 @@ class TestQuestionnairesDuReferentiel:
             "salaries_prevus": 2,
             "region_siege": "LITTORAL",
             "activite": "Commerce général",
+            # Version 2 du questionnaire : le dossier de formalité s'ouvre seul
+            # à l'encaissement, et il lui faut un nom et un siège.
+            "denomination_souhaitee": "COMMERCE GÉNÉRAL SARL",
+            "siege": "Akwa, Douala",
         }
         for code, valeur in reponses.items():
             qualification = qualification.repondre(questionnaire, code, valeur, T0)

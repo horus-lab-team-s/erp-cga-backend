@@ -32,10 +32,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 __all__ = [
     "DossierPourLaCharge",
+    "DossierSansComptable",
     "LigneDeCharge",
     "PorteurDeDossiers",
     "PropositionDeReaffectation",
     "ReglagesDeLaCharge",
+    "dossiers_sans_comptable",
     "mesurer_la_charge",
     "proposer_des_reaffectations",
 ]
@@ -153,6 +155,72 @@ class PropositionDeReaffectation(BaseModel):
 
 def _pourcent(points: int, capacite: int | None) -> int | None:
     return None if not capacite else round(points * 100 / capacite)
+
+
+class DossierSansComptable(BaseModel):
+    """Un dossier qu'aucun comptable ne porte."""
+
+    model_config = ConfigDict(frozen=True)
+
+    niu: str
+    denomination: str
+    #: Ce qui s'y accumule pendant que personne ne le tient. Un dossier orphelin
+    #: et vide n'est pas le même problème qu'un dossier orphelin où les pièces
+    #: s'entassent.
+    pieces_en_attente: int
+    echeances_du_mois: int
+    retards: int
+
+
+def dossiers_sans_comptable(
+    porteurs: list[PorteurDeDossiers],
+    dossiers: dict[str, DossierPourLaCharge],
+) -> list[DossierSansComptable]:
+    """Les dossiers qu'aucun comptable ne porte.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ **UNE SOCIÉTÉ PEUT ÊTRE ADHÉRENTE, PAYER, ET N'ÊTRE TENUE PAR PERSONNE.**
+
+    Un comptable travaille sur un périmètre de NIU. Une société qui vient d'être
+    créée n'est dans aucun : ses pièces déposées lui sont **introuvables**, et
+    rien ne le signalait. Mesuré sur la pile le 30 septembre 2026 — la cliente
+    dépose son premier justificatif, le comptable reçoit « pièce introuvable ».
+
+    Le geste d'affectation existe pourtant
+    (`POST /transverse/habilitations/{id}/dossiers/{niu}`) : il manquait
+    seulement que quelqu'un soit prévenu de le poser.
+
+    ⚠️ **ON SIGNALE, ON N'AFFECTE PAS.** Qui reçoit un dossier neuf est une
+    décision d'organisation du cabinet : une affectation automatique enverrait
+    des dossiers à quelqu'un que personne n'a choisi. Cette fonction dit qu'il y
+    a un trou, elle ne le bouche pas. Les propositions de réaffectation, à côté,
+    s'occupent d'équilibrer ce qui est déjà porté.
+
+    ⚠️ **LE RÔLE COMPTE, ET SEUL LUI.** Un dossier suivi par un chargé de
+    clientèle sans comptable reste sans comptabilité : c'est le métier qui
+    manque, pas un porteur quelconque. Les habilitations transverses (direction,
+    réviseur) voient tout et ne portent rien, `PorteurDeDossiers` le dit déjà.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    tenus = {
+        niu
+        for porteur in porteurs
+        if porteur.role == "COMPTABLE"
+        for niu in porteur.dossiers
+    }
+    # ⚠️ L'ordre suit celui des dossiers, non un tri par gravité : l'écran décide
+    # de ce qu'il met en avant, et un tri ici le lui imposerait.
+    return [
+        DossierSansComptable(
+            niu=niu,
+            denomination=dossier.denomination,
+            pieces_en_attente=dossier.pieces_en_attente,
+            echeances_du_mois=dossier.echeances_du_mois,
+            retards=dossier.retards,
+        )
+        for niu, dossier in dossiers.items()
+        if niu not in tenus
+    ]
 
 
 def mesurer_la_charge(

@@ -325,7 +325,7 @@ class QualiteDesRegles(_BaseModel):
 def noms_des_comptes() -> dict[str, str]:
     from app.contextes.transverse.api import atelier
 
-    return {c.identifiant: f"{c.prenom} {c.nom}" for c in atelier().comptes.lister()}
+    return {c.identifiant: c.nom_affiche for c in atelier().comptes.lister()}
 
 
 def derogations_du_perimetre(

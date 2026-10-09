@@ -561,7 +561,7 @@ class EcritureComptable(BaseModel):
             exercice=self.exercice,
             numero=numero,
             date_operation=date_operation,
-            libelle=f"Contre-passation de {self.cle} — {self.libelle}",
+            libelle=f"Contre-passation de {self.cle} : {self.libelle}",
             piece_justificative=self.piece_justificative,
             reference_externe=self.reference_externe,
             lignes=[ligne.inversee() for ligne in self.lignes],

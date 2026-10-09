@@ -54,10 +54,10 @@ def _proforma(numero: str = "PRO-2026-0001", dossier: str = "dos-1", **surcharge
     defauts = {
         "numero": numero,
         "dossier": dossier,
-        "service": "creation-sarl",
+        "service": "CREATION",
         "tarif": _tarif(),
         "contenu": b"%PDF le document",
-        "modele": "creation-sarl",
+        "modele": "CREATION",
         "version_modele": "2026.1",
         "a_l_instant": T0,
     }

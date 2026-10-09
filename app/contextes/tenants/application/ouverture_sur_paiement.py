@@ -90,17 +90,26 @@ class ResultatOuverture(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    execution: Execution
+    #: `None` quand la vente n'ouvrait **aucun** locataire — une prestation
+    #: vendue à une adhérente, et non la plateforme vendue à un cabinet. Ce n'est
+    #: ni un échec ni un rejeu : il n'y avait rien à ouvrir, et les propriétés
+    #: ci-dessous répondent « non » plutôt que de lever.
+    execution: Execution | None
     #: `False` quand l'événement était un rejeu sur une saga déjà terminée.
     a_progresse: bool
 
     @property
+    def sans_objet(self) -> bool:
+        """Cette vente n'ouvrait pas de locataire."""
+        return self.execution is None
+
+    @property
     def terminee(self) -> bool:
-        return self.execution.etat is EtatSaga.TERMINEE
+        return self.execution is not None and self.execution.etat is EtatSaga.TERMINEE
 
     @property
     def demande_un_humain(self) -> bool:
-        return self.execution.demande_un_humain
+        return self.execution is not None and self.execution.demande_un_humain
 
     @property
     def tenant_utilisable(self) -> bool:
@@ -112,10 +121,16 @@ class ResultatOuverture(BaseModel):
         espace ouvert dans ce cas serait un mensonge que sa première connexion
         découvrirait.
         """
-        return self.terminee and ouverture_reellement_complete(self.execution.contexte)
+        return (
+            self.terminee
+            and self.execution is not None
+            and ouverture_reellement_complete(self.execution.contexte)
+        )
 
     @property
     def etapes_substituees(self) -> tuple[str, ...]:
+        if self.execution is None:
+            return ()
         return substituees(self.execution.contexte)
 
 
@@ -141,6 +156,24 @@ def ouvrir_sur_paiement(
     mécanisme existe pour empêcher.
     ─────────────────────────────────────────────────────────────────────────
     """
+    # ─────────────────────────────────────────────────────────────────────
+    # ⚠️ TOUTE VENTE N'OUVRE PAS UN LOCATAIRE, ET L'ÉVÉNEMENT LE DIT.
+    #
+    # Jusqu'au 27 septembre, chaque proforma payée en ouvrait un. Une cliente
+    # qui achetait la création de sa SARL recevait donc son propre espace de
+    # plateforme, isolé du cabinet, pendant que son entreprise entrait au
+    # portefeuille **du cabinet** : deux locataires, et un espace vide.
+    #
+    # Un locataire se vend à un autre centre de gestion. Une prestation se vend
+    # à une adhérente, dont le compte vit là où vit son dossier.
+    #
+    # ⚠️ Le défaut est ABSENT-VAUT-VRAI : un événement déposé avant cette
+    # distinction n'en porte pas la clé, et doit continuer d'ouvrir son
+    # locataire. Il en dort dans la boîte d'envoi.
+    # ─────────────────────────────────────────────────────────────────────
+    if not evenement.charge.get("ouvre_un_locataire", True):
+        return ResultatOuverture(execution=None, a_progresse=False)
+
     manquants = [c for c in CHAMPS_ATTENDUS if not str(evenement.charge.get(c, "")).strip()]
     if manquants:
         raise ChargeIncomplete(

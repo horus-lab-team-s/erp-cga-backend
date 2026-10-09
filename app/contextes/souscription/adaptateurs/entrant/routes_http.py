@@ -37,25 +37,31 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
     DepotDevisSql,
     DepotPaiementsSql,
     DepotSouscriptionsSql,
+    DepotTarifsFixesSql,
 )
 from app.contextes.souscription.api import (
+    CatalogueArrete,
     DemandeLigne,
     DepotDevisMemoire,
     DepotPaiementsMemoire,
     DepotServicesMemoire,
     DepotSouscriptionsMemoire,
+    DepotTarifsFixesMemoire,
     Devis,
     DevisImpossible,
     DevisIntrouvable,
     EcheanceAbonnement,
     EngagementRefuse,
+    FixationRefusee,
     FournisseurTara,
     NaturePaiement,
+    NatureService,
     OuvertureAccesTransverse,
     Paiement,
     Prospect,
@@ -69,12 +75,14 @@ from app.contextes.souscription.api import (
     Souscription,
     SouscriptionIntrouvable,
     SuiteDeSouscription,
+    TarifFixe,
     VerificationDIdentite,
     activer_souscription,
     appeler_les_echeances,
     echeancier,
     engager,
     etablir_devis,
+    fixer,
     nouvelle_cle_idempotence,
     reconcilier,
     relances_du_jour,
@@ -105,21 +113,23 @@ class Comptoir:
 
     def __init__(self) -> None:
         config = configuration()
-        # Le catalogue reste en code : c'est de la configuration commerciale, pas
-        # une donnée produite. Il aura sa table le jour où la direction devra
-        # changer un tarif sans redéploiement — et ce jour-là, seule cette ligne
-        # changera.
-        self.services = DepotServicesMemoire()
-
         session = session_de_travail()
         if session is None:
             self.devis = DepotDevisMemoire()
             self.souscriptions = DepotSouscriptionsMemoire()
             self.paiements = DepotPaiementsMemoire()
+            self.tarifs_fixes = DepotTarifsFixesMemoire()
         else:
             self.devis = DepotDevisSql(session, courant())
             self.souscriptions = DepotSouscriptionsSql(session, courant())
             self.paiements = DepotPaiementsSql(session, courant())
+            self.tarifs_fixes = DepotTarifsFixesSql(session, courant())
+        # ⚠️ LE JOUR ANNONCÉ EST ARRIVÉ. Ce commentaire disait : « il aura sa
+        # table le jour où la direction devra changer un tarif sans
+        # redéploiement ». La structure de l'offre reste en code ; les PRIX sont
+        # les décisions du gérant, conservées en base et rejouées à chaque
+        # lecture. Voir `CatalogueArrete`.
+        self.services = CatalogueArrete(DepotServicesMemoire(), self.tarifs_fixes)
         self.fournisseur = FournisseurTara(
             cle_api=config.tara_cle_api,
             identifiant_marchand_tara=config.tara_identifiant_marchand,
@@ -229,6 +239,187 @@ def lire_services(
     a_la_date: date = Query(..., description="Date à laquelle résoudre le barème"),
 ) -> list[Service]:
     return comptoir().services.charger(a_la_date)
+
+
+# ── Les prix, fixés par le gérant ───────────────────────────────────────────
+
+
+class DemandeDeFixation(BaseModel):
+    """Tel prix, pour telle prestation, à partir de tel jour."""
+
+    service: str = Field(min_length=1)
+    formule: str | None = None
+    montant: Decimal = Field(gt=0)
+    a_partir_du: date
+    #: Pourquoi ce prix. Obligatoire : un prix sans motif ne se défend pas trois
+    #: ans plus tard devant un client qui demande pourquoi il a changé.
+    motif: str = Field(min_length=3)
+
+
+class LigneDeTarif(BaseModel):
+    """Le prix d'une prestation, ou d'une de ses formules, à une date."""
+
+    service: str
+    libelle: str
+    formule: str | None = None
+    libelle_formule: str | None = None
+    montant: Decimal | None = None
+    #: `A_VALIDER` tant que le gérant n'a rien décidé.
+    statut: str
+    en_vigueur_depuis: date
+    fixe_par: str | None = None
+    #: Le nom de celui qui l'a fixé. ⚠️ L'identifiant seul (« C-001 ») ne dit rien
+    #: à la direction qui relit l'écran : vu à l'essai dans la console.
+    fixe_par_nom: str | None = None
+    fixe_le: str | None = None
+    #: Faux pour ce qui se chiffre sur étude : le gérant n'y fixe pas de prix
+    #: unique, il l'arrête sur la proposition de chaque client.
+    fixable: bool
+
+
+class DecisionDeTarif(TarifFixe):
+    """Une décision, avec le nom de son auteur pour l'écran."""
+
+    fixe_par_nom: str | None = None
+
+
+class EtatDesTarifs(BaseModel):
+    a_la_date: date
+    lignes: list[LigneDeTarif]
+    #: Combien de prix restent à fixer : la question que se pose la direction.
+    a_fixer: int
+    decisions: list[DecisionDeTarif]
+
+
+def _etat_des_tarifs(a_la_date: date) -> EtatDesTarifs:
+    c = comptoir()
+    noms = {compte.identifiant: compte.nom_complet for compte in atelier().comptes.lister()}
+    lignes: list[LigneDeTarif] = []
+    for s in c.services.charger(a_la_date):
+        # Ce qui se chiffre sur étude (la création, le ponctuel) n'a pas de prix
+        # unique à fixer : le cabinet l'arrête sur la proposition de chaque
+        # client. Tout le reste se fixe, y compris la tranche du réel, qui peut
+        # recevoir un prix le jour où le gérant le décide.
+        sur_etude = s.nature is NatureService.SUR_ETUDE
+        cibles = (
+            [(f.code, f.libelle, f.tarifs) for f in s.formules]
+            if s.formules
+            else [(None, None, s.tarifs)]
+        )
+        for code, libelle, tarifs in cibles:
+            tarif = next((t for t in tarifs if t.couvre(a_la_date)), None)
+            if tarif is None:
+                continue
+            lignes.append(
+                LigneDeTarif(
+                    service=s.code,
+                    libelle=s.libelle,
+                    formule=code,
+                    libelle_formule=libelle,
+                    montant=tarif.montant,
+                    statut=tarif.statut.value,
+                    en_vigueur_depuis=tarif.du,
+                    fixe_par=tarif.fixe_par,
+                    fixe_par_nom=noms.get(tarif.fixe_par) if tarif.fixe_par else None,
+                    fixe_le=tarif.fixe_le.isoformat() if tarif.fixe_le else None,
+                    fixable=not sur_etude,
+                )
+            )
+    return EtatDesTarifs(
+        a_la_date=a_la_date,
+        lignes=lignes,
+        a_fixer=sum(1 for x in lignes if x.fixable and x.statut != "FIXE"),
+        decisions=[
+            DecisionDeTarif(**d.model_dump(), fixe_par_nom=noms.get(d.fixe_par))
+            for d in c.tarifs_fixes.lister()
+        ],
+    )
+
+
+@routeur.get(
+    "/tarifs",
+    summary="Les prix de l'offre, et ce qui reste à fixer",
+    description=(
+        "Réservé à la direction (`FIXER_LES_TARIFS`). Chaque prix porte son statut : "
+        "`A_VALIDER` tant que le gérant ne l'a pas arrêté, `FIXE` ensuite, avec qui "
+        "l'a fixé et quand."
+    ),
+)
+def lire_tarifs(
+    acces: AccesRequis, a_la_date: date = Query(...)
+) -> EtatDesTarifs:
+    exiger(acces, Permission.FIXER_LES_TARIFS)
+    return _etat_des_tarifs(a_la_date)
+
+
+@routeur.post(
+    "/tarifs",
+    summary="Fixer le prix d'une prestation, à partir d'une date",
+    status_code=201,
+    description=(
+        "Réservé à la direction. **Le prix est une décision humaine** : tant qu'il "
+        "n'est pas fixé ici, le tarif du catalogue s'affiche comme indicatif et ne se "
+        "règle pas en ligne.\n\n"
+        "On ne fixe jamais un prix dans le passé : un devis déjà émis changerait de "
+        "prix. Corriger un prix, c'est en fixer un nouveau à partir d'une date."
+    ),
+    responses={
+        404: {"description": "Prestation inconnue"},
+        422: {"description": "Date passée, formule absente ou prestation sur étude"},
+    },
+)
+def fixer_un_tarif(acces: AccesRequis, demande: DemandeDeFixation) -> EtatDesTarifs:
+    exiger(acces, Permission.FIXER_LES_TARIFS)
+    instant = maintenant()
+    if demande.a_partir_du < instant.date():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"un prix ne se fixe pas dans le passé ({demande.a_partir_du}) : un devis "
+                "déjà émis changerait de prix. Choisir aujourd'hui ou une date à venir."
+            ),
+        )
+    c = comptoir()
+    fixation = TarifFixe(
+        identifiant=_reference("TF"),
+        service=demande.service,
+        formule=demande.formule,
+        montant=demande.montant,
+        a_partir_du=demande.a_partir_du,
+        motif=demande.motif,
+        fixe_par=acces.compte,
+        fixe_le=instant,
+    )
+    try:
+        service = next(
+            (s for s in c.services.charger(demande.a_partir_du) if s.code == demande.service),
+            None,
+        )
+        if service is None:
+            raise ServiceIntrouvable(f"aucune prestation {demande.service} au catalogue")
+        # Appliquée à blanc d'abord : une décision que le domaine refuse n'est pas
+        # écrite, et le gérant lit pourquoi.
+        fixer(service, fixation)
+    except ServiceIntrouvable as echec:
+        raise HTTPException(status_code=404, detail=str(echec)) from echec
+    except FixationRefusee as echec:
+        raise HTTPException(status_code=422, detail=str(echec)) from echec
+
+    c.tarifs_fixes.enregistrer(fixation)
+    c.journal.ajouter(
+        horodatage=instant,
+        acteur=acces.compte,
+        action="tarif.fixe",
+        objet_type="service",
+        objet_id=demande.service,
+        apres={
+            "formule": demande.formule,
+            "montant": str(demande.montant),
+            "a_partir_du": demande.a_partir_du.isoformat(),
+            "motif": demande.motif,
+        },
+    )
+    return _etat_des_tarifs(instant.date())
 
 
 # ── Le devis ─────────────────────────────────────────────────────────────────
@@ -444,13 +635,20 @@ async def notification_tara(requete: Request) -> ResultatEncaissement:
     except Exception:  # noqa: BLE001 — une charge illisible ne doit pas faire 500
         charge_utile = {}
     boutique = comptoir()
-    return traiter_notification(
-        charge_utile if isinstance(charge_utile, dict) else {},
-        fournisseur=boutique.fournisseur,
-        paiements=boutique.paiements,
-        suites=boutique.suites,
-        journal=boutique.journal,
-        a_l_instant=maintenant(),
+
+    # ⚠️ L'encaissement écrit en base, et cette route est asynchrone : tenu sur la
+    # boucle d'événements, il figeait le serveur le temps de l'écriture. La route
+    # reste asynchrone pour `await requete.json()`, qui l'est réellement.
+    # Voir `tests/test_boucle_non_bloquee.py`.
+    return await run_in_threadpool(
+        lambda: traiter_notification(
+            charge_utile if isinstance(charge_utile, dict) else {},
+            fournisseur=boutique.fournisseur,
+            paiements=boutique.paiements,
+            suites=boutique.suites,
+            journal=boutique.journal,
+            a_l_instant=maintenant(),
+        )
     )
 
 

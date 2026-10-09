@@ -359,7 +359,7 @@ class TestSchemaCompose:
     @pytest.fixture(scope="class")
     def questionnaire(self):
         return RepertoireDeQuestionnaires.depuis(REFERENTIEL / "qualification").prendre(
-            "creation-sarl"
+            "CREATION"
         )
 
     def test_il_reprend_les_faits_du_questionnaire(self, questionnaire):
@@ -396,7 +396,10 @@ class TestReferentielReel:
 
     def test_il_se_charge(self, grille):
         baremes, regles = grille
-        assert {b.service for b in baremes} == {"creation-sarl", "tenue-comptable"}
+        # ⚠️ Fermée comme la liste des questionnaires, et pour la même raison :
+        # un barème ajouté doit correspondre à un service que le client peut
+        # réellement commander. `PAIE` est entrée le 30 septembre.
+        assert {b.service for b in baremes} == {"CREATION", "ADHESION", "PAIE"}
         assert len(regles) >= 7
 
     def test_chaque_bareme_et_chaque_regle_porte_un_fondement(self, grille):
@@ -417,7 +420,7 @@ class TestReferentielReel:
         """Le contrôle qui empêche un ajustement de s'appliquer à tous les
         dossiers pour une faute de frappe."""
         _, regles = grille
-        creation = questionnaires.prendre("creation-sarl")
+        creation = questionnaires.prendre("CREATION")
         concernees = [
             r for r in regles
             if r.code.startswith(("TAR-ASS", "TAR-CAP", "TAR-NAT", "TAR-REG", "TAR-STA", "TAR-CHG"))
@@ -434,7 +437,7 @@ class TestReferentielReel:
                 "region_siege": "OUEST",
                 "statuts_apportes": True,
             },
-            bareme=bareme_pour(baremes, "creation-sarl", LE_JOUR),
+            bareme=bareme_pour(baremes, "CREATION", LE_JOUR),
             regles=regles,
             a_la_date=LE_JOUR,
             score_charge=59,
@@ -456,7 +459,7 @@ class TestReferentielReel:
                 "region_siege": "LITTORAL",
                 "statuts_apportes": False,
             },
-            bareme=bareme_pour(baremes, "creation-sarl", LE_JOUR),
+            bareme=bareme_pour(baremes, "CREATION", LE_JOUR),
             regles=regles, a_la_date=LE_JOUR, score_charge=20,
         )
         assert p.lignes == ()

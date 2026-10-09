@@ -86,7 +86,7 @@ _CASIER = PieceConstitution(
 )
 _JUSTIFICATIF_SIEGE = PieceConstitution(
     code="JUSTIFICATIF_SIEGE",
-    libelle="Justificatif de domiciliation du siège — bail, titre foncier ou attestation",
+    libelle="Justificatif de domiciliation du siège : bail, titre foncier ou attestation",
 )
 _PLAN_LOCALISATION = PieceConstitution(
     code="PLAN_LOCALISATION",
