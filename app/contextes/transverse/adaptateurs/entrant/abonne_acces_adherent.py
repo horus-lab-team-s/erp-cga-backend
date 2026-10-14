@@ -131,10 +131,83 @@ def ouvrir_l_acces_de_la_fondatrice(
     locataire = configuration().locataire_par_defaut
     instant = maintenant()
     with etabli(locataire), unite(locataire) as boutique:
-        if boutique.comptes.par_courriel(courriel) is not None:
-            # Déjà ouvert : événement rejoué, ou compte créé à la main.
+        existant = boutique.comptes.par_courriel(courriel)
+        if existant is None:
+            _ouvrir(boutique, poste, charge, courriel, niu, locataire, instant)
             return
-        _ouvrir(boutique, poste, charge, courriel, niu, locataire, instant)
+        # ⚠️ SON COMPTE EXISTE DEPUIS LE PAIEMENT (14 octobre 2026).
+        #
+        # Le compte client s'ouvre désormais au règlement de la création. Cette
+        # branche s'arrêtait en silence sur toute adresse connue : la société de
+        # la cliente entrait au portefeuille, et son espace adhérent ne
+        # s'ouvrait jamais. On étend SON compte, s'il suit CETTE création ;
+        # sinon c'est, comme avant, un rejeu ou un compte créé à la main.
+        _etendre(boutique, poste, existant, charge, evenement.cle, niu, instant)
+
+
+def _etendre(boutique, poste, compte, charge, reference: str, niu: str, instant) -> None:
+    """Ajoute l'espace adhérent au compte qu'elle a depuis le paiement."""
+    from app.contextes.transverse.api import ExtensionRefusee, etendre_a_l_adhesion
+    from app.contextes.transverse.application.activation import emettre_jeton
+    from app.contextes.transverse.application.administration import SYSTEME
+    from app.contextes.transverse.domaine.identites import EtatCompte
+    from app.contextes.transverse.domaine.jetons import TypeJeton
+    from app.infrastructure.config import configuration
+
+    deja = any(
+        h.role.value == "ADHERENT" and h.portee is not None and niu in h.portee
+        for h in boutique.habilitations.pour_compte(compte.identifiant)
+    )
+    try:
+        etendre_a_l_adhesion(
+            compte=compte,
+            identifiant_habilitation=f"H-{uuid.uuid4().hex[:12]}",
+            niu=niu,
+            reference_creation=reference,
+            depuis=instant.date(),
+            habilitations=boutique.habilitations,
+            journal=boutique.journal,
+            a_l_instant=instant,
+        )
+    except ExtensionRefusee:
+        # Déjà ouvert à la main, ou adresse d'un autre compte : on n'y touche pas.
+        return
+    if deja:
+        # Événement rejoué : l'habilitation existait, le message est parti.
+        return
+
+    denomination = str(charge.get("denomination") or "")
+    if compte.etat is EtatCompte.EN_ATTENTE_ACTIVATION:
+        # ⚠️ Elle n'a jamais choisi son mot de passe : le lien du paiement a
+        # pu expirer depuis des semaines. Un lien neuf, et le message qui va
+        # avec.
+        jeton, secret = emettre_jeton(
+            compte,
+            TypeJeton.ACTIVATION,
+            identifiant_jeton=f"J-{uuid.uuid4().hex[:12]}",
+            jetons=boutique.jetons,
+            journal=boutique.journal,
+            a_l_instant=instant,
+            emis_par=SYSTEME,
+        )
+        _envoyer_le_lien(poste, compte, secret, jeton, denomination, niu)
+    else:
+        base = configuration().adresse_publique_site.rstrip("/")
+        poste.envoyer(
+            "compte.adhesion_ajoutee",
+            destinataire=compte.courriel,
+            contexte={
+                "prenom": compte.appellation,
+                "denomination": denomination,
+                "niu": niu,
+                "lien": f"{base}/connexion",
+            },
+        )
+    _journal.info(
+        "Entreprise %s immatriculée : espace adhérent ajouté au compte %s.",
+        niu,
+        compte.identifiant,
+    )
 
 
 def _ouvrir(boutique, poste, charge, courriel: str, niu: str, locataire: str, instant) -> None:

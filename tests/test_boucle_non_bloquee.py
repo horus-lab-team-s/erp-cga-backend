@@ -178,6 +178,7 @@ ROUTES_ASYNCHRONES = {
     "deposer_fichier": "await fichier.read()",
     "deposer_fichier_scelle": "await fichier.read()",
     "deposer_fichier_de_formalite": "await fichier.read()",
+    "deposer_fichier_de_creation": "await fichier.read()",
     "reprendre": "await fichier.read()",
     "notification_tara": "await requete.json()",
 }

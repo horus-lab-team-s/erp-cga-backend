@@ -17,12 +17,14 @@ from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     SouscriptionIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.tables import (
+    TableContratDHonoraires,
     TableDevis,
     TableDossierCommercial,
     TablePaiement,
     TableProforma,
     TableQualification,
     TableRappelAPasser,
+    TableReglementDHonoraires,
     TableSouscription,
     TableSuiviDeRelance,
     TableTarifFixe,
@@ -31,6 +33,11 @@ from app.contextes.souscription.domaine.devis import Devis
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
+)
+from app.contextes.souscription.domaine.honoraires import (
+    ContratDHonoraires,
+    PeriodeDejaReglee,
+    ReglementDHonoraires,
 )
 from app.contextes.souscription.domaine.offre import TarifFixe
 from app.contextes.souscription.domaine.paiements import Paiement, StatutPaiement
@@ -45,6 +52,8 @@ from app.contextes.souscription.domaine.souscriptions import (
 from app.infrastructure.depot_document import DepotDocument
 
 __all__ = [
+    "DepotContratsDHonorairesSql",
+    "DepotReglementsDHonorairesSql",
     "DepotDevisSql",
     "DepotTarifsFixesSql",
     "DepotProformasSql",
@@ -538,3 +547,63 @@ class DepotTarifsFixesSql(DepotDocument[TarifFixe]):
     def lister(self) -> list[TarifFixe]:
         return self._tous(self._requete().order_by(TableTarifFixe.fixe_le))
 
+
+
+class DepotContratsDHonorairesSql(DepotDocument[ContratDHonoraires]):
+    """Réalisation de `DepotContratsDHonoraires`. Voir `TableContratDHonoraires`."""
+
+    _table = TableContratDHonoraires
+    _entite = ContratDHonoraires
+
+    def _cle(self, entite: ContratDHonoraires) -> dict[str, Any]:
+        return {"locataire": self.locataire, "niu": entite.niu}
+
+    def _colonnes(self, entite: ContratDHonoraires) -> dict[str, Any]:
+        return {"fixe_le": entite.fixe_le}
+
+    def lire(self, niu: str) -> ContratDHonoraires | None:
+        return self._premier(self._requete().where(TableContratDHonoraires.niu == niu))
+
+    def enregistrer(self, contrat: ContratDHonoraires) -> None:
+        self._poser(contrat)
+
+    def lister(self) -> list[ContratDHonoraires]:
+        return sorted(self._tous(self._requete()), key=lambda c: c.denomination)
+
+
+class DepotReglementsDHonorairesSql(DepotDocument[ReglementDHonoraires]):
+    """Réalisation de `DepotReglementsDHonoraires`. Voir `TableReglementDHonoraires`."""
+
+    _table = TableReglementDHonoraires
+    _entite = ReglementDHonoraires
+
+    def _cle(self, entite: ReglementDHonoraires) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: ReglementDHonoraires) -> dict[str, Any]:
+        return {"niu": entite.niu, "periode": entite.periode, "constate_le": entite.constate_le}
+
+    def pour(self, niu: str) -> list[ReglementDHonoraires]:
+        return self._tous(
+            self._requete()
+            .where(TableReglementDHonoraires.niu == niu)
+            .order_by(TableReglementDHonoraires.periode)
+        )
+
+    def enregistrer(self, reglement: ReglementDHonoraires) -> None:
+        """⚠️ La lecture d'abord, pour un refus lisible ; la contrainte de la base
+        tranche la course entre deux règlements simultanés."""
+        if any(r.periode == reglement.periode for r in self.pour(reglement.niu)):
+            raise PeriodeDejaReglee(
+                f"la période du {reglement.periode:%d/%m/%Y} de {reglement.niu} est déjà réglée."
+            )
+        try:
+            self._poser(reglement)
+        except IntegrityError as conflit:
+            raise PeriodeDejaReglee(
+                f"la période du {reglement.periode:%d/%m/%Y} de {reglement.niu} vient "
+                "d'être réglée par un autre canal."
+            ) from conflit
+
+    def lister(self) -> list[ReglementDHonoraires]:
+        return self._tous(self._requete().order_by(TableReglementDHonoraires.constate_le))

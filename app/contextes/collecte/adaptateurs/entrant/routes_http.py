@@ -550,7 +550,7 @@ async def deposer_fichier(
 
 
 async def _ranger_le_fichier(fichier: UploadFile) -> DepotFichier:
-    """Lit, contrôle et range. **Partagé par les trois portes**, et c'est l'objet.
+    """Lit, contrôle et range. **Partagé par toutes les portes**, et c'est l'objet.
 
     ⚠️ Les gardes recopiées dans trois routes divergent : l'une reçoit une
     correction, les autres non, et c'est la moins surveillée qui reste ouverte.
@@ -677,6 +677,43 @@ async def deposer_fichier_scelle(
         # inconnue » permettrait d'énumérer les dossiers en lisant les réponses.
         raise HTTPException(status_code=404, detail=str(refus)) from refus
 
+    return await _ranger_le_fichier(fichier)
+
+
+@routeur.post(
+    "/fichiers-de-creation",
+    summary="Déposer un fichier sur un dossier de création, depuis son compte",
+    status_code=201,
+    responses={
+        404: {"description": "Dossier hors de la portée du compte"},
+        413: {"description": "Fichier trop volumineux"},
+        415: {"description": "Type de document refusé"},
+    },
+)
+async def deposer_fichier_de_creation(
+    acces: AccesRequis,
+    reference: str = Query(..., description="Le dossier de création (CRE-…)"),
+    fichier: UploadFile = File(..., description="Le document photographié"),
+) -> DepotFichier:
+    """La troisième porte : un dossier de création, ouvert par une session.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI ELLE EXISTE (14 octobre 2026)
+
+    La cliente d'une création a désormais un compte, ouvert au paiement. Depuis
+    son espace, elle n'a pas de sceau à présenter, et `/fichiers` exige un NIU
+    qu'elle n'a pas.
+
+    ⚠️ LA PORTÉE, PAS LE SCEAU : la référence doit être dans la portée du compte,
+    son seul dossier, et hors portée rend 404, comme partout.
+
+    ⚠️ LA CLIENTE SEULE. Le cabinet a sa porte, `/fichiers-de-formalite`, sous
+    `SUIVRE_FORMALITE` : l'ouvrir ici aussi ferait deux portes pour un geste.
+
+    ⚠️ **LES MÊMES GARDES QUE LES DEUX AUTRES PORTES** : c'est `_ranger_le_fichier`.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger_dossier(acces, Permission.SUIVRE_MA_CREATION, reference)
     return await _ranger_le_fichier(fichier)
 
 

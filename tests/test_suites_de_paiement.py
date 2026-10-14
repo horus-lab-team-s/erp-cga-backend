@@ -127,15 +127,14 @@ def parcours_neuf():
     reinitialiser_dossiers()
 
 
-@pytest.fixture
-def dossier_accepte():
+def _poser_un_dossier_accepte(service: str):
     """Un dossier jusqu'à l'acceptation, **sans adresse retenue**."""
     demande = DemandeDeContact(
         identifiant="dc-suite",
         deposee_le=T0,
         nom="Boulangerie du Wouri",
         telephone="+237690112233",
-        service_souhaite="CREATION",
+        service_souhaite=service,
         canal_prefere=Canal.APPEL,
         consentement=Consentement(
             accorde=False, recueilli_le=T0, version_du_texte="v1"
@@ -161,7 +160,7 @@ def dossier_accepte():
         emettre(
             numero=NUMERO,
             dossier=REFERENCE,
-            service="CREATION",
+            service=service,
             tarif=tarif,
             contenu=b"%PDF",
             modele="CREATION",
@@ -170,6 +169,24 @@ def dossier_accepte():
         ).transmise(T0)
     )
     return dossier
+
+
+@pytest.fixture
+def dossier_accepte():
+    """La vente d'un espace de plateforme, acceptée, **sans adresse retenue**.
+
+    ⚠️ `PLATEFORME`, et non plus `CREATION`. Ces cas gardent ce qui arrive quand
+    un règlement tombe sur un espace que personne n'a préparé. Ils portaient sur
+    une création d'entreprise, qui n'ouvre plus d'espace depuis le 27 septembre
+    2026 : ils ne tenaient que parce que l'adresse était exigée de toute vente.
+    Depuis le 13 octobre, elle ne l'est que là où il y a un espace à adresser.
+    """
+    return _poser_un_dossier_accepte("PLATEFORME")
+
+
+@pytest.fixture
+def creation_acceptee():
+    return _poser_un_dossier_accepte("CREATION")
 
 
 class TestQuandLAdresseNAPasEteRetenue:
@@ -202,6 +219,25 @@ class TestQuandLAdresseNAPasEteRetenue:
         _suite(journal).encaisser(_paiement(), T0)
 
         assert journal.actions() == ["paiement.ouverture_impossible"]
+
+    def test_une_creation_sans_adresse_est_encaissee(self, creation_acceptee):
+        """⚠️ **L'autre moitié de la règle, et le défaut du 13 octobre 2026.**
+
+        Une création d'entreprise n'ouvre pas d'espace. Exiger d'elle une adresse
+        laissait un règlement notifié par l'opérateur en échec, « l'ouverture
+        attend un humain », alors qu'il n'y avait rien à ouvrir : la cliente avait
+        payé, et son dossier de formalité ne naissait pas.
+        """
+        journal = _JournalFactice()
+
+        aboutissement = _suite(journal).encaisser(_paiement(), T0)
+
+        assert aboutissement.abouti is True, aboutissement.message
+        assert "n'ouvre pas d'espace" in aboutissement.message
+        dossier = _dossiers().lire(REFERENCE)
+        assert dossier.etat.value == "PAYEE"
+        assert dossier.slug_retenu is None
+        assert journal.actions() == []
 
     def test_avec_une_adresse_retenue_le_dossier_est_encaisse(self, dossier_accepte):
         """⚠️ La contre-épreuve. Sans elle, une suite qui échouerait toujours

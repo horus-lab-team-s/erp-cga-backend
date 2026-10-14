@@ -239,6 +239,7 @@ from app.contextes.souscription.domaine.qualification import (
     ReponseInvalide,
     SourceReponse,
     ouvrir_une_qualification,
+    preremplir,
 )
 from app.contextes.souscription.domaine.relance import (
     IssueDeRelance,
@@ -446,6 +447,7 @@ __all__ = [
     "ouvrir_un_dossier",
     "ouvrir_un_fil",
     "ouvrir_une_qualification",
+    "preremplir",
     "plan_depuis",
     "rapprocher",
     "reaffecter_le_dossier",

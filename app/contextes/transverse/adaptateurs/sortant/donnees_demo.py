@@ -125,6 +125,9 @@ COMPTES_DEMO: list[Compte] = [
     _compte("C-005", "Christelle", "NDONGO", "c.ndongo@cga-brcg.cm"),
     _compte("C-006", "Roger", "EBOLO", "r.ebolo@cga-brcg.cm"),
     _compte("C-007", "Patricia", "MOUKOURI", "p.moukouri@cga-brcg.cm"),
+    # La responsable de caisse (14 octobre 2026) : elle constate les règlements
+    # reçus au guichet. Elle ne voit ni les comptes des adhérents ni les dossiers.
+    _compte("C-009", "Nadège", "ESSAMA", "n.essama@cga-brcg.cm"),
     # Parti en avril. Le compte est suspendu, l'habilitation fermée, et l'un
     # comme l'autre demeurent : les écritures qu'il a validées portent son
     # identifiant, et le journal d'audit y renvoie.
@@ -200,6 +203,8 @@ HABILITATIONS_DEMO: list[Habilitation] = [
     _hab("H-008", "C-007", Role.CHARGE_FORMALITES, None, date(2025, 6, 1),
          motif=MotifHabilitation.CHANGEMENT_DE_POSTE,
          precision="cumule les formalités depuis le départ de A. TCHINDA"),
+    _hab("H-013", "C-009", Role.CAISSE, None, date(2026, 10, 1),
+         accordee_par="C-001", precision="tient la caisse du cabinet"),
     # Le comptable parti : habilitation fermée, ligne conservée. Résoudre les
     # droits de C-008 au 1er mars et au 1er juin 2026 donne deux réponses.
     _hab(

@@ -23,6 +23,9 @@ deux contextes détient la vérité sur les personnes.
 
 from __future__ import annotations
 
+from app.contextes.transverse.adaptateurs.entrant.compte_de_creation import (
+    ouvrir_le_compte_de_la_creation,
+)
 from app.contextes.transverse.adaptateurs.entrant.dependances import (
     NOM_TEMOIN,
     AccesRequis,
@@ -35,6 +38,7 @@ from app.contextes.transverse.adaptateurs.entrant.dependances import (
     atelier,
     exiger,
     exiger_dossier,
+    exiger_dossier_pour_l_un_de,
     garnir_le_repertoire,
     reinitialiser_atelier,
     repertoire_des_tenants,
@@ -90,6 +94,7 @@ from app.contextes.transverse.application.activation import (
 from app.contextes.transverse.application.administration import (
     SYSTEME,
     CourrielDejaPris,
+    ExtensionRefusee,
     FermetureRefusee,
     ReaffectationRefusee,
     ReinitialisationRefusee,
@@ -98,9 +103,11 @@ from app.contextes.transverse.application.administration import (
     accorder,
     affecter_dossier,
     creer_l_administrateur_d_un_tenant,
+    etendre_a_l_adhesion,
     fermer_habilitation,
     inviter_collaborateur,
     ouvrir_acces_adherent,
+    ouvrir_acces_client_creation,
     reaffecter_dossier,
     reinitialiser_second_facteur,
     retablir_compte,
@@ -294,6 +301,7 @@ __all__ = [
     "enroler_second_facteur",
     "exiger",
     "exiger_dossier",
+    "exiger_dossier_pour_l_un_de",
     "fermer_habilitation",
     "fermer_session",
     "habilitations_actives",
@@ -302,6 +310,10 @@ __all__ = [
     "creer_l_administrateur_d_un_tenant",
     "inviter_collaborateur",
     "ouvrir_acces_adherent",
+    "ouvrir_acces_client_creation",
+    "ouvrir_le_compte_de_la_creation",
+    "etendre_a_l_adhesion",
+    "ExtensionRefusee",
     "ouvrir_session",
     "permissions_au",
     "permissions_de",

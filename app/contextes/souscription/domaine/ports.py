@@ -39,6 +39,10 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.honoraires import (
+    ContratDHonoraires,
+    ReglementDHonoraires,
+)
 from app.contextes.souscription.domaine.offre import Service, TarifFixe
 from app.contextes.souscription.domaine.paiements import EvenementPaiement, Paiement
 from app.contextes.souscription.domaine.proforma import Proforma
@@ -47,6 +51,8 @@ from app.contextes.souscription.domaine.relance import SuiviDeRelance
 from app.contextes.souscription.domaine.souscriptions import Souscription
 
 __all__ = [
+    "DepotContratsDHonoraires",
+    "DepotReglementsDHonoraires",
     "DepotDevis",
     "DepotDossiersCommerciaux",
     "DepotPaiements",
@@ -339,3 +345,25 @@ class ServiceOuvertureAcces(Protocol):
     def ouvrir(self, souscription: Souscription, a_l_instant: datetime) -> str:
         """Rend l'identifiant du compte créé. Lève si l'accès ne peut pas être ouvert."""
         ...
+
+
+class DepotContratsDHonoraires(Protocol):
+    """Le contrat d'honoraires de chaque adhérent : un par entreprise, le dernier fait foi."""
+
+    def lire(self, niu: str) -> ContratDHonoraires | None: ...
+
+    def enregistrer(self, contrat: ContratDHonoraires) -> None: ...
+
+    def lister(self) -> list[ContratDHonoraires]: ...
+
+
+class DepotReglementsDHonoraires(Protocol):
+    """Les règlements constatés. **Un par période** : voir `PeriodeDejaReglee`."""
+
+    def pour(self, niu: str) -> list[ReglementDHonoraires]: ...
+
+    def enregistrer(self, reglement: ReglementDHonoraires) -> None:
+        """Lève `PeriodeDejaReglee` si la période porte déjà un règlement."""
+        ...
+
+    def lister(self) -> list[ReglementDHonoraires]: ...

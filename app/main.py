@@ -658,6 +658,12 @@ def creer_application() -> FastAPI:
     # dernier parce qu'elle est le seul contexte à traverser la frontière entre
     # les deux — un visiteur y entre sans compte et en ressort avec.
     application.include_router(routeur_souscription)
+    # ⚠️ 14 octobre 2026 : les honoraires des adhérents, sous `/souscription/honoraires`.
+    from app.contextes.souscription.adaptateurs.entrant.routes_honoraires import (
+        routeur as routeur_honoraires,
+    )
+
+    application.include_router(routeur_honoraires)
     # Le parcours d'acquisition, en amont de la souscription : il part du
     # formulaire public et s'arrête au dossier qualifié. Monté à part parce qu'il
     # a son propre préfixe et sa propre étiquette, et parce qu'il grandira.

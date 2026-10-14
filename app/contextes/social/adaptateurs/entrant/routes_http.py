@@ -52,7 +52,7 @@ from app.contextes.social.api import (
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
-    exiger_dossier,
+    exiger_dossier_pour_l_un_de,
 )
 from app.infrastructure.config import configuration
 from app.partage.erreurs import message_lisible
@@ -139,6 +139,33 @@ def _periode(annee: int, mois: int) -> Periode:
 
 
 # ── Lectures ─────────────────────────────────────────────────────────────────
+
+#: Qui peut LIRE la paie d'un dossier.
+#:
+#: ─────────────────────────────────────────────────────────────────────────────
+#: DEUX RÔLES, AUCUNE PERMISSION EN COMMUN, ET C'EST VOULU
+#:
+#: Le collaborateur tient la paie de ses dossiers par `LIRE_COMPTABILITE`, qui
+#: lui ouvre aussi la balance et le journal dont il a besoin pour la contrôler.
+#:
+#: L'adhérent tient la sienne par `TENIR_SA_PAIE`, et rien d'autre : un bulletin
+#: porte des rémunérations nominatives, et lui ouvrir la comptabilité du dossier
+#: pour qu'il voie sa paie lui ouvrirait au passage tous les livres.
+#:
+#: ⚠️ Le périmètre reste entier dans les deux cas. `exiger_dossier_pour_l_un_de`
+#: applique le même contrôle de dossier quelle que soit la permission qui a
+#: ouvert la porte : une paie demandée sur un autre NIU rend 404.
+#: ─────────────────────────────────────────────────────────────────────────────
+LECTURE_DE_LA_PAIE = (Permission.LIRE_COMPTABILITE, Permission.TENIR_SA_PAIE)
+
+#: Qui peut TENIR la paie : inscrire un salarié, ouvrir et clore un contrat.
+#:
+#: ⚠️ `SAISIR_ECRITURE` côté cabinet et non `LIRE_COMPTABILITE` : inscrire un
+#: salarié engage le dossier, et un chargé de clientèle qui lit les comptes n'a
+#: pas à embaucher. L'adhérent, lui, saisit son propre personnel : c'est tout
+#: l'objet du libre service.
+TENUE_DE_LA_PAIE = (Permission.SAISIR_ECRITURE, Permission.TENIR_SA_PAIE)
+
 @routeur.get("/dossiers/{entreprise}/salaries", summary="Le fichier du personnel")
 def lister_salaries(
     acces: AccesRequis,
@@ -152,7 +179,7 @@ def lister_salaries(
     nominatif des années après un départ. Ceux qui sont sortis portent
     `sans_contrat` — l'écran les grise, il ne les efface pas.
     """
-    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     en_cours = {
         c.salarie: c for c in depot_contrats.du_dossier(entreprise, a_la_date=a_la_date)
@@ -195,7 +222,7 @@ def lire_bulletin(
         ),
     ),
 ) -> Bulletin:
-    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     periode = _periode(annee, mois)
     _, depot_contrats = depots()
     contrats = [
@@ -244,7 +271,7 @@ def lire_declaration(
     qu'une erreur : la CNPS attend une déclaration à zéro, pas une absence de
     déclaration.
     """
-    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     periode = _periode(annee, mois)
     _, depot_contrats = depots()
     try:
@@ -286,7 +313,7 @@ def lire_declaration(
 def inscrire(acces: AccesRequis, entreprise: str, demande: DemandeSalarie) -> Salarie:
     """⚠️ Pas 89 : un matricule déjà attribué est refusé (409). Il écrasait le salarié,
     fût-il d'un autre dossier. Voir `application/personnel.py`."""
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     salarie = Salarie(
         matricule=demande.matricule,
@@ -317,7 +344,7 @@ def engager(
     on le ferme et on en ouvre un nouveau. Écraser le salaire effacerait
     l'histoire, et la paie de mars se recalculerait avec le salaire d'avril.
     """
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     try:
         contrat = Contrat(
@@ -367,7 +394,7 @@ def clore(
     contrats ne se chevauchent plus. La fin est exclue : clore le 01/10 laisse septembre
     au contrat clos, et le nouveau contrat commence le 01/10.
     """
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     try:
         return clore_un_contrat(

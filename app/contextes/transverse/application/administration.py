@@ -64,6 +64,9 @@ __all__ = [
     "fermer_habilitation",
     "inviter_collaborateur",
     "ouvrir_acces_adherent",
+    "ouvrir_acces_client_creation",
+    "etendre_a_l_adhesion",
+    "ExtensionRefusee",
     "retablir_compte",
     "suspendre_compte",
 ]
@@ -311,6 +314,176 @@ def ouvrir_acces_adherent(
     réellement validé. C'est le contexte de souscription qui porte cette garantie,
     pas celui-ci.
     """
+    return _ouvrir_un_acces_externe(
+        role=Role.ADHERENT,
+        dossier=niu,
+        trace={"niu": niu, "souscription": reference_souscription},
+        precision=reference_souscription,
+        identifiant_compte=identifiant_compte,
+        identifiant_habilitation=identifiant_habilitation,
+        identifiant_jeton=identifiant_jeton,
+        courriel=courriel,
+        nom=nom,
+        prenom=prenom,
+        locataire=locataire,
+        depuis=depuis,
+        comptes=comptes,
+        habilitations=habilitations,
+        jetons=jetons,
+        journal=journal,
+        a_l_instant=a_l_instant,
+        telephone=telephone,
+        duree_lien=duree_lien,
+    )
+
+
+def ouvrir_acces_client_creation(
+    *,
+    identifiant_compte: str,
+    identifiant_habilitation: str,
+    identifiant_jeton: str,
+    courriel: str,
+    nom: str,
+    prenom: str,
+    reference_creation: str,
+    locataire: str,
+    depuis: date,
+    comptes: DepotComptes,
+    habilitations: DepotHabilitations,
+    jetons: DepotJetons,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+    telephone: str | None = None,
+    duree_lien: timedelta | None = None,
+) -> tuple[Compte, Jeton, str]:
+    """Ouvre le compte de la cliente qui vient de payer la création de sa société.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME RAISONNEMENT QUE `ouvrir_acces_adherent`, SUR UNE AUTRE PORTÉE.
+
+    Aucun `Acces` : c'est l'encaissement qui déclenche, et il n'y a personne à
+    autoriser. Aucun degré de liberté : le rôle est `CLIENT_CREATION`, la portée
+    est le seul dossier de formalité payé. Une création payée ne peut pas
+    fabriquer un adhérent, ni un collaborateur.
+
+    ⚠️ L'appelant est responsable de n'invoquer cette fonction que pour un
+    dossier de formalité réellement ouvert sur un paiement encaissé.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    return _ouvrir_un_acces_externe(
+        role=Role.CLIENT_CREATION,
+        dossier=reference_creation,
+        trace={"creation": reference_creation},
+        precision=reference_creation,
+        identifiant_compte=identifiant_compte,
+        identifiant_habilitation=identifiant_habilitation,
+        identifiant_jeton=identifiant_jeton,
+        courriel=courriel,
+        nom=nom,
+        prenom=prenom,
+        locataire=locataire,
+        depuis=depuis,
+        comptes=comptes,
+        habilitations=habilitations,
+        jetons=jetons,
+        journal=journal,
+        a_l_instant=a_l_instant,
+        telephone=telephone,
+        duree_lien=duree_lien,
+    )
+
+
+class ExtensionRefusee(ValueError):
+    """Le compte ne peut pas recevoir l'accès adhérent par cette voie."""
+
+
+def etendre_a_l_adhesion(
+    *,
+    compte: Compte,
+    identifiant_habilitation: str,
+    niu: str,
+    reference_creation: str,
+    depuis: date,
+    habilitations: DepotHabilitations,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+) -> Habilitation:
+    """Ajoute le rôle `ADHERENT` au compte de la cliente dont la société est née.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME COMPTE, ET NON UN SECOND.
+
+    Elle a choisi son mot de passe au paiement, et suit sa création depuis des
+    semaines. Lui ouvrir un second compte à l'immatriculation était impossible
+    (une adresse ne sert qu'à un compte) et l'abonné s'arrêtait en silence : sa
+    société entrait au portefeuille, et son espace adhérent ne s'ouvrait jamais.
+
+    ⚠️ **SEULEMENT SI CE COMPTE SUIT CETTE CRÉATION-LÀ.** L'adresse seule ne
+    suffit pas : un collaborateur, ou une autre cliente, peut porter l'adresse
+    déclarée au dossier. Étendre sur la seule adresse donnerait le dossier d'une
+    entreprise à quiconque a saisi la même adresse. C'est l'habilitation
+    `CLIENT_CREATION` portant ce dossier de formalité qui prouve que c'est elle.
+
+    ⚠️ **ON NE FERME PAS SON ACCÈS À LA CRÉATION.** Le dossier clos porte ses
+    numéros et ses pièces ; elle peut vouloir les relire. La portée de
+    `CLIENT_CREATION` n'est pas un NIU, et l'espace adhérent ne la lit pas.
+
+    Rejouable : un événement remis deux fois rend l'habilitation déjà ouverte.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    existantes = habilitations.pour_compte(compte.identifiant)
+    suit_cette_creation = any(
+        h.role is Role.CLIENT_CREATION
+        and h.portee is not None
+        and reference_creation in h.portee
+        for h in existantes
+    )
+    if not suit_cette_creation:
+        raise ExtensionRefusee(
+            f"le compte {compte.identifiant} ne suit pas la création "
+            f"{reference_creation} : l'accès adhérent ne s'étend pas par cette voie."
+        )
+    for deja in existantes:
+        if deja.role is Role.ADHERENT and deja.portee is not None and niu in deja.portee:
+            return deja
+
+    habilitation = Habilitation(
+        identifiant=identifiant_habilitation,
+        compte=compte.identifiant,
+        role=Role.ADHERENT,
+        portee=frozenset({niu}),
+        debut=depuis,
+        motif=MotifHabilitation.SOUSCRIPTION,
+        accordee_par=SYSTEME,
+        precision=reference_creation,
+    )
+    _enregistrer_habilitation(habilitation, habilitations, journal, SYSTEME, a_l_instant)
+    return habilitation
+
+
+def _ouvrir_un_acces_externe(
+    *,
+    role: Role,
+    dossier: str,
+    trace: dict[str, str | None],
+    precision: str | None,
+    identifiant_compte: str,
+    identifiant_habilitation: str,
+    identifiant_jeton: str,
+    courriel: str,
+    nom: str,
+    prenom: str,
+    locataire: str,
+    depuis: date,
+    comptes: DepotComptes,
+    habilitations: DepotHabilitations,
+    jetons: DepotJetons,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+    telephone: str | None,
+    duree_lien: timedelta | None,
+) -> tuple[Compte, Jeton, str]:
+    """Le compte, son habilitation à portée unique, son lien d'activation."""
     _verifier_adresse_libre(courriel, comptes)
 
     compte = Compte(
@@ -330,23 +503,20 @@ def ouvrir_acces_adherent(
         action="compte.cree",
         objet_type="compte",
         objet_id=compte.identifiant,
-        apres={
-            "courriel": compte.courriel,
-            "niu": niu,
-            "souscription": reference_souscription,
-        },
+        apres={"courriel": compte.courriel, **trace},
     )
 
     habilitation = Habilitation(
         identifiant=identifiant_habilitation,
         compte=compte.identifiant,
-        # Le rôle et la portée sont imposés — voir la docstring.
-        role=Role.ADHERENT,
-        portee=frozenset({niu}),
+        # Le rôle et la portée sont imposés par l'appelant public — voir les
+        # docstrings de `ouvrir_acces_adherent` et `ouvrir_acces_client_creation`.
+        role=role,
+        portee=frozenset({dossier}),
         debut=depuis,
         motif=MotifHabilitation.SOUSCRIPTION,
         accordee_par=SYSTEME,
-        precision=reference_souscription,
+        precision=precision,
     )
     _enregistrer_habilitation(habilitation, habilitations, journal, SYSTEME, a_l_instant)
 

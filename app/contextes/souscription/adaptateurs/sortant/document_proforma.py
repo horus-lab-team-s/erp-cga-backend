@@ -32,11 +32,13 @@ from io import BytesIO
 from reportlab.lib.colors import HexColor, black, white
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from app.contextes.souscription.domaine.composition_proforma import CompositionProforma
 from app.partage.formats import ESPACE_FINE, en_toutes_lettres
 from app.partage.formats import montant as _montant_ecran
+from app.partage.marque import LOGO
 
 __all__ = ["rendre_le_document"]
 
@@ -126,22 +128,53 @@ def rendre_le_document(
         y = _rubrique(page, rubrique, y)
     total = composition.total if total_arrete is None else total_arrete
     y = _total(page, total, composition.total, y)
+    if composition.a_une_suite:
+        _suite(page, composition, y)
     _pied(page)
     page.showPage()
     page.save()
     return tampon.getvalue()
 
 
+#: Le logo de la maison. Lu ici dans une variable du module, pour qu'un essai
+#: puisse éprouver le rendu sans lui.
+_LOGO = LOGO
+#: La place qu'il occupe à gauche du bandeau. Ses proportions sont 16 / 9.
+_LARGEUR_LOGO = 30 * mm
+
+
 def _entete(page: canvas.Canvas) -> float:
+    """Le logo à gauche, le bandeau à sa droite : l'en-tête des documents papier.
+
+    ⚠️ **LE LOGO MANQUAIT, ET LE CABINET L'A RELEVÉ** (14 octobre 2026). Un
+    document sans la marque de la maison se lit comme un brouillon, et c'est lui
+    que le client compare au papier qu'on lui remettait jusque-là.
+
+    ⚠️ **SON ABSENCE NE FAIT PAS ÉCHOUER LE RENDU.** Une image mal construite, où
+    le fichier manquerait, doit encore émettre des proformas : le bandeau reprend
+    alors toute la largeur, comme avant.
+    """
     haut = _HAUTEUR - 14 * mm
+    gauche = 0.0
+    if _LOGO.is_file():
+        page.drawImage(
+            ImageReader(str(_LOGO)),
+            _MARGE - 6 * mm,
+            haut - 15.5 * mm,
+            width=_LARGEUR_LOGO,
+            height=_LARGEUR_LOGO * 162 / 288,
+            preserveAspectRatio=True,
+            mask=None,
+        )
+        gauche = _MARGE - 6 * mm + _LARGEUR_LOGO + 4 * mm
     page.setFillColor(_INDIGO)
-    page.rect(0, haut - 14 * mm, _LARGEUR, 14 * mm, stroke=0, fill=1)
+    page.rect(gauche, haut - 14 * mm, _LARGEUR - gauche, 14 * mm, stroke=0, fill=1)
     page.setFillColor(white)
     page.setFont("Helvetica-Bold", 16)
-    page.drawString(_MARGE, haut - 6 * mm, "CGA BROAD RANGE CONSULTING")
-    page.setFont("Helvetica", 7.5)
+    page.drawString(max(gauche + 5 * mm, _MARGE), haut - 6 * mm, "CGA BROAD RANGE CONSULTING")
+    page.setFont("Helvetica", 7 if gauche else 7.5)
     page.drawString(
-        _MARGE,
+        max(gauche + 5 * mm, _MARGE),
         haut - 11 * mm,
         "ASSISTANCE COMPTABLE ET FISCALE  ·  ASSISTANCE JURIDIQUE  ·  FORMATIONS"
         "  ·  PROCÉDURES ADMINISTRATIVES",
@@ -200,9 +233,12 @@ def _rubrique(page: canvas.Canvas, rubrique, y: float) -> float:
     # ⚠️ Le sous-total se calcule, il n'est pas au référentiel : une seconde
     # vérité à côté des lignes finirait par en diverger.
     if len(rubrique.lignes) > 1:
+        # ⚠️ Le filet est AU-DESSUS du sous-total, avec de l'air. Il passait à
+        # 2,5 mm de la ligne de base, c'est-à-dire au travers des chiffres : le
+        # sous-total se lisait barré, donc annulé.
         page.setLineWidth(0.6)
-        page.line(_LARGEUR - _MARGE - 42 * mm, y + 1.5 * mm, _LARGEUR - _MARGE, y + 1.5 * mm)
-        y -= 1 * mm
+        page.line(_LARGEUR - _MARGE - 42 * mm, y + 2.6 * mm, _LARGEUR - _MARGE, y + 2.6 * mm)
+        y -= 2.2 * mm
         page.setFont("Helvetica-Bold", 9.5)
         page.drawRightString(
             _LARGEUR - _MARGE, y, f"{_sous(rubrique.sous_total)} FCFA"
@@ -258,6 +294,66 @@ def _total(page: canvas.Canvas, total: Decimal, total_compose: Decimal, y: float
     return y
 
 
+#: Sous cette hauteur, on tourne la page : le pied occupe 22 mm.
+_PLANCHER = 30 * mm
+
+
+def _suite(page: canvas.Canvas, composition: CompositionProforma, y: float) -> None:
+    """Ce que le client apporte, ce qu'il reçoit, en combien de temps.
+
+    ⚠️ **CHAQUE BLOC TIENT ENSEMBLE OU PASSE À LA PAGE SUIVANTE.** Un titre laissé
+    seul en bas de page, sa liste en haut de la suivante, fait croire que la liste
+    est vide. La hauteur d'un bloc est donc mesurée avant d'être tracée.
+    """
+    largeur = _LARGEUR - 2 * _MARGE
+
+    def placer(y: float, hauteur: float) -> float:
+        if y - hauteur >= _PLANCHER:
+            return y
+        _pied(page)
+        page.showPage()
+        return _entete(page)
+
+    def liste(titre: str, elements: tuple[str, ...], y: float, *, numerotee: bool) -> float:
+        if not elements:
+            return y
+        retrait = 7 * mm
+        blocs = [
+            _couper(page, texte, "Helvetica", 9.5, largeur - retrait, equilibrer=False)
+            for texte in elements
+        ]
+        hauteur = 9 * mm + sum(len(b) for b in blocs) * 4.8 * mm + len(blocs) * 1 * mm
+        y = placer(y - 4 * mm, hauteur)
+        page.setFillColor(black)
+        page.setFont("Helvetica-Bold", 10)
+        page.drawCentredString(_LARGEUR / 2, y, titre)
+        y -= 7 * mm
+        page.setFont("Helvetica", 9.5)
+        for rang, lignes in enumerate(blocs, start=1):
+            page.drawString(_MARGE, y, f"{rang}." if numerotee else "•")
+            for ligne in lignes:
+                page.drawString(_MARGE + retrait, y, ligne)
+                y -= 4.8 * mm
+            y -= 1 * mm
+        return y - 2 * mm
+
+    y = liste("DOCUMENTS A FOURNIR", composition.documents_a_fournir, y, numerotee=True)
+    y = liste("DOCUMENTS A RECEVOIR", composition.documents_a_recevoir, y, numerotee=False)
+
+    if composition.delai_d_execution:
+        lignes = _couper(
+            page, composition.delai_d_execution, "Helvetica", 9.5, largeur, equilibrer=False
+        )
+        y = placer(y - 4 * mm, 9 * mm + len(lignes) * 4.8 * mm)
+        page.setFont("Helvetica-Bold", 10)
+        page.drawString(_MARGE, y, "DELAI D'EXECUTION ET REGLEMENT")
+        y -= 6.5 * mm
+        page.setFont("Helvetica", 9.5)
+        for ligne in lignes:
+            page.drawString(_MARGE, y, ligne)
+            y -= 4.8 * mm
+
+
 def _pied(page: canvas.Canvas) -> None:
     bas = 22 * mm
     page.setFillColor(_INDIGO)
@@ -271,7 +367,13 @@ def _pied(page: canvas.Canvas) -> None:
 
 
 def _couper(
-    page: canvas.Canvas, texte: str, police: str, taille: float, largeur: float
+    page: canvas.Canvas,
+    texte: str,
+    police: str,
+    taille: float,
+    largeur: float,
+    *,
+    equilibrer: bool = True,
 ) -> list[str]:
     """Coupe le texte pour tenir dans `largeur` points, aux espaces seulement.
 
@@ -304,7 +406,10 @@ def _couper(
         return lignes
 
     lignes = decouper(largeur)
-    if len(lignes) < 2:
+    # ⚠️ L'équilibrage sert un texte CENTRÉ. Sur un paragraphe aligné à gauche, il
+    # raccourcirait toutes les lignes pour rien : la liste des pièces se couperait
+    # aux deux tiers de la page.
+    if len(lignes) < 2 or not equilibrer:
         return lignes
 
     # La largeur idéale si le texte se répartissait exactement. On remonte

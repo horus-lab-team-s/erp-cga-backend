@@ -23,12 +23,17 @@ En base : une transaction avec `SELECT … FOR UPDATE` sur la ligne du paiement.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from app.contextes.souscription.domaine.devis import Devis
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
+)
+from app.contextes.souscription.domaine.honoraires import (
+    ContratDHonoraires,
+    PeriodeDejaReglee,
+    ReglementDHonoraires,
 )
 from app.contextes.souscription.domaine.paiements import Paiement, StatutPaiement
 from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
@@ -385,3 +390,46 @@ class DepotQualificationsMemoire:
 
     def enregistrer(self, qualification: Qualification) -> None:
         self._entrepot.poser(qualification)
+
+
+class DepotContratsDHonorairesMemoire:
+    """Réalisation en mémoire de `DepotContratsDHonoraires`."""
+
+    def __init__(self) -> None:
+        self._contrats: dict[str, ContratDHonoraires] = {}
+
+    def lire(self, niu: str) -> ContratDHonoraires | None:
+        return self._contrats.get(niu)
+
+    def enregistrer(self, contrat: ContratDHonoraires) -> None:
+        self._contrats[contrat.niu] = contrat
+
+    def lister(self) -> list[ContratDHonoraires]:
+        return sorted(self._contrats.values(), key=lambda c: c.denomination)
+
+
+class DepotReglementsDHonorairesMemoire:
+    """Réalisation en mémoire de `DepotReglementsDHonoraires`.
+
+    ⚠️ La même garde que la clé unique de la base : sans elle, les cas en mémoire
+    accepteraient un double règlement que PostgreSQL refuserait.
+    """
+
+    def __init__(self) -> None:
+        self._reglements: dict[tuple[str, date], ReglementDHonoraires] = {}
+
+    def pour(self, niu: str) -> list[ReglementDHonoraires]:
+        return sorted(
+            (r for r in self._reglements.values() if r.niu == niu), key=lambda r: r.periode
+        )
+
+    def enregistrer(self, reglement: ReglementDHonoraires) -> None:
+        cle = (reglement.niu, reglement.periode)
+        if cle in self._reglements:
+            raise PeriodeDejaReglee(
+                f"la période du {reglement.periode:%d/%m/%Y} de {reglement.niu} est déjà réglée."
+            )
+        self._reglements[cle] = reglement
+
+    def lister(self) -> list[ReglementDHonoraires]:
+        return sorted(self._reglements.values(), key=lambda r: r.constate_le)

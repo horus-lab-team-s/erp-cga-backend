@@ -446,6 +446,18 @@ class TestLaRelanceDUneProformaSansReponse:
         postes = service_de_notification().derniers()
         assert postes, "aucun courriel posté : la branche courriel n'a pas été prise"
         dernier = postes[-1]
+        # ⚠️ ON CHERCHE LE NÔTRE, ON NE PREND PLUS « LE DERNIER ».
+        #
+        # Le dernier message posté n'est pas forcément celui qu'on vient de
+        # provoquer : les rappels d'échéance partent aux adhérents en parallèle,
+        # et le 10 octobre 2026 ils arrivaient après la relance. Le cas rougissait
+        # alors en annonçant un gabarit inattendu, sur un produit pourtant juste.
+        relances = [m for m in postes if m.code == "relance.proforma"]
+        assert relances, (
+            "aucune relance de proforma postée. Messages vus : "
+            f"{[m.code for m in postes]}"
+        )
+        dernier = relances[-1]
         assert dernier.code == "relance.proforma", (
             f"code de gabarit inattendu : {dernier.code}. Un code absent du "
             "catalogue ferait rendre « faux » à l'envoi, sans rien poster."
@@ -804,7 +816,22 @@ class TestLaMainQuiPasseToutSeule:
         # mains » l'informerait surtout que personne ne s'en occupait.
         from app.contextes.transverse.api import service_de_notification
 
-        assert service_de_notification().derniers() == []
+        # ⚠️ « VIDE » ÉTAIT FAUX, ET LE CALENDRIER L'A MONTRÉ.
+        #
+        # Ce cas exigeait une boîte aux lettres vide. Elle ne l'est pas : les
+        # rappels d'échéance partent aux adhérents dès que le dépôt approche, et
+        # le 10 octobre 2026 l'échéance de TVA du 15 était à cinq jours. Six
+        # `echeance.rappel` attendaient donc, sans aucun rapport avec la reprise.
+        #
+        # Ce que le cas veut dire est plus précis : **rien n'est parti AU
+        # PROSPECT**. La reprise réorganise le cabinet, elle ne communique pas.
+        # C'est cela qu'on vérifie, et cela ne dépend d'aucune date.
+        pour_le_prospect = [
+            m
+            for m in service_de_notification().derniers()
+            if "proforma" in m.code or "prospect" in m.code or "reprise" in m.code
+        ]
+        assert pour_le_prospect == [], pour_le_prospect
         assert client.get("/acquisition/rappels").json() == []
 
         # 6 · L'ancienneté repart de zéro : le nouveau responsable a son délai
@@ -898,7 +925,9 @@ class TestLeReglementNotifieParLOperateur:
         )
         assert demande.status_code == 202, demande.text
         corps = demande.json()
-        assert corps["slug"] == self.SLUG
+        # ⚠️ Une création n'ouvre pas d'espace : l'adresse envoyée est ignorée, et
+        # la réponse le dit. Un client plus ancien de l'API l'envoie encore.
+        assert corps["slug"] is None
         assert Decimal(corps["montant"]) == Decimal("250000")
 
         # ⚠️ Rien n'est encaissé : le dossier est toujours à l'acceptation.
@@ -938,8 +967,10 @@ class TestLeReglementNotifieParLOperateur:
             client.get(f"/acquisition/dossiers/{reference}").json()["etat"] == "PAYEE"
         )
 
-        # 5 · L'événement d'ouverture est déposé, avec le slug retenu **avant** le
-        # règlement. ⚠️ La machine n'a choisi aucune adresse.
+        # 5 · L'événement d'encaissement est déposé. ⚠️ Il ne porte AUCUNE adresse :
+        # une création n'ouvre pas d'espace, et l'événement le dit lui-même. Il
+        # portait jusqu'au 13 octobre 2026 l'adresse choisie au règlement, que la
+        # fiche affichait ensuite comme « l'espace » d'une cliente qui n'en a pas.
         with moteur_test.connect() as connexion:
             (ouverture,) = list(
                 connexion.execute(
@@ -949,7 +980,8 @@ class TestLeReglementNotifieParLOperateur:
                     )
                 )
             )
-        assert ouverture.donnees["charge"]["slug"] == self.SLUG
+        assert ouverture.donnees["charge"]["ouvre_un_locataire"] is False
+        assert ouverture.donnees["charge"]["slug"] == ""
 
         # 6 · ⚠️ LES TOURS PASSENT, ET AUCUN LOCATAIRE NE S'OUVRE.
         #
@@ -1012,7 +1044,7 @@ class TestLeReglementNotifieParLOperateur:
         manqué ne doit pas échouer pour cela.
         """
         client = plateforme
-        _, numero = self._dossier_accepte(client)
+        _, numero = self._dossier_accepte(client, service="PLATEFORME")
         self._en_administrateur(client)
 
         assert (
@@ -1042,7 +1074,7 @@ class TestLeReglementNotifieParLOperateur:
         tapée ce jour-là. Deux chemins, deux espaces possibles pour un engagement.
         """
         client = plateforme
-        reference, numero = self._dossier_accepte(client)
+        reference, numero = self._dossier_accepte(client, service="PLATEFORME")
         self._en_administrateur(client)
         assert client.post(
             f"/acquisition/proformas/{numero}/reglement", json={"slug": self.SLUG}
@@ -1066,7 +1098,7 @@ class TestLeReglementNotifieParLOperateur:
         """Le règlement en espèces sans demande préalable : l'adresse confirmée est retenue,
         et le dossier dit ensuite laquelle a été ouverte."""
         client = plateforme
-        reference, numero = self._dossier_accepte(client)
+        reference, numero = self._dossier_accepte(client, service="PLATEFORME")
         self._en_administrateur(client)
         reponse = client.post(
             f"/acquisition/proformas/{numero}/encaissement", json={"slug": self.SLUG}
@@ -1085,8 +1117,17 @@ class TestLeReglementNotifieParLOperateur:
         )
         assert reponse.status_code == 200, reponse.text
 
-    def _dossier_accepte(self, client, *, accepter: bool = True):
-        """Un dossier jusqu'à l'acceptation de sa proforma, par les routes réelles."""
+    def _dossier_accepte(
+        self, client, *, accepter: bool = True, service: str = "CREATION"
+    ):
+        """Un dossier jusqu'à l'acceptation de sa proforma, par les routes réelles.
+
+        ⚠️ **LE SERVICE VENDU DÉCIDE DE CE QUE LE RÈGLEMENT OUVRE.** Une création
+        d'entreprise, le défaut, ouvre un dossier de formalité et aucun espace :
+        elle ne retient donc aucune adresse (13 octobre 2026). Les cas qui gardent
+        l'adresse d'un espace — retenue une fois, jamais remplacée — demandent
+        `PLATEFORME`, la seule offre qui en ouvre un.
+        """
         from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
             DepotDossiersSql,
             DepotProformasSql,
@@ -1111,7 +1152,7 @@ class TestLeReglementNotifieParLOperateur:
             nom="Boulangerie du Wouri",
             telephone="+237690112233",
             courriel=None,
-            service_souhaite="CREATION",
+            service_souhaite=service,
             message=None,
             canal_prefere=Canal.APPEL,
             consentement=Consentement(
@@ -1131,7 +1172,7 @@ class TestLeReglementNotifieParLOperateur:
         proforma = emettre(
             numero=numero,
             dossier=reference,
-            service="CREATION",
+            service=service,
             tarif=tarif,
             contenu=b"%PDF recette",
             modele="CREATION",

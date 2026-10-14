@@ -237,8 +237,12 @@ class TestRoles:
         assert Permission.VALIDER_ECRITURE in cumul
         assert Permission.RELANCER_ADHERENT in cumul
 
-    def test_les_deux_roles_externes_exigent_une_portee(self):
-        assert ROLES_A_PORTEE_OBLIGATOIRE == frozenset({Role.ADHERENT, Role.INSPECTEUR})
+    def test_les_roles_externes_exigent_une_portee(self):
+        """⚠️ Le client en création (14 octobre 2026) aussi : sans portée, il
+        suivrait toutes les créations du cabinet."""
+        assert ROLES_A_PORTEE_OBLIGATOIRE == frozenset(
+            {Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION}
+        )
 
 
 # ── Le compte ────────────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ from app.contextes.obligations.domaine.echeances_adherent import (
     EcheanceDeLAdherent,
     PreuveEnvoyee,
     ReglagesDesEcheancesDeLAdherent,
+    VerdictDeLaPreuve,
     echeances_de_l_adherent,
     libelle_de_periode,
 )
@@ -58,6 +59,7 @@ from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
     atelier,
+    exiger,
     exiger_dossier,
     session_de_travail,
 )
@@ -102,20 +104,45 @@ def _instances(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
     return instances
 
 
-def _preuves(niu: str) -> list[PreuveEnvoyee]:
-    return [
-        PreuveEnvoyee(
-            code_obligation=e.apres["obligation"],
-            periode_debut=date.fromisoformat(e.apres["periode_debut"]),
-            piece=e.apres["piece"],
-            envoyee_le=e.horodatage,
-            par=e.acteur,
+ACTION_RECUE = "obligations.preuve_de_paiement_recue"
+#: ⚠️ 14 octobre 2026 : le verdict du cabinet, écrit au même journal que la preuve. Le journal est
+#: chaîné et conservé dix ans : la vérification d'une quittance engage le cabinet envers l'adhérent
+#: (« payée »), elle se relit au même endroit que l'envoi, et un second registre divergerait.
+ACTION_VERDICT = "obligations.preuve_de_paiement_verifiee"
+
+
+def _preuves(niu: str | None) -> list[PreuveEnvoyee]:
+    """Les preuves d'un dossier (ou de tous, `None`), chacune avec son verdict s'il existe.
+
+    ⚠️ Le verdict se rattache par (dossier, obligation, période, pièce) : la même pièce ne
+    s'envoie qu'une fois par échéance, c'est la clé que l'envoi garantit.
+    """
+    entrees = atelier().journal.lister(objet_type=OBJET_PREUVE, objet_id=niu)
+    verdicts = {
+        (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"]): e
+        for e in entrees
+        if e.action == ACTION_VERDICT
+    }
+    preuves = []
+    for e in entrees:
+        if e.action != ACTION_RECUE:
+            continue
+        cle = (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"])
+        v = verdicts.get(cle)
+        preuves.append(
+            PreuveEnvoyee(
+                code_obligation=e.apres["obligation"],
+                periode_debut=date.fromisoformat(e.apres["periode_debut"]),
+                piece=e.apres["piece"],
+                envoyee_le=e.horodatage,
+                par=e.acteur,
+                verdict=VerdictDeLaPreuve(v.apres["verdict"]) if v else None,
+                motif=v.apres.get("motif") if v else None,
+                verifiee_le=v.horodatage if v else None,
+                verifiee_par=v.acteur if v else None,
+            )
         )
-        for e in atelier().journal.lister(objet_type=OBJET_PREUVE, objet_id=niu)
-        # Seule action écrite sur ce type d'objet aujourd'hui (mutant équivalent au pas 113) : le
-        # filtre protège la lecture le jour où une autre action s'y ajoute (une preuve rejetée).
-        if e.action == "obligations.preuve_de_paiement_recue"
-    ]
+    return preuves
 
 
 class VueDesEcheances(BaseModel):
@@ -225,6 +252,9 @@ def envoyer_une_preuve(
         if p.code_obligation == obligation.code_obligation
         and p.periode_debut == obligation.periode_debut
         and p.piece == demande.piece
+        # ⚠️ Une quittance refusée peut être réexpédiée corrigée : seul un envoi en attente ou
+        # validé fait doublon.
+        and p.verdict is not VerdictDeLaPreuve.REFUSEE
     ]
     if deja:
         raise HTTPException(
@@ -238,7 +268,7 @@ def envoyer_une_preuve(
     atelier().journal.ajouter(
         horodatage=horodatage,
         acteur=acces.compte,
-        action="obligations.preuve_de_paiement_recue",
+        action=ACTION_RECUE,
         objet_type=OBJET_PREUVE,
         objet_id=entreprise,
         apres={
@@ -262,6 +292,132 @@ def envoyer_une_preuve(
         ),
         titre=titre,
         periode=periode,
+    )
+
+
+# ── La vérification des quittances (14 octobre 2026) ───────────────────────────
+#
+# Le cabinet a demandé « paiement de la TVA et de la CNPS, avec changement de statut ». Quand
+# l'adhérent règle lui-même l'administration, sa quittance arrivait et restait « le cabinet la
+# vérifie » jusqu'au dépôt de la déclaration : personne ne disait jamais « c'est payé », et
+# personne n'avait d'écran pour dire « cette quittance ne va pas ».
+
+
+class QuittanceAVerifier(BaseModel):
+    dossier: str
+    obligation: str
+    libelle: str
+    periode: str
+    periode_debut: date
+    piece: str
+    envoyee_le: datetime
+    par: str
+
+
+@routeur.get(
+    "/preuves-a-verifier",
+    summary="Les quittances envoyées par les adhérents, en attente de vérification",
+)
+def quittances_a_verifier(acces: AccesRequis) -> list[QuittanceAVerifier]:
+    """Les plus anciennes d'abord. ⚠️ Seulement celles des dossiers de sa portée."""
+    exiger(acces, Permission.VERIFIER_UN_REGLEMENT)
+    entrees = atelier().journal.lister(objet_type=OBJET_PREUVE)
+    jugees = {
+        (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"])
+        for e in entrees
+        if e.action == ACTION_VERDICT
+    }
+    return [
+        QuittanceAVerifier(
+            dossier=e.objet_id,
+            obligation=e.apres["obligation"],
+            libelle=e.apres.get("libelle", e.apres["obligation"]),
+            periode=e.apres.get("periode", e.apres["periode_debut"]),
+            periode_debut=date.fromisoformat(e.apres["periode_debut"]),
+            piece=e.apres["piece"],
+            envoyee_le=e.horodatage,
+            par=e.apres.get("par", e.acteur),
+        )
+        for e in entrees
+        if e.action == ACTION_RECUE
+        and acces.voit(e.objet_id)
+        and (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"])
+        not in jugees
+    ]
+
+
+class VerdictDemande(BaseModel):
+    code_obligation: str = Field(min_length=1)
+    periode_debut: date
+    piece: str = Field(min_length=1)
+    verdict: VerdictDeLaPreuve
+    #: Exigé pour un refus : c'est ce que l'adhérent lira pour envoyer la bonne quittance.
+    motif: str | None = Field(default=None, max_length=500)
+
+
+@routeur.post(
+    "/dossiers/{entreprise}/preuves-de-paiement/verdict",
+    summary="Valider ou refuser la quittance envoyée par l'adhérent",
+    responses={
+        404: {"description": "Aucune quittance de ce dossier pour cette échéance"},
+        409: {"description": "Quittance déjà vérifiée"},
+        422: {"description": "Refus sans motif"},
+    },
+)
+def juger_une_quittance(
+    acces: AccesRequis, entreprise: str, demande: VerdictDemande
+) -> PreuveEnvoyee:
+    """⚠️ UN VERDICT NE SE REPREND PAS. Il est écrit au journal chaîné ; une erreur se répare en
+    demandant à l'adhérent une nouvelle quittance, pas en effaçant ce qui a été dit."""
+    exiger_dossier(acces, Permission.VERIFIER_UN_REGLEMENT, entreprise)
+    motif = (demande.motif or "").strip()
+    if demande.verdict is VerdictDeLaPreuve.REFUSEE and len(motif) < 5:
+        raise HTTPException(
+            status_code=422,
+            detail="Un refus dit pourquoi : l'adhérent doit savoir quelle quittance renvoyer.",
+        )
+    preuve = next(
+        (
+            p
+            for p in _preuves(entreprise)
+            if p.code_obligation == demande.code_obligation
+            and p.periode_debut == demande.periode_debut
+            and p.piece == demande.piece
+        ),
+        None,
+    )
+    if preuve is None:
+        raise HTTPException(
+            status_code=404, detail="Aucune quittance de ce dossier pour cette échéance."
+        )
+    if preuve.verdict is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cette quittance est déjà {preuve.verdict.value.lower()} "
+            f"depuis le {preuve.verifiee_le:%d/%m/%Y}.",
+        )
+    horodatage = maintenant()
+    atelier().journal.ajouter(
+        horodatage=horodatage,
+        acteur=acces.compte,
+        action=ACTION_VERDICT,
+        objet_type=OBJET_PREUVE,
+        objet_id=entreprise,
+        apres={
+            "obligation": demande.code_obligation,
+            "periode_debut": demande.periode_debut.isoformat(),
+            "piece": demande.piece,
+            "verdict": demande.verdict.value,
+            **({"motif": motif} if motif else {}),
+        },
+    )
+    return preuve.model_copy(
+        update={
+            "verdict": demande.verdict,
+            "motif": motif or None,
+            "verifiee_le": horodatage,
+            "verifiee_par": acces.compte,
+        }
     )
 
 

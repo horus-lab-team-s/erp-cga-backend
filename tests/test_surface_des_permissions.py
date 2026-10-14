@@ -48,6 +48,18 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "session pour afficher un formulaire reviendrait à demander à quelqu'un de "
         "s'inscrire pour poser une question."
     ),
+    ("GET", "/acquisition/questionnaires/{service}/visiteur"): (
+        "Les questions que le site pose avant qu'un responsable rappelle : le "
+        "visiteur n'a pas de compte. La route ne rend que ce qui est écrit pour "
+        "lui — pas l'aide du juriste, qui dit comment le cabinet chiffre, ni les "
+        "questions que le référentiel réserve au responsable."
+    ),
+    ("POST", "/acquisition/proformas/{numero}/paiement-en-ligne"): (
+        "Le client règle lui-même la proposition qu'il a acceptée : il n'a pas de "
+        "compte. La route est scellée comme l'acceptation, par le lien personnel "
+        "de la proposition, et elle ne constate rien : elle demande le débit, "
+        "c'est la notification de l'opérateur qui encaisse."
+    ),
     ("POST", "/acquisition/demandes"): (
         "Le seul point d'entrée du parcours. Un visiteur n'a pas de compte, et "
         "c'est justement ce que cette route existe pour changer."
@@ -212,7 +224,24 @@ def _sans_controle():
             source = inspect.getsource(route.endpoint)
         except (OSError, TypeError):
             continue
-        if any(appel in source for appel in ("exiger(", "exiger_dossier(", "restreindre(")):
+        # ⚠️ LA LISTE DES GARDES RECONNUES, ET POURQUOI ELLE DOIT SUIVRE.
+        #
+        # Ce cas lit le source de chaque route et y cherche un appel de garde. Une
+        # garde nouvelle qu'il ne connaît pas fait paraître la route **ouverte**,
+        # et le cas rougit en accusant un code pourtant correct.
+        #
+        # `exiger_dossier_pour_l_un_de` est entrée le 10 octobre 2026 avec la paie
+        # en libre service : une même route y sert deux rôles qui n'ont aucune
+        # permission en commun, le comptable par `LIRE_COMPTABILITE` et l'adhérent
+        # par `TENIR_SA_PAIE`, et le périmètre du dossier reste contrôlé dans les
+        # deux cas.
+        gardes = (
+            "exiger(",
+            "exiger_dossier(",
+            "exiger_dossier_pour_l_un_de(",
+            "restreindre(",
+        )
+        if any(appel in source for appel in gardes):
             continue
         trouvees.append((sorted(route.methods)[0], chemin))
     return trouvees

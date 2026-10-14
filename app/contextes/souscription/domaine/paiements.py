@@ -131,6 +131,9 @@ class NaturePaiement(StrEnum):
     SOUSCRIPTION = "SOUSCRIPTION"
     #: Une proforma du parcours d'acquisition. Son règlement ouvre un tenant.
     PROFORMA = "PROFORMA"
+    #: Une période d'honoraires d'un adhérent (14 octobre 2026). `reference_reglee`
+    #: est le NIU, `echeance` le début de la période.
+    HONORAIRES = "HONORAIRES"
 
 
 class StrategieRapprochement(StrEnum):

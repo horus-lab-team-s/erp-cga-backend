@@ -191,28 +191,49 @@ def _annoncer_l_ouverture(dossier) -> None:
         from app.contextes.creation_entreprise.domaine.lien_de_suivi import (
             sceau_de_suivi,
         )
-        from app.contextes.transverse.api import service_de_notification
+        from app.contextes.transverse.api import (
+            ouvrir_le_compte_de_la_creation,
+            service_de_notification,
+        )
         from app.infrastructure.config import configuration
 
         reglages = configuration()
         secret = reglages.cle_chiffrement or "secret-de-developpement"
         base = reglages.adresse_publique_vitrine.rstrip("/")
         sceau = sceau_de_suivi(dossier.reference, secret=secret)
-        service_de_notification().envoyer(
-            "creation.dossier_ouvert",
-            destinataire=courriel,
-            contexte={
-                # ⚠️ `appellation`, et jamais `nom` ni `prenom` seuls : une
-                # demande de contact ne porte qu'un champ de nom, et composer la
-                # salutation à la main a déjà fait partir un « Bonjour » vide.
-                "prenom": dossier.fondateur.appellation,
-                "denomination": dossier.denomination_souhaitee,
-                # ⚠️ L'adresse de la VITRINE : c'est là qu'elle lit sans compte,
-                # comme pour sa proforma. Celle de la console mènerait à une page
-                # de connexion, qu'elle ne peut pas franchir.
-                "lien": f"{base}/fr/mon-dossier/{dossier.reference}?s={sceau}",
-            },
+        contexte = {
+            # ⚠️ `appellation`, et jamais `nom` ni `prenom` seuls : une
+            # demande de contact ne porte qu'un champ de nom, et composer la
+            # salutation à la main a déjà fait partir un « Bonjour » vide.
+            "prenom": dossier.fondateur.appellation,
+            "denomination": dossier.denomination_souhaitee,
+            # ⚠️ L'adresse de la VITRINE : c'est là qu'elle lit sans compte,
+            # comme pour sa proforma. Celle de la console mènerait à une page
+            # de connexion, qu'elle n'a pas encore les moyens de franchir.
+            "lien": f"{base}/fr/mon-dossier/{dossier.reference}?s={sceau}",
+        }
+        # ⚠️ LE COMPTE CLIENT, OUVERT AU PAIEMENT (14 octobre 2026).
+        #
+        # Le Transverse fait partie du socle : la création l'appelle par sa
+        # surface publique. Sans compte ouvert (adresse déjà prise par un autre
+        # compte, panne), le message part avec le seul lien de suivi, comme
+        # avant : le compte s'ajoute, il ne conditionne rien.
+        lien_compte = ouvrir_le_compte_de_la_creation(
+            reference=dossier.reference,
+            courriel=courriel,
+            nom=dossier.fondateur.appellation,
+            telephone=dossier.fondateur.telephone or None,
         )
+        if lien_compte:
+            service_de_notification().envoyer(
+                "creation.dossier_ouvert_avec_compte",
+                destinataire=courriel,
+                contexte={**contexte, "lien_compte": lien_compte},
+            )
+        else:
+            service_de_notification().envoyer(
+                "creation.dossier_ouvert", destinataire=courriel, contexte=contexte
+            )
         _journal.info("Dossier %s : lien de suivi envoyé.", dossier.reference)
     except Exception:  # noqa: BLE001 — voir l'en-tête : jamais au prix du dossier
         _journal.exception(

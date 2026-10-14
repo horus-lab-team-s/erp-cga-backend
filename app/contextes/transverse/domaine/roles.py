@@ -32,7 +32,10 @@ L'**adhérent** consulte son propre dossier et y dépose ses pièces. L'**inspec
 assistant** lit et émet un avis, sans jamais écrire. Le **chargé de formalités**
 suit les créations d'entreprise et n'a rien à voir avec la comptabilité.
 
-Ces trois-là doivent obligatoirement porter une portée explicite : un adhérent
+Le **client en création** (14 octobre 2026) a payé la création de sa société et
+la suit, avant qu'elle existe : sa portée est son dossier de formalité.
+
+Ces quatre-là doivent obligatoirement porter une portée explicite : un adhérent
 dont la portée serait « tous les dossiers » lirait la comptabilité de ses
 concurrents. Voir `habilitations.py`, où la contrainte est vérifiée.
 ─────────────────────────────────────────────────────────────────────────────────
@@ -57,7 +60,9 @@ __all__ = [
 
 
 class Role(StrEnum):
-    """Les neuf rôles de `Docs/architecture/05-securite-multitenant.md` § 2."""
+    """Les neuf rôles de `Docs/architecture/05-securite-multitenant.md` § 2,
+    et deux autres ajoutés le 14 octobre 2026 sur décision du cabinet : la caisse,
+    et le client en création."""
 
     CHARGE_CLIENTELE = "CHARGE_CLIENTELE"
     COMPTABLE = "COMPTABLE"
@@ -66,8 +71,15 @@ class Role(StrEnum):
     CHARGE_FORMALITES = "CHARGE_FORMALITES"
     DIRECTION = "DIRECTION"
     ADMINISTRATEUR = "ADMINISTRATEUR"
+    #: La responsable de caisse : elle constate les règlements, et rien d'autre.
+    #: Voir `Permission.ENCAISSER`.
+    CAISSE = "CAISSE"
     #: Externe — le dirigeant de l'entreprise suivie.
     ADHERENT = "ADHERENT"
+    #: Externe — la cliente qui a payé la création de sa société, avant que
+    #: celle-ci existe. Sa portée est son dossier de formalité (`CRE-…`), et
+    #: rien d'autre. Voir `Permission.SUIVRE_MA_CREATION`.
+    CLIENT_CREATION = "CLIENT_CREATION"
     #: Externe — lecture et avis seulement, jamais d'écriture.
     INSPECTEUR = "INSPECTEUR"
 
@@ -88,7 +100,9 @@ LIBELLES_ROLE: dict[Role, str] = {
     Role.CHARGE_FORMALITES: "chargé de formalités",
     Role.DIRECTION: "direction",
     Role.ADMINISTRATEUR: "administrateur",
+    Role.CAISSE: "responsable de caisse",
     Role.ADHERENT: "adhérent",
+    Role.CLIENT_CREATION: "client en création",
     Role.INSPECTEUR: "inspecteur",
 }
 
@@ -150,6 +164,56 @@ class Permission(StrEnum):
     #: Pas 115 : régler ses propres rappels d'échéance. L'adhérent seul : un collaborateur qui
     #: couperait les rappels d'un adhérent le priverait d'un avertissement qu'il a choisi.
     REGLER_SES_RAPPELS = "REGLER_SES_RAPPELS"
+    #: Tenir la paie de SA PROPRE entreprise : inscrire ses salariés, ouvrir et clore leurs
+    #: contrats, lire les bulletins calculés et la déclaration mensuelle.
+    #:
+    #: ─────────────────────────────────────────────────────────────────────────────
+    #: ⚠️ POURQUOI UNE PERMISSION NOUVELLE, ET NON `LIRE_COMPTABILITE` ÉLARGIE
+    #:
+    #: Les routes de paie exigeaient `LIRE_COMPTABILITE`, que l'adhérent ne détient
+    #: pas, et ce refus était délibéré : un bulletin porte des rémunérations
+    #: nominatives, et ouvrir la comptabilité d'un dossier à son titulaire pour qu'il
+    #: voie sa paie lui ouvrirait au passage la balance, le grand livre et le journal.
+    #:
+    #: Une permission propre dit exactement ce qu'elle autorise, et rien de plus. Elle
+    #: est **toujours cadrée sur un dossier** par `exiger_dossier` : le périmètre d'un
+    #: adhérent est l'entreprise dont il est titulaire, et une paie demandée sur un
+    #: autre NIU rend 404 — pas 403, qui apprendrait que ce dossier existe.
+    #:
+    #: ⚠️ Elle N'EST PAS donnée aux rôles du cabinet, et ce n'est pas un oubli. Le
+    #: collaborateur tient la paie de ses dossiers par `LIRE_COMPTABILITE`, qui lui
+    #: ouvre aussi les livres dont il a besoin pour la contrôler. Lui ajouter
+    #: celle-ci ne lui donnerait rien et brouillerait la lecture de la matrice.
+    #: ─────────────────────────────────────────────────────────────────────────────
+    TENIR_SA_PAIE = "TENIR_SA_PAIE"
+    #: Suivre la création de SA société, y déposer ses pièces : la cliente qui a
+    #: payé, entre son règlement et son immatriculation.
+    #:
+    #: ─────────────────────────────────────────────────────────────────────────────
+    #: ⚠️ POURQUOI UN RÔLE ET UNE PERMISSION À EUX (décision du 14 octobre 2026)
+    #:
+    #: Le cabinet a demandé « un compte client ouvert automatiquement au paiement,
+    #: avec définition du mot de passe ». `ADHERENT` ne convient pas : sa portée est
+    #: un NIU, et au moment du paiement l'entreprise n'existe pas. Lui donner
+    #: `LIRE_DOSSIER` sur une référence de formalité ouvrirait les écrans de
+    #: l'espace adhérent sur un dossier qui n'est pas au portefeuille.
+    #:
+    #: La permission ne vaut que sur les dossiers de sa portée, comme celles de
+    #: l'adhérent : une référence demandée hors de sa portée rend 404.
+    #:
+    #: ⚠️ Le lien signé sans mot de passe reste valable en parallèle : le compte
+    #: s'ajoute au lien, il ne le remplace pas.
+    #: ─────────────────────────────────────────────────────────────────────────────
+    SUIVRE_MA_CREATION = "SUIVRE_MA_CREATION"
+    #: Régler SES honoraires depuis son espace : demander le débit de son mobile
+    #: money pour une période due (14 octobre 2026). L'adhérent seul, cadré sur
+    #: son dossier ; le cabinet constate un règlement par `ENCAISSER`.
+    REGLER_SES_HONORAIRES = "REGLER_SES_HONORAIRES"
+    #: Vérifier la quittance qu'un adhérent a envoyée pour une échéance fiscale ou sociale, et
+    #: dire si elle règle l'échéance (14 octobre 2026). Le comptable et le réviseur : ce sont eux
+    #: qui lisent les quittances pour comptabiliser l'impôt payé. Un verdict engage le cabinet
+    #: envers l'adhérent (« payée »), il n'est donc pas donné à qui ne tient pas le dossier.
+    VERIFIER_UN_REGLEMENT = "VERIFIER_UN_REGLEMENT"
 
     # ── Conformité ───────────────────────────────────────────────────────────
     CONTROLER_CONFORMITE = "CONTROLER_CONFORMITE"
@@ -211,6 +275,31 @@ class Permission(StrEnum):
     # ── Formalités et administration ─────────────────────────────────────────
     SUIVRE_FORMALITE = "SUIVRE_FORMALITE"
     GERER_COMPTES = "GERER_COMPTES"
+    #: Constater un règlement : demander un paiement par téléphone, ou confirmer
+    #: un versement reçu au guichet ou par virement.
+    #:
+    #: ─────────────────────────────────────────────────────────────────────────
+    #: ⚠️ POURQUOI UNE PERMISSION À ELLE, ET UN RÔLE POUR LA PORTER
+    #:
+    #: Le cabinet l'a décidé le 14 octobre 2026 : « c'est une personne,
+    #: généralement la responsable de caisse, qui doit encaisser les versements ».
+    #: Jusque-là le geste exigeait `GERER_COMPTES`, donc l'administrateur : celle
+    #: qui tient la caisse n'avait pas le droit de dire qu'un client avait payé,
+    #: et celui qui l'avait pouvait aussi créer des comptes et lire le journal.
+    #:
+    #: Encaisser n'est ni administrer, ni comptabiliser, ni chiffrer. La
+    #: permission dit exactement ce geste. Le rôle `CAISSE` ne porte qu'elle : la
+    #: caissière voit ce qui est dû et ce qui est réglé, et aucun livre.
+    #:
+    #: ⚠️ L'administrateur la garde. La lui retirer aurait laissé sans caissière
+    #: tout cabinet qui n'a nommé personne à ce rôle, et ses clients sans moyen
+    #: de voir leur règlement constaté.
+    #:
+    #: ⚠️ La séparation tient toujours : `QUALIFIER_PROSPECT`, qui arrête le prix,
+    #: n'est donnée ni à la caisse ni à l'administrateur. Celle qui chiffre
+    #: n'encaisse pas.
+    #: ─────────────────────────────────────────────────────────────────────────
+    ENCAISSER = "ENCAISSER"
     AFFECTER_DOSSIER = "AFFECTER_DOSSIER"
     EDITER_VITRINE = "EDITER_VITRINE"
 
@@ -263,6 +352,8 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.REPONDRE_AU_CABINET,
         Permission.SIGNALER_UN_CHANGEMENT,
         Permission.REGLER_SES_RAPPELS,
+        Permission.TENIR_SA_PAIE,
+        Permission.REGLER_SES_HONORAIRES,
     },
     # Le chargé de clientèle est l'interlocuteur de l'adhérent. Il voit tout du
     # dossier, il relance, et il saisit ce qu'on lui apporte — voir la note sur
@@ -277,6 +368,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
     Role.COMPTABLE: _LECTURE_DOSSIER
     | {
         Permission.LIRE_COMPTABILITE,
+        Permission.VERIFIER_UN_REGLEMENT,
         # ⚠️ Ajoutée le jour du branchement des routes, et le manque était réel :
         # `CanalDepot.DEPOT_CABINET` existe, ce qui veut dire qu'un adhérent
         # apporte ses pièces en main propre et qu'un collaborateur les saisit.
@@ -296,6 +388,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
     Role.REVISEUR: _LECTURE_DOSSIER
     | {
         Permission.LIRE_COMPTABILITE,
+        Permission.VERIFIER_UN_REGLEMENT,
         Permission.LIRE_AUDIT,
         Permission.REVISER_DOSSIER,
         Permission.RELANCER_PIECES,
@@ -344,8 +437,14 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.FIXER_LES_TARIFS,
     },
     # Voir l'en-tête : aucune permission comptable ou déclarative.
+    Role.CAISSE: {Permission.ENCAISSER},
+    # Son dossier de formalité, et rien d'autre : ni dossier du portefeuille, ni
+    # pièce comptable. Le jour où sa société est immatriculée et qu'elle prend le
+    # suivi, son compte reçoit en plus le rôle `ADHERENT`.
+    Role.CLIENT_CREATION: {Permission.SUIVRE_MA_CREATION},
     Role.ADMINISTRATEUR: {
         Permission.GERER_COMPTES,
+        Permission.ENCAISSER,
         Permission.AFFECTER_DOSSIER,
         Permission.LIRE_AUDIT,
         Permission.EDITER_VITRINE,
@@ -359,13 +458,15 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
 
 
 #: Les rôles qui ne peuvent jamais porter sur l'ensemble du portefeuille.
-ROLES_A_PORTEE_OBLIGATOIRE: frozenset[Role] = frozenset({Role.ADHERENT, Role.INSPECTEUR})
+ROLES_A_PORTEE_OBLIGATOIRE: frozenset[Role] = frozenset(
+    {Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION}
+)
 
 #: Les rôles tenus par des salariés du cabinet. Sert à distinguer, à l'ouverture
 #: de session, l'espace de travail de l'espace adhérent — le routage se fait
 #: après authentification, jamais par un choix offert avant.
 ROLES_INTERNES: frozenset[Role] = frozenset(Role) - frozenset(
-    {Role.ADHERENT, Role.INSPECTEUR}
+    {Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION}
 )
 
 

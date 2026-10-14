@@ -33,7 +33,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
 __all__ = [
+    "TableContratDHonoraires",
     "TableDevis",
+    "TableReglementDHonoraires",
     "TableProforma",
     "TableQualification",
     "TableRappelAPasser",
@@ -377,3 +379,39 @@ class TableTarifFixe(Cloisonne, Document, Base):
     a_partir_du: Mapped[date] = mapped_column(Date, nullable=False)
     fixe_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
+
+
+class TableContratDHonoraires(Cloisonne, Document, Base):
+    """Le contrat d'honoraires d'un adhérent (14 octobre 2026).
+
+    Clé composite `(locataire, niu)` : un contrat par entreprise et par cabinet.
+    Le dernier enregistré fait foi ; son auteur et sa date sont dans le document.
+    """
+
+    __tablename__ = "contrat_honoraires"
+
+    #: ⚠️ Redéclarée en clé primaire, comme pour la proforma : un NIU n'est un
+    #: contrat qu'au sein d'un cabinet.
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    niu: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fixe_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableReglementDHonoraires(Cloisonne, Document, Base):
+    """Un règlement d'honoraires, pour une période (14 octobre 2026).
+
+    ⚠️ LA CONTRAINTE D'UNICITÉ EST LA GARDE DU DOUBLE RÈGLEMENT. Le mobile money
+    et le guichet peuvent arriver pour la même période, à quelques secondes
+    d'écart : la vérification applicative lit puis écrit, la base seule tranche.
+    """
+
+    __tablename__ = "reglement_honoraires"
+    __table_args__ = (
+        UniqueConstraint("locataire", "niu", "periode", name="uq_reglement_honoraires_periode"),
+        Index("ix_reglement_honoraires_constate", "locataire", "constate_le"),
+    )
+
+    identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
+    niu: Mapped[str] = mapped_column(String(64), nullable=False)
+    periode: Mapped[date] = mapped_column(Date, nullable=False)
+    constate_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -181,6 +181,24 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
         # `demonstration_a_jour.py`.
         accuses_du_jour = consigner(session, locataire, maintenant().date())
 
+        # ── Les honoraires des adhérents (14 octobre 2026) ────────────────
+        #
+        # Datés du jour de l'amorçage, comme les accusés : l'échéancier montre
+        # ses quatre états quel que soit le jour où la base est créée.
+        from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+            DepotContratsDHonorairesSql,
+            DepotReglementsDHonorairesSql,
+        )
+        from app.contextes.souscription.adaptateurs.sortant.honoraires_demo import (
+            honoraires_demo,
+        )
+
+        contrats_honoraires, reglements_honoraires = honoraires_demo(maintenant().date())
+        for contrat_h in contrats_honoraires:
+            DepotContratsDHonorairesSql(session, locataire).enregistrer(contrat_h)
+        for reglement_h in reglements_honoraires:
+            DepotReglementsDHonorairesSql(session, locataire).enregistrer(reglement_h)
+
         return {
             "creations": len(PIPELINE_DEMO),
             "salaries": len(SALARIES_DEMO),
@@ -192,4 +210,5 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             "demandes": len(DEMANDES_DEMO),
             "ecritures": ecritures_posees,
             "accuses": len(ACCUSES_DEMO) + accuses_du_jour,
+            "contrats_honoraires": len(contrats_honoraires),
         }

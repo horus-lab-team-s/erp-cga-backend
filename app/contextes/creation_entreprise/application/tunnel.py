@@ -21,6 +21,7 @@ from app.contextes.creation_entreprise.domaine.checklist import (
     code_du_capital_minimum,
 )
 from app.contextes.creation_entreprise.domaine.entites import (
+    CanalDeLaPiece,
     DossierCreation,
     EtapeCreation,
     Fondateur,
@@ -228,6 +229,8 @@ def fournir_piece(
     a_la_date: date,
     *,
     empreinte: str | None = None,
+    canal: CanalDeLaPiece | None = None,
+    versee_par: str | None = None,
 ) -> DossierCreation:
     """Marque une pièce comme reçue.
 
@@ -235,11 +238,25 @@ def fournir_piece(
     guichet réclame parfois une pièce que la liste n'a pas prévue, et le dossier
     doit pouvoir en garder la trace. La liste dit ce qu'il faut préparer, elle ne
     prétend pas régenter ce que le greffe accepte.
+
+    ⚠️ UN NOUVEAU DOCUMENT REMPLACE L'ANCIEN ; SON ABSENCE NE L'EFFACE PAS.
+
+    Une pièce marquée reçue sans fichier gardait jusqu'ici… rien : l'empreinte
+    était remise à `None`. Le juriste qui cochait « reçue » sur la carte
+    d'identité que la cliente avait déjà envoyée faisait disparaître son document
+    du dossier. Constaté le 14 octobre 2026 en relisant ce code.
     """
     connue = any(p.code == code_piece for p in dossier.pieces)
     if connue:
         pieces = tuple(
-            p.model_copy(update={"fournie_le": a_la_date, "empreinte": empreinte})
+            p.model_copy(
+                update={
+                    "fournie_le": a_la_date,
+                    "empreinte": empreinte or p.empreinte,
+                    "canal": canal or p.canal,
+                    "versee_par": versee_par or p.versee_par,
+                }
+            )
             if p.code == code_piece
             else p
             for p in dossier.pieces
@@ -252,6 +269,8 @@ def fournir_piece(
                 obligatoire=False,
                 fournie_le=a_la_date,
                 empreinte=empreinte,
+                canal=canal,
+                versee_par=versee_par,
             ),
         )
     return dossier.model_copy(update={"pieces": pieces})

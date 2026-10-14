@@ -56,6 +56,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.contextes.souscription.domaine.composition_proforma import Rubrique
 from app.contextes.souscription.domaine.tarification import Debours, LigneTarifaire
 from app.partage.copie import transiter
 
@@ -269,6 +270,15 @@ class Proforma(BaseModel):
     tarif: TarifArrete
     lignes: tuple[LigneTarifaire, ...] = ()
     debours: tuple[Debours, ...] = ()
+    #: Les rubriques IMPRIMÉES sur le document, telles que le responsable les a
+    #: arrêtées. Vide pour une proforma émise sans document du cabinet.
+    #:
+    #: ⚠️ POURQUOI ELLES SONT GARDÉES (14 octobre 2026). `lignes` porte le calcul
+    #: du barème (« Siège hors du Littoral + 37 500 »), qui justifie l'intervalle
+    #: devant le cabinet. Le client, lui, a reçu un document à rubriques. La page
+    #: de sa proposition lui montrait le calcul, qui ne totalisait pas le montant
+    #: du document : deux explications du même prix, et elles se contredisaient.
+    rubriques: tuple[Rubrique, ...] = ()
     #: Les faits de la qualification **au moment du chiffrage**. Un fait modifié
     #: plus tard ne change pas la proforma passée.
     faits: dict[str, str] = Field(default_factory=dict)
@@ -367,6 +377,7 @@ class Proforma(BaseModel):
         a_l_instant: datetime,
         lignes: tuple[LigneTarifaire, ...] | None = None,
         debours: tuple[Debours, ...] | None = None,
+        rubriques: tuple[Rubrique, ...] = (),
     ) -> tuple[Proforma, Proforma]:
         """Rend `(la précédente marquée remplacée, la nouvelle)`.
 
@@ -398,6 +409,10 @@ class Proforma(BaseModel):
             tarif=tarif,
             lignes=self.lignes if lignes is None else lignes,
             debours=self.debours if debours is None else debours,
+            # ⚠️ JAMAIS RECOPIÉES : les rubriques de la version précédente
+            # totalisaient l'ANCIEN montant. Une version nouvelle porte celles de
+            # son propre document, ou aucune.
+            rubriques=rubriques,
             empreinte_document=empreinte(contenu),
             etat=EtatProforma.EMISE,
             emise_le=a_l_instant,
@@ -419,6 +434,7 @@ def emettre(
     lignes: tuple[LigneTarifaire, ...] = (),
     debours: tuple[Debours, ...] = (),
     faits: dict[str, str] | None = None,
+    rubriques: tuple[Rubrique, ...] = (),
 ) -> Proforma:
     """Émet la première version. L'empreinte est calculée ici, une fois."""
     return Proforma(
@@ -428,6 +444,7 @@ def emettre(
         tarif=tarif,
         lignes=lignes,
         debours=debours,
+        rubriques=rubriques,
         faits=dict(faits or {}),
         empreinte_document=empreinte(contenu),
         modele=modele,

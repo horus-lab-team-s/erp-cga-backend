@@ -225,6 +225,9 @@ class TestMontage:
         chemins = client.get("/openapi.json").json()["paths"]
         acquisition = sorted(c for c in chemins if c.startswith("/acquisition"))
         assert acquisition == [
+            # 14 octobre 2026 : PROTÉGÉE par `ENCAISSER`. Ce que la responsable
+            # de caisse voit : les règlements dus et ceux qui sont constatés.
+            "/acquisition/caisse",
             "/acquisition/canaux",
             # Pas 148 : le catalogue des documents de proforma, pour que
             # l'écran ne recopie pas la liste des compositions.
@@ -259,9 +262,17 @@ class TestMontage:
             "/acquisition/proformas/{numero}/encaissement",
             # Pas 136 : relire le lien pour le renvoyer, sans noter de transmission.
             "/acquisition/proformas/{numero}/lien",
+            # 14 octobre 2026 : PUBLIQUE et scellée. Le client règle lui-même sa
+            # proposition acceptée par mobile money, depuis son lien personnel.
+            "/acquisition/proformas/{numero}/paiement-en-ligne",
             "/acquisition/proformas/{numero}/reglement",
             "/acquisition/proformas/{numero}/transmission",
             "/acquisition/questionnaires/{service}",
+            # 14 octobre 2026 : PUBLIQUE, et pauvre. Les questions que le site pose
+            # au visiteur, pour que ses réponses ouvrent sa qualification déjà
+            # remplie. Elle ne rend ni l'aide du juriste, ni le rang, ni les
+            # questions internes.
+            "/acquisition/questionnaires/{service}/visiteur",
             "/acquisition/rappels",
             "/acquisition/rappels/{identifiant}/fait",
             # Pas 93 : protégée par LIRE_PROSPECT, source de la recherche globale.

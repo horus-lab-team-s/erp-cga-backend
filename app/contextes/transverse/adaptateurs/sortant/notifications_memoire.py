@@ -48,6 +48,13 @@ CODES_MESSAGES: dict[str, str] = {
     "creation.dossier_ouvert": (
         "Dossier de formalité ouvert, avec le lien de suivi qui n'expire pas"
     ),
+    # 14 octobre 2026 : le compte client s'ouvre au paiement de la création.
+    "creation.dossier_ouvert_avec_compte": (
+        "Dossier de formalité ouvert, compte client créé : choisir son mot de passe"
+    ),
+    "compte.adhesion_ajoutee": (
+        "Votre société est immatriculée, l'espace adhérent s'ajoute à votre compte"
+    ),
     # Pas 138 : elle engageait son entreprise et ne recevait rien.
     "proforma.acceptation": "Accusé d'acceptation d'une proposition commerciale",
     # Pas 134 : entre le dépôt du formulaire et le premier appel, la cliente
@@ -71,6 +78,10 @@ CODES_MESSAGES: dict[str, str] = {
     "relance.proforma": "Relance d'une proposition transmise et sans réponse",
     # La proposition elle-même, envoyée au client dès que le responsable l'a émise.
     "proforma.envoi": "Votre proposition est prête, avec le lien pour la consulter",
+    # 14 octobre 2026 : la même, avec le détail des rubriques et le document joint.
+    "proforma.envoi.detaillee": (
+        "Votre proposition, son détail rubrique par rubrique, et le document joint"
+    ),
     "piece.rectificative_demandee": "Le cabinet demande une facture rectificative",
     # Pas 111 : la relance des pièces qui manquent au mois, composée par le comptable.
     "piece.relance": "Les pièces qui manquent pour terminer votre mois",

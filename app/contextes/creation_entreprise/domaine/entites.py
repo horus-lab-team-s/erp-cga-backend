@@ -246,6 +246,27 @@ class Immatriculation(BaseModel):
         return all((self.rccm, self.niu, self.patente, self.cnps))
 
 
+class CanalDeLaPiece(StrEnum):
+    """Par où la pièce est arrivée au cabinet.
+
+    ⚠️ AJOUTÉ LE 14 OCTOBRE 2026, À LA DEMANDE DU CABINET : « les documents
+    envoyés par WhatsApp sont versés par le juriste ». Une pièce reçue ne disait
+    pas d'où elle venait : six mois plus tard, devant un document illisible, on ne
+    savait plus s'il fallait le redemander à la cliente ou le rechercher dans une
+    conversation.
+    """
+
+    #: Déposée par la cliente, depuis le lien de suivi sans compte.
+    LIEN_DE_SUIVI = "LIEN_DE_SUIVI"
+    #: Déposée par la cliente, depuis son compte.
+    ESPACE_CLIENT = "ESPACE_CLIENT"
+    #: Reçue par messagerie, versée par un collaborateur.
+    WHATSAPP = "WHATSAPP"
+    #: Apportée au cabinet.
+    GUICHET = "GUICHET"
+    COURRIEL = "COURRIEL"
+
+
 class PieceConstitution(BaseModel):
     """Une pièce attendue au dossier de constitution.
 
@@ -264,6 +285,10 @@ class PieceConstitution(BaseModel):
     fournie_le: date | None = None
     #: Empreinte du fichier au magasin de C · Collecte, si la pièce y est déposée.
     empreinte: str | None = None
+    #: Par où elle est arrivée. `None` pour les pièces reçues avant le 14 octobre 2026.
+    canal: CanalDeLaPiece | None = None
+    #: Qui l'a versée au dossier : un compte du cabinet, ou « cliente ».
+    versee_par: str | None = None
 
     @property
     def fournie(self) -> bool:

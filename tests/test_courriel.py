@@ -79,6 +79,20 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "denomination": "NGONO COUTURE SARL",
         "lien": "https://www.cga-brcg.cm/fr/mon-dossier/CRE-dos-0412?s=abc",
     },
+    "creation.dossier_ouvert_avec_compte": {
+        # Recopié de `abonne_de_souscription._annoncer_l_ouverture`.
+        "prenom": "Sylvie NGONO",
+        "denomination": "NGONO COUTURE SARL",
+        "lien": "https://www.cga-brcg.cm/fr/mon-dossier/CRE-dos-0412?s=abc",
+        "lien_compte": "https://app.cga-brcg.cm/activation?jeton=abc&parcours=creation",
+    },
+    "compte.adhesion_ajoutee": {
+        # Recopié de `abonne_acces_adherent._etendre`.
+        "prenom": "Sylvie NGONO",
+        "denomination": "NGONO COUTURE SARL",
+        "niu": "M091122334455X",
+        "lien": "https://app.cga-brcg.cm/connexion",
+    },
     "proforma.acceptation": {
         # Recopié de `routes_acquisition._accuser_l_acceptation`.
         "prenom": "Sylvie NGONO",
@@ -181,6 +195,19 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "derniere": "False",
     },
     # Recopié de `_envoyer_la_proforma_par_courriel` (routes_acquisition.py).
+    # Recopié de la même fonction, branche « avec document » (14 octobre 2026).
+    "proforma.envoi.detaillee": {
+        "nom": "Station Bonabéri",
+        "proforma": "PRO-2026-0001",
+        "montant": "505\u202f000",
+        "lien": "https://www.cga-brcgroup.com/fr/proforma/PRO-2026-0001?v=1&e=x&s=y",
+        "expire_le": "22/10/2026",
+        "detail": [
+            ("I. Procedure au cfce", "177\u202f000 FCFA"),
+            ("Total général", "505\u202f000 FCFA"),
+        ],
+        "pieces_jointes": [("Proforma-PRO-2026-0001.pdf", b"%PDF-1.4", "application/pdf")],
+    },
     "proforma.envoi": {
         "nom": "Station Bonabéri",
         "proforma": "PRO-2026-0001",
@@ -851,3 +878,78 @@ class TestAucunTiretCadratin:
         rendu = rendre(CATALOGUE["compte.invitation"], CONTEXTES_DES_APPELANTS["compte.invitation"])
         assert "\n-- \n" in rendu.texte
         assert "agrément MINFI/DGI n° 00000048" in rendu.texte
+
+
+class TestLeCourrielSuitLeDocument:
+    """⚠️ LE LOGO, LE DÉTAIL ET LA PIÈCE JOINTE (14 octobre 2026).
+
+    Le cabinet veut que ses courriels suivent le style de ses proformas, logo
+    compris. Trois choses à garder, et aucune ne se voit dans le texte d'un test
+    de gabarit : elles vivent dans la STRUCTURE du message.
+
+    Éprouvé dans les deux sens : sans `_joindre_le_logo`, le premier cas rougit ;
+    sans `_joindre_les_pieces`, le deuxième ; en rendant le tableau sans
+    échappement, le dernier.
+    """
+
+    def _envoyer(self, code: str = "proforma.envoi.detaillee", **surcharges):
+        transport = TransportEspion()
+        parti = _service(transport).envoyer(
+            code,
+            destinataire="cliente@exemple.cm",
+            contexte={**CONTEXTES_DES_APPELANTS[code], **surcharges},
+        )
+        assert parti is True
+        (message,) = transport.remis
+        return message
+
+    def test_le_logo_voyage_dans_le_corps_et_non_en_piece_jointe(self):
+        message = self._envoyer("compte.activation")
+        html = message.get_body(preferencelist=("html",))
+        assert "cid:logo-cga" in html.get_content()
+
+        images = [p for p in message.walk() if p.get_content_type() == "image/jpeg"]
+        assert len(images) == 1
+        assert images[0]["Content-ID"] == "<logo-cga>"
+        # ⚠️ Rangé AVEC le corps : listé comme pièce jointe, la cliente verrait un
+        # fichier image sous chaque message du cabinet.
+        assert list(message.iter_attachments()) == []
+
+    def test_la_proforma_part_avec_son_document(self):
+        message = self._envoyer()
+
+        (jointe,) = list(message.iter_attachments())
+        assert jointe.get_filename() == "Proforma-PRO-2026-0001.pdf"
+        assert jointe.get_content_type() == "application/pdf"
+        assert jointe.get_content() == b"%PDF-1.4"
+
+    def test_le_detail_est_dans_les_deux_corps_et_le_total_en_dernier(self):
+        message = self._envoyer()
+        texte = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+
+        for corps in (texte, html):
+            assert "I. Procedure au cfce" in corps
+            assert corps.index("I. Procedure au cfce") < corps.index("Total général")
+        assert "505 000 FCFA" in html
+
+    def test_une_proforma_sans_document_n_annonce_ni_detail_ni_piece(self):
+        message = self._envoyer("proforma.envoi")
+
+        assert list(message.iter_attachments()) == []
+        html = message.get_body(preferencelist=("html",)).get_content()
+        assert "joint à ce message" not in html
+
+    def test_une_piece_mal_formee_n_empeche_pas_le_message_de_partir(self):
+        message = self._envoyer(pieces_jointes=[("sans-contenu.pdf",), "n'importe quoi"])
+        assert list(message.iter_attachments()) == []
+
+    def test_une_designation_ne_peut_pas_injecter_de_balise(self):
+        """Les intitulés viennent du référentiel, et les lignes peuvent être
+        retouchées par le responsable : ce qui s'y écrit n'est pas du HTML."""
+        message = self._envoyer(
+            detail=[("<script>alert(1)</script>", "1 FCFA"), ("Total général", "1 FCFA")]
+        )
+        html = message.get_body(preferencelist=("html",)).get_content()
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html

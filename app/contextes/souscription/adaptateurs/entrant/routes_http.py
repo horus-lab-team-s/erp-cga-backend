@@ -39,9 +39,15 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
+    DepotContratsDHonorairesMemoire,
+    DepotReglementsDHonorairesMemoire,
+)
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+    DepotContratsDHonorairesSql,
     DepotDevisSql,
     DepotPaiementsSql,
+    DepotReglementsDHonorairesSql,
     DepotSouscriptionsSql,
     DepotTarifsFixesSql,
 )
@@ -119,11 +125,15 @@ class Comptoir:
             self.souscriptions = DepotSouscriptionsMemoire()
             self.paiements = DepotPaiementsMemoire()
             self.tarifs_fixes = DepotTarifsFixesMemoire()
+            self.contrats_honoraires = DepotContratsDHonorairesMemoire()
+            self.reglements_honoraires = DepotReglementsDHonorairesMemoire()
         else:
             self.devis = DepotDevisSql(session, courant())
             self.souscriptions = DepotSouscriptionsSql(session, courant())
             self.paiements = DepotPaiementsSql(session, courant())
             self.tarifs_fixes = DepotTarifsFixesSql(session, courant())
+            self.contrats_honoraires = DepotContratsDHonorairesSql(session, courant())
+            self.reglements_honoraires = DepotReglementsDHonorairesSql(session, courant())
         # ⚠️ LE JOUR ANNONCÉ EST ARRIVÉ. Ce commentaire disait : « il aura sa
         # table le jour où la direction devra changer un tarif sans
         # redéploiement ». La structure de l'offre reste en code ; les PRIX sont
@@ -169,6 +179,9 @@ class Comptoir:
         from app.contextes.souscription.application.encaissement_du_parcours import (
             SuiteDeProforma,
         )
+        from app.contextes.souscription.application.reglement_des_honoraires import (
+            SuiteDHonoraires,
+        )
 
         return {
             NaturePaiement.SOUSCRIPTION: SuiteDeSouscription(
@@ -180,6 +193,12 @@ class Comptoir:
                 dossiers=_dossiers(),
                 proformas=_proformas(),
                 boite=_boite_du_parcours(),
+                journal=self.journal,
+            ),
+            # ⚠️ 14 octobre 2026 : les honoraires des adhérents, réglés depuis leur
+            # espace. Voir `SuiteDHonoraires`.
+            NaturePaiement.HONORAIRES: SuiteDHonoraires(
+                reglements=self.reglements_honoraires,
                 journal=self.journal,
             ),
         }

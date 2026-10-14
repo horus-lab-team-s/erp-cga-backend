@@ -38,7 +38,7 @@ lui apprendrait l'existence de dossiers qu'il n'a pas à connaître.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta
@@ -814,6 +814,70 @@ def exiger_dossier(
     ─────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, permission, motif=motif)
+    if not acces.voit(niu):
+        raise HTTPException(
+            status_code=404,
+            detail=introuvable
+            or (
+                f"aucun dossier {niu} accessible. Si ce dossier existe, il n'est pas "
+                "dans votre portefeuille : en demander l'affectation."
+            ),
+        )
+
+
+def exiger_dossier_pour_l_un_de(
+    acces: Acces,
+    permissions: Sequence[Permission],
+    niu: str,
+    *,
+    motif: str | None = None,
+    introuvable: str | None = None,
+) -> None:
+    """Le droit par **l'une** des permissions nommées, et le périmètre sur le dossier.
+
+    ─────────────────────────────────────────────────────────────────────────
+    POURQUOI UNE ALTERNATIVE, ET POURQUOI ELLE NE RELÂCHE RIEN
+
+    Une même route peut être légitime pour deux rôles qui n'ont aucune permission
+    en commun. La paie en est le cas : le comptable la tient par
+    `LIRE_COMPTABILITE`, qui lui ouvre aussi les livres dont il a besoin pour la
+    contrôler ; l'adhérent la tient sur sa seule entreprise par `TENIR_SA_PAIE`,
+    et n'a rien à faire dans les livres.
+
+    Écrire deux routes jumelles aurait été pire : les gardes recopiées divergent,
+    l'une reçoit une correction et l'autre non, et c'est la moins surveillée qui
+    reste ouverte.
+
+    ⚠️ **LE PÉRIMÈTRE RESTE ENTIER.** Le contrôle de dossier est le même que
+    celui de `exiger_dossier`, et il s'applique quelle que soit la permission qui
+    a ouvert la porte. Un adhérent qui demande la paie d'un autre NIU reçoit
+    `404`, parce que ce dossier n'existe pas **pour lui** — voir la note de
+    `exiger_dossier` sur ce que trahirait un `403`.
+
+    ⚠️ Le refus nomme **toutes** les permissions admises. Un message qui n'en
+    nommerait qu'une enverrait celui qui intègre demander la mauvaise.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    if not permissions:
+        raise ValueError("exiger_dossier_pour_l_un_de sans aucune permission : "
+                         "une garde qui n'exige rien n'est pas une garde.")
+
+    detenue = next(
+        (p for p in permissions if acces.detient(p)),
+        None,
+    )
+    if detenue is None:
+        nommees = ", ".join(str(p) for p in permissions)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Action non permise : l'une de {nommees} est requise.",
+        )
+
+    # ⚠️ On repasse par `exiger` plutôt que de s'arrêter à `detient` : c'est lui
+    # qui porte le contrôle du motif, exigé par trois permissions du produit. Le
+    # court-circuiter ici ferait passer un geste qui doit être justifié.
+    exiger(acces, detenue, motif=motif)
+
     if not acces.voit(niu):
         raise HTTPException(
             status_code=404,

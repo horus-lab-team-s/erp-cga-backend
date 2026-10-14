@@ -22,6 +22,7 @@ QUATRE ÉTATS POUR L'ADHÉRENT
 
     EN_RETARD        l'échéance est passée, rien n'est déposé, aucune preuve envoyée
     PREUVE_ENVOYEE   l'adhérent a envoyé sa quittance : le cabinet la vérifie
+    PAYEE            le cabinet a vérifié la quittance (14 octobre 2026) : le paiement est acquis
     A_VENIR          l'échéance n'est pas passée
     DEPOSEE          le cabinet a consigné le dépôt (l'accusé existe)
 
@@ -56,6 +57,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.contextes.obligations.domaine.obligations import ObligationInstance
 
 __all__ = [
+    "VerdictDeLaPreuve",
     "EcheanceDeLAdherent",
     "EtatPourLAdherent",
     "ExplicationDObligation",
@@ -132,8 +134,16 @@ class ReglagesDesEcheancesDeLAdherent(BaseModel):
 class EtatPourLAdherent(StrEnum):
     EN_RETARD = "EN_RETARD"
     PREUVE_ENVOYEE = "PREUVE_ENVOYEE"
+    #: La quittance est vérifiée par le cabinet : le PAIEMENT est acquis. Le dépôt de la
+    #: déclaration, lui, reste l'acte du cabinet, et la carte passe à DEPOSEE quand il est consigné.
+    PAYEE = "PAYEE"
     A_VENIR = "A_VENIR"
     DEPOSEE = "DEPOSEE"
+
+
+class VerdictDeLaPreuve(StrEnum):
+    VALIDEE = "VALIDEE"
+    REFUSEE = "REFUSEE"
 
 
 class PreuveEnvoyee(BaseModel):
@@ -144,6 +154,12 @@ class PreuveEnvoyee(BaseModel):
     piece: str
     envoyee_le: datetime
     par: str
+    #: ⚠️ 14 octobre 2026 : le verdict du cabinet. `None` tant que personne ne l'a vérifiée.
+    #: Une quittance REFUSÉE ne règle rien : l'échéance redevient à régler, avec le motif.
+    verdict: VerdictDeLaPreuve | None = None
+    motif: str | None = None
+    verifiee_le: datetime | None = None
+    verifiee_par: str | None = None
 
 
 class RappelDEcheance(BaseModel):
@@ -207,6 +223,15 @@ def echeances_de_l_adherent(
     for p in sorted(preuves, key=lambda p: p.envoyee_le):
         derniere_preuve[(p.code_obligation, p.periode_debut)] = p
 
+    def prouvee(code: str, o: ObligationInstance) -> bool:
+        """⚠️ Une quittance REFUSÉE ne prouve rien : l'échéance redevient à régler."""
+        preuve = derniere_preuve.get((code, o.periode_debut))
+        return preuve is not None and preuve.verdict is not VerdictDeLaPreuve.REFUSEE
+
+    def payee(code: str, o: ObligationInstance) -> bool:
+        preuve = derniere_preuve.get((code, o.periode_debut))
+        return preuve is not None and preuve.verdict is VerdictDeLaPreuve.VALIDEE
+
     retenues: list[EcheanceDeLAdherent] = []
     for code, suite in par_code.items():
         choisies: list[tuple[int, EtatPourLAdherent, int]] = []
@@ -215,13 +240,38 @@ def echeances_de_l_adherent(
             for rang, o in enumerate(suite)
             if not o.deposee and o.echeance <= jour + timedelta(days=reglages.horizon_jours)
         ]
-        prouvees = [(r, o) for r, o in a_regler if (code, o.periode_debut) in derniere_preuve]
+        prouvees = [(r, o) for r, o in a_regler if prouvee(code, o)]
+        # ⚠️ UNE QUITTANCE REFUSÉE GARDE SA CARTE, comme une quittance envoyée. Remise dans le lot
+        # des retards, sa période disparaissait derrière la plus ancienne en retard, et le motif
+        # du refus avec elle : l'adhérent ne savait pas qu'on attendait une autre quittance, ni
+        # pourquoi. Constaté à l'écriture du cas, le 14 octobre 2026.
+        refusees = [
+            (r, o)
+            for r, o in a_regler
+            if not prouvee(code, o) and (code, o.periode_debut) in derniere_preuve
+        ]
+        for rang, o in refusees:
+            choisies.append(
+                (
+                    rang,
+                    EtatPourLAdherent.EN_RETARD if o.echeance < jour else EtatPourLAdherent.A_VENIR,
+                    0,
+                )
+            )
         sans_preuve = [
-            (r, o) for r, o in a_regler if (code, o.periode_debut) not in derniere_preuve
+            (r, o)
+            for r, o in a_regler
+            if not prouvee(code, o) and (code, o.periode_debut) not in derniere_preuve
         ]
         en_retard = [(r, o) for r, o in sans_preuve if o.echeance < jour]
-        for rang, _ in prouvees:
-            choisies.append((rang, EtatPourLAdherent.PREUVE_ENVOYEE, 0))
+        for rang, o in prouvees:
+            choisies.append(
+                (
+                    rang,
+                    EtatPourLAdherent.PAYEE if payee(code, o) else EtatPourLAdherent.PREUVE_ENVOYEE,
+                    0,
+                )
+            )
         if en_retard:
             choisies.append((en_retard[0][0], EtatPourLAdherent.EN_RETARD, len(en_retard) - 1))
         elif sans_preuve:
@@ -276,9 +326,11 @@ def echeances_de_l_adherent(
                         else None
                     ),
                     prochaine_echeance=apres.echeance if apres is not None else None,
+                    # ⚠️ La preuve accompagne aussi une carte redevenue à régler : c'est elle
+                    # qui porte le motif du refus, que l'adhérent doit lire pour en renvoyer une.
                     preuve=(
                         derniere_preuve.get((code, o.periode_debut))
-                        if etat is EtatPourLAdherent.PREUVE_ENVOYEE
+                        if etat is not EtatPourLAdherent.DEPOSEE
                         else None
                     ),
                     autres_periodes_en_retard=autres,
@@ -289,14 +341,15 @@ def echeances_de_l_adherent(
         EtatPourLAdherent.EN_RETARD: 0,
         EtatPourLAdherent.PREUVE_ENVOYEE: 1,
         EtatPourLAdherent.A_VENIR: 2,
-        EtatPourLAdherent.DEPOSEE: 3,
+        EtatPourLAdherent.PAYEE: 3,
+        EtatPourLAdherent.DEPOSEE: 4,
     }
 
     def cle(e: EcheanceDeLAdherent):
         if e.etat is EtatPourLAdherent.EN_RETARD:
             return (0, -e.jours, e.code_obligation)
         if e.etat is EtatPourLAdherent.DEPOSEE:
-            return (3, -(e.declaree_le or date.min).toordinal(), e.code_obligation)
+            return (4, -(e.declaree_le or date.min).toordinal(), e.code_obligation)
         return (ordre[e.etat], e.echeance.toordinal(), e.code_obligation)
 
     return sorted(retenues, key=cle)
