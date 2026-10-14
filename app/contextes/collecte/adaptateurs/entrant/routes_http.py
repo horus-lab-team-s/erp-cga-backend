@@ -19,6 +19,7 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -81,6 +82,7 @@ from app.contextes.collecte.domaine.espace_adherent import (
     texte_de_la_reponse,
     vue_des_justificatifs,
 )
+from app.contextes.collecte.domaine.facture_lue import FactureLue, LigneLue, SourceDeLecture
 from app.contextes.collecte.domaine.ports import DepotDemandes, DepotPieces
 from app.contextes.transverse.api import (
     LOCATAIRE_PAR_DEFAUT,
@@ -1040,6 +1042,208 @@ def lire_la_piece(
         )
     except TransitionRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
+
+
+# ── La facture lue, et sa lecture automatique (14 octobre 2026) ──────────────
+#
+# « Une facture chargée doit vite devenir une écriture. » La pièce ne portait que son
+# type, sa référence, sa date, son TTC et son émetteur : rien dont on pût tirer une
+# écriture. Elle porte désormais la facture lue et confirmée (`FactureLue`), d'où la
+# comptabilité propose l'écriture. La lecture automatique, quand elle est configurée,
+# préremplit ; un collaborateur confirme toujours.
+
+
+def service_de_lecture():
+    """Le moteur de lecture automatique, ou `None` s'il n'est pas configuré.
+
+    ⚠️ `None` sans clé, et c'est voulu : aucun document ne sort du serveur tant que le
+    cabinet n'a pas posé `CGA_ANTHROPIC_CLE_API`. Les essais remplacent cette fonction.
+    """
+    reglages = configuration()
+    if not reglages.anthropic_cle_api:
+        return None
+    from app.contextes.collecte.adaptateurs.sortant.extraction_claude import ExtractionClaude
+
+    return ExtractionClaude(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+
+
+class EtatDeLaLecture(BaseModel):
+    disponible: bool
+
+
+@routeur.get("/lecture-automatique", summary="La lecture automatique est-elle configurée ?")
+def lecture_automatique_disponible(acces: AccesRequis) -> EtatDeLaLecture:
+    exiger(acces, Permission.IDENTIFIER_PIECE)
+    return EtatDeLaLecture(disponible=bool(configuration().anthropic_cle_api))
+
+
+class ValeurProposee(BaseModel):
+    champ: str
+    valeur: Any
+    confiance: Decimal
+    #: Le collaborateur doit la relire : confiance sous le seuil, ou champ qui engage
+    #: la déclaration (montants, NIU, date) quel que soit le score.
+    a_relire: bool
+
+
+class LectureProposee(BaseModel):
+    """Ce que la lecture a vu. **Rien n'est enregistré** : c'est une proposition."""
+
+    moteur: str
+    incident: str | None
+    valeurs: list[ValeurProposee]
+
+
+def _piece_de_mon_portefeuille(acces, identifiant: str) -> PieceJustificative:
+    introuvable = f"pièce {identifiant} introuvable."
+    piece = depot_pieces().par_identifiant(identifiant)
+    if piece is None:
+        raise HTTPException(status_code=404, detail=introuvable)
+    exiger_dossier(acces, Permission.IDENTIFIER_PIECE, piece.entreprise, introuvable=introuvable)
+    return piece
+
+
+@routeur.post(
+    "/pieces/{identifiant}/lecture-automatique",
+    summary="Lire automatiquement le document d'une pièce, pour préremplir sa facture",
+    responses={
+        404: {"description": "Pièce inconnue, hors portefeuille, ou sans document"},
+        503: {"description": "Lecture automatique non configurée"},
+    },
+)
+def lire_automatiquement(acces: AccesRequis, identifiant: str) -> LectureProposee:
+    """⚠️ Le document est envoyé à l'API d'Anthropic. Rien n'est écrit au dossier : les valeurs
+    reviennent à l'écran, et c'est `POST /pieces/{id}/facture` qui enregistre ce que le
+    collaborateur a confirmé."""
+    exiger(acces, Permission.IDENTIFIER_PIECE)
+    piece = _piece_de_mon_portefeuille(acces, identifiant)
+    service = service_de_lecture()
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="La lecture automatique n'est pas configurée : saisissez la facture.",
+        )
+    if piece.empreinte is None:
+        raise HTTPException(status_code=404, detail="Cette pièce n'a pas de document à lire.")
+    try:
+        contenu = magasin_fichiers().lire(piece.empreinte)
+    except (CleInvalide, FichierAbsent, KeyError, FileNotFoundError) as absent:
+        raise HTTPException(status_code=404, detail="Le document est introuvable.") from absent
+    extraction = service.extraire(contenu, piece=piece.identifiant, type_attendu=piece.type)
+    return LectureProposee(
+        moteur=extraction.moteur,
+        incident=extraction.incident,
+        valeurs=[
+            ValeurProposee(
+                champ=v.champ,
+                valeur=v.valeur_lue,
+                confiance=v.confiance,
+                a_relire=not v.acceptable_automatiquement,
+            )
+            for v in extraction.champs.values()
+        ],
+    )
+
+
+class LigneSaisie(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    designation: str = Field(min_length=1, max_length=300)
+    montant_ht: Decimal = Field(gt=0)
+
+
+class FactureSaisie(BaseModel):
+    """La facture, telle que le collaborateur l'a confirmée."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    emetteur: str = Field(min_length=1, max_length=200)
+    niu_emetteur: str | None = Field(default=None, max_length=32)
+    #: « J'ai vérifié sur le portail de la DGI que ce NIU est actif. » Voir `FactureLue`.
+    niu_actif: bool | None = None
+    reference: str = Field(min_length=1, max_length=64)
+    date_emission: date
+    lignes: list[LigneSaisie] = Field(default_factory=list, max_length=200)
+    montant_ht: Decimal = Field(gt=0)
+    montant_tva: Decimal = Field(ge=0)
+    montant_ttc: Decimal = Field(gt=0)
+    source: SourceDeLecture = SourceDeLecture.SAISIE
+
+
+@routeur.post(
+    "/pieces/{identifiant}/facture",
+    summary="Enregistrer la facture lue et confirmée d'une pièce",
+    responses={
+        404: {"description": "Pièce inconnue, ou hors du portefeuille"},
+        409: {"description": "Pièce déjà comptabilisée ou archivée"},
+        422: {"description": "Les montants ne se recoupent pas"},
+    },
+)
+def enregistrer_la_facture(
+    acces: AccesRequis, identifiant: str, saisie: FactureSaisie
+) -> PieceJustificative:
+    """La pièce devient une facture d'achat lue, prête à proposer son écriture.
+
+    ⚠️ PLUS RIEN NE CHANGE APRÈS L'ÉCRITURE. Une pièce comptabilisée porte la facture
+    d'où l'écriture est sortie ; la retoucher ferait mentir le lien entre les deux. Une
+    erreur se corrige par une contre-passation, comme toute écriture validée.
+    """
+    exiger(acces, Permission.IDENTIFIER_PIECE)
+    piece = _piece_de_mon_portefeuille(acces, identifiant)
+    if piece.etat in (EtatPiece.COMPTABILISEE, EtatPiece.ARCHIVEE):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"pièce {identifiant} {piece.etat.value.lower()} : "
+                "sa facture ne se modifie plus."
+            ),
+        )
+    try:
+        facture = FactureLue(
+            emetteur=saisie.emetteur.strip(),
+            niu_emetteur=(saisie.niu_emetteur or "").replace(" ", "").upper() or None,
+            niu_actif=saisie.niu_actif,
+            reference=saisie.reference.strip(),
+            date_emission=saisie.date_emission,
+            lignes=tuple(
+                LigneLue(designation=ligne.designation.strip(), montant_ht=ligne.montant_ht)
+                for ligne in saisie.lignes
+            ),
+            montant_ht=saisie.montant_ht,
+            montant_tva=saisie.montant_tva,
+            montant_ttc=saisie.montant_ttc,
+            source=saisie.source,
+            lue_par=acces.compte,
+            lue_le=maintenant(),
+        )
+    except ValueError as refus:
+        raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
+    pieces = depot_pieces()
+    if piece.etat is EtatPiece.RECUE:
+        try:
+            piece = lire_une_piece(
+                piece,
+                type=TypePiece.FACTURE_ACHAT,
+                reference_document=facture.reference,
+                date_document=facture.date_emission,
+                montant_ttc=facture.montant_ttc,
+                emetteur=facture.emetteur,
+                pieces=pieces,
+            )
+        except TransitionRefusee as refus:
+            raise HTTPException(status_code=409, detail=str(refus)) from refus
+    else:
+        piece = piece.model_copy(
+            update={
+                "reference_document": facture.reference,
+                "date_document": facture.date_emission,
+                "montant_ttc": facture.montant_ttc,
+                "emetteur": facture.emetteur,
+            }
+        )
+    avec = piece.model_copy(update={"facture": facture})
+    pieces.enregistrer(avec)
+    return avec
 
 
 class DemandeDeClassement(BaseModel):

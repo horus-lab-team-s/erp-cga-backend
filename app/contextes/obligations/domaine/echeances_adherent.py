@@ -23,6 +23,7 @@ QUATRE ÉTATS POUR L'ADHÉRENT
     EN_RETARD        l'échéance est passée, rien n'est déposé, aucune preuve envoyée
     PREUVE_ENVOYEE   l'adhérent a envoyé sa quittance : le cabinet la vérifie
     PAYEE            le cabinet a vérifié la quittance (14 octobre 2026) : le paiement est acquis
+    FONDS_RECUS      sous mandat de paiement, le cabinet a reçu les fonds et règle l'administration
     A_VENIR          l'échéance n'est pas passée
     DEPOSEE          le cabinet a consigné le dépôt (l'accusé existe)
 
@@ -57,6 +58,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.contextes.obligations.domaine.obligations import ObligationInstance
 
 __all__ = [
+    "FondsRecusParLeCabinet",
     "VerdictDeLaPreuve",
     "EcheanceDeLAdherent",
     "EtatPourLAdherent",
@@ -137,6 +139,9 @@ class EtatPourLAdherent(StrEnum):
     #: La quittance est vérifiée par le cabinet : le PAIEMENT est acquis. Le dépôt de la
     #: déclaration, lui, reste l'acte du cabinet, et la carte passe à DEPOSEE quand il est consigné.
     PAYEE = "PAYEE"
+    #: Sous mandat de paiement (14 octobre 2026) : les fonds de l'adhérent sont chez le cabinet,
+    #: l'administration n'est PAS encore payée. Passe à PAYEE quand le cabinet porte la quittance.
+    FONDS_RECUS = "FONDS_RECUS"
     A_VENIR = "A_VENIR"
     DEPOSEE = "DEPOSEE"
 
@@ -160,6 +165,18 @@ class PreuveEnvoyee(BaseModel):
     motif: str | None = None
     verifiee_le: datetime | None = None
     verifiee_par: str | None = None
+
+
+class FondsRecusParLeCabinet(BaseModel):
+    """Les fonds remis au cabinet pour une échéance, sous mandat de paiement."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code_obligation: str
+    periode_debut: date
+    montant: Decimal
+    canal: str
+    recus_le: datetime
 
 
 class RappelDEcheance(BaseModel):
@@ -196,6 +213,8 @@ class EcheanceDeLAdherent(BaseModel):
     precedente: RappelDEcheance | None
     prochaine_echeance: date | None
     preuve: PreuveEnvoyee | None
+    #: Sous mandat de paiement : les fonds remis au cabinet pour cette échéance.
+    fonds: FondsRecusParLeCabinet | None = None
     #: Pour la carte « en retard » : les autres périodes de la même obligation en retard, sans
     #preuve.
     autres_periodes_en_retard: int = 0
@@ -209,6 +228,7 @@ def echeances_de_l_adherent(
     reglages: ReglagesDesEcheancesDeLAdherent,
     montants_constates: dict[str, Decimal | None],
     preuves: list[PreuveEnvoyee],
+    fonds_recus: list[FondsRecusParLeCabinet] | None = None,
 ) -> list[EcheanceDeLAdherent]:
     """Les échéances à montrer, dans l'ordre où elles demandent un geste.
 
@@ -222,6 +242,8 @@ def echeances_de_l_adherent(
     derniere_preuve: dict[tuple[str, date], PreuveEnvoyee] = {}
     for p in sorted(preuves, key=lambda p: p.envoyee_le):
         derniere_preuve[(p.code_obligation, p.periode_debut)] = p
+
+    fonds = {(f.code_obligation, f.periode_debut): f for f in (fonds_recus or [])}
 
     def prouvee(code: str, o: ObligationInstance) -> bool:
         """⚠️ Une quittance REFUSÉE ne prouve rien : l'échéance redevient à régler."""
@@ -240,7 +262,11 @@ def echeances_de_l_adherent(
             for rang, o in enumerate(suite)
             if not o.deposee and o.echeance <= jour + timedelta(days=reglages.horizon_jours)
         ]
-        prouvees = [(r, o) for r, o in a_regler if prouvee(code, o)]
+        # ⚠️ Des fonds remis au cabinet sont « pris en charge » : l'échéance n'est plus à
+        # régler pour l'adhérent, sans être payée tant que la quittance n'est pas portée.
+        prouvees = [
+            (r, o) for r, o in a_regler if prouvee(code, o) or (code, o.periode_debut) in fonds
+        ]
         # ⚠️ UNE QUITTANCE REFUSÉE GARDE SA CARTE, comme une quittance envoyée. Remise dans le lot
         # des retards, sa période disparaissait derrière la plus ancienne en retard, et le motif
         # du refus avec elle : l'adhérent ne savait pas qu'on attendait une autre quittance, ni
@@ -248,7 +274,9 @@ def echeances_de_l_adherent(
         refusees = [
             (r, o)
             for r, o in a_regler
-            if not prouvee(code, o) and (code, o.periode_debut) in derniere_preuve
+            if not prouvee(code, o)
+            and (code, o.periode_debut) not in fonds
+            and (code, o.periode_debut) in derniere_preuve
         ]
         for rang, o in refusees:
             choisies.append(
@@ -261,17 +289,19 @@ def echeances_de_l_adherent(
         sans_preuve = [
             (r, o)
             for r, o in a_regler
-            if not prouvee(code, o) and (code, o.periode_debut) not in derniere_preuve
+            if not prouvee(code, o)
+            and (code, o.periode_debut) not in fonds
+            and (code, o.periode_debut) not in derniere_preuve
         ]
         en_retard = [(r, o) for r, o in sans_preuve if o.echeance < jour]
         for rang, o in prouvees:
-            choisies.append(
-                (
-                    rang,
-                    EtatPourLAdherent.PAYEE if payee(code, o) else EtatPourLAdherent.PREUVE_ENVOYEE,
-                    0,
-                )
-            )
+            if payee(code, o):
+                etat = EtatPourLAdherent.PAYEE
+            elif (code, o.periode_debut) in fonds:
+                etat = EtatPourLAdherent.FONDS_RECUS
+            else:
+                etat = EtatPourLAdherent.PREUVE_ENVOYEE
+            choisies.append((rang, etat, 0))
         if en_retard:
             choisies.append((en_retard[0][0], EtatPourLAdherent.EN_RETARD, len(en_retard) - 1))
         elif sans_preuve:
@@ -333,6 +363,7 @@ def echeances_de_l_adherent(
                         if etat is not EtatPourLAdherent.DEPOSEE
                         else None
                     ),
+                    fonds=fonds.get((code, o.periode_debut)),
                     autres_periodes_en_retard=autres,
                     effectif_a_confirmer=o.effectif_a_confirmer,
                 )
@@ -340,6 +371,7 @@ def echeances_de_l_adherent(
     ordre = {
         EtatPourLAdherent.EN_RETARD: 0,
         EtatPourLAdherent.PREUVE_ENVOYEE: 1,
+        EtatPourLAdherent.FONDS_RECUS: 1,
         EtatPourLAdherent.A_VENIR: 2,
         EtatPourLAdherent.PAYEE: 3,
         EtatPourLAdherent.DEPOSEE: 4,

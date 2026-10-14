@@ -43,6 +43,7 @@ from app.contextes.portefeuille.domaine.entites import (
     Exercice,
     FormeJuridique,
     MandatDeclaratif,
+    MandatDePaiement,
     RegimeFiscal,
     StatutRattachement,
     StatutRegime,
@@ -136,6 +137,17 @@ BATIMENT = Entreprise(
         )
     ],
     mandats=[_mandat_complet(date(2022, 6, 1), "NKOA Jean-Pierre, gérant")],
+    # 14 octobre 2026 : il confie au cabinet le paiement de la CNPS et des retenues sur
+    # salaires, et règle lui-même sa TVA. Voir `MandatDePaiement`.
+    mandats_de_paiement=[
+        MandatDePaiement(
+            debut=date(2026, 6, 1),
+            motif=MotifChangement.ADHESION,
+            obligations=["CNPS", "IRPP_SALAIRES"],
+            signe_le=date(2026, 6, 1),
+            signe_par="NKOA Jean-Pierre, gérant",
+        )
+    ],
     exercices=_exercices(2021, 2026),
     dirigeants=[
         Dirigeant(

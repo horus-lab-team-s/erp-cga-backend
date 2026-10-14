@@ -196,6 +196,34 @@ class MandatDeclaratif(Periode):
         return self.couvre(a_la_date) and code in self.obligations
 
 
+class MandatDePaiement(Periode):
+    """Ce que le Centre PAIE au nom de l'adhérent, avec les fonds qu'il lui remet.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ DISTINCT DU MANDAT DÉCLARATIF, ET CE N'EST PAS UN DOUBLON (14 octobre 2026).
+
+    Déclarer à la place de l'entreprise et payer à sa place sont deux actes. Le
+    second fait **détenir au cabinet des fonds de tiers** : l'argent de l'adhérent,
+    dû à l'administration, transite par le cabinet. Il exige son propre accord
+    écrit, et il peut couvrir d'autres obligations que le premier (la CNPS sans la
+    TVA, par exemple).
+
+    Décision du cabinet du 14 octobre 2026 : pour la TVA et la CNPS, l'adhérent
+    paie lui-même l'administration, OU, s'il a signé ce mandat, confie les fonds
+    au cabinet (par mobile money ou au guichet), qui reverse et porte la quittance.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    obligations: list[str] = Field(min_length=1)
+    signe_le: date
+    signe_par: str = Field(min_length=1)
+
+    def couvre_obligation(self, code: str, a_la_date: date) -> bool:
+        return self.couvre(a_la_date) and code in self.obligations
+
+
 # ── L'exercice ───────────────────────────────────────────────────────────────────
 
 
@@ -353,6 +381,8 @@ class Entreprise(BaseModel):
     #: adhéré, résilié, puis ré-adhéré.
     adhesions: list[Adhesion] = Field(default_factory=list)
     mandats: list[MandatDeclaratif] = Field(default_factory=list)
+    #: 14 octobre 2026 : ce que le Centre paie pour l'adhérent. Voir `MandatDePaiement`.
+    mandats_de_paiement: list[MandatDePaiement] = Field(default_factory=list)
 
     exercices: list[Exercice] = Field(default_factory=list)
     dirigeants: list[Dirigeant] = Field(default_factory=list)
@@ -369,6 +399,9 @@ class Entreprise(BaseModel):
         )
         verifier_succession(self.adhesions, quoi=f"{self.niu} · adhésions", continue_=False)
         verifier_succession(self.mandats, quoi=f"{self.niu} · mandats", continue_=False)
+        verifier_succession(
+            self.mandats_de_paiement, quoi=f"{self.niu} · mandats de paiement", continue_=False
+        )
         return self
 
     @model_validator(mode="after")
@@ -477,6 +510,13 @@ class Entreprise(BaseModel):
     def mandatee_pour(self, code_obligation: str, a_la_date: date) -> bool:
         """Le Centre a-t-il qualité pour déposer cette déclaration ce jour-là ?"""
         return any(m.couvre_obligation(code_obligation, a_la_date) for m in self.mandats)
+
+    def paiement_mandate(self, code_obligation: str, a_la_date: date) -> bool:
+        """Le Centre a-t-il qualité pour PAYER cette obligation ce jour-là, avec les fonds
+        de l'adhérent ? Sans ce mandat, il ne lui appelle aucun fonds."""
+        return any(
+            m.couvre_obligation(code_obligation, a_la_date) for m in self.mandats_de_paiement
+        )
 
     def exercice_couvrant(self, jour: date) -> Exercice:
         for exercice in self.exercices:

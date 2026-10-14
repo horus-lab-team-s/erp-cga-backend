@@ -42,6 +42,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from app.contextes.collecte.domaine.facture_lue import FactureLue
 from app.partage.copie import transiter
 
 __all__ = [
@@ -198,6 +199,9 @@ class PieceJustificative(BaseModel):
     motif_archivage: str | None = None
     depose_par: str | None = None
     commentaire: str | None = None
+    #: 14 octobre 2026 : la facture lue et confirmée (lignes, HT, TVA, NIU du fournisseur),
+    #: d'où l'écriture se propose. Voir `facture_lue.py`.
+    facture: FactureLue | None = None
 
     @model_validator(mode="after")
     def _coherence(self) -> PieceJustificative:

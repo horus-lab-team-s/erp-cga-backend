@@ -33,6 +33,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
 __all__ = [
+    "TableAppelDeFonds",
     "TableContratDHonoraires",
     "TableDevis",
     "TableReglementDHonoraires",
@@ -415,3 +416,20 @@ class TableReglementDHonoraires(Cloisonne, Document, Base):
     niu: Mapped[str] = mapped_column(String(64), nullable=False)
     periode: Mapped[date] = mapped_column(Date, nullable=False)
     constate_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableAppelDeFonds(Cloisonne, Document, Base):
+    """Un appel de fonds de tiers (14 octobre 2026) : l'argent d'un adhérent, dû à
+    l'administration, que le cabinet détient puis reverse.
+
+    ⚠️ Une table à part des honoraires, et pas par goût de l'ordre : cet argent n'est
+    pas au cabinet. Aucune requête ne doit pouvoir les additionner par mégarde.
+    """
+
+    __tablename__ = "appel_de_fonds"
+    __table_args__ = (Index("ix_appel_de_fonds_dossier", "locataire", "niu", "etat"),)
+
+    identifiant: Mapped[str] = mapped_column(String(96), primary_key=True)
+    niu: Mapped[str] = mapped_column(String(64), nullable=False)
+    etat: Mapped[str] = mapped_column(String(20), nullable=False)
+    arrete_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)

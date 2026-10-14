@@ -288,6 +288,18 @@ class Configuration(BaseSettings):
     tara_cle_api: str = ""
     tara_identifiant_marchand: str = ""
 
+    #: La lecture automatique des factures par Claude (décision du cabinet, 14 octobre 2026).
+    #:
+    #: ⚠️ **VIDE ⇒ AUCUN DOCUMENT NE SORT DU SERVEUR.** Sans clé, le bouton « Lire
+    #: automatiquement » n'est pas proposé et la facture se saisit à la main, à côté de son
+    #: aperçu. Avec la clé, le document est envoyé à l'API d'Anthropic : le cabinet doit le
+    #: mentionner dans sa politique de confidentialité. La clé n'est lue qu'ici, jamais dans
+    #: l'environnement par défaut du SDK, pour qu'une variable posée pour un autre usage
+    #: n'active pas l'envoi de pièces d'adhérents sans que personne l'ait décidé.
+    anthropic_cle_api: str = ""
+    #: Le modèle de lecture. Opus 5.5 par défaut : une erreur de lecture se paie en écriture fausse.
+    lecture_modele: str = "claude-opus-5-5"
+
     #: Le relais de messagerie. **Vide ⇒ aucun courriel ne part** : l'adaptateur
     #: en mémoire prend le relais et retient les messages, ce qui est le mode de
     #: développement voulu. Voir `adaptateurs/sortant/notifications_smtp.py`.

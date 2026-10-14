@@ -17,6 +17,7 @@ from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     SouscriptionIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.tables import (
+    TableAppelDeFonds,
     TableContratDHonoraires,
     TableDevis,
     TableDossierCommercial,
@@ -34,6 +35,7 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.fonds_de_tiers import AppelDeFonds
 from app.contextes.souscription.domaine.honoraires import (
     ContratDHonoraires,
     PeriodeDejaReglee,
@@ -52,6 +54,7 @@ from app.contextes.souscription.domaine.souscriptions import (
 from app.infrastructure.depot_document import DepotDocument
 
 __all__ = [
+    "DepotAppelsDeFondsSql",
     "DepotContratsDHonorairesSql",
     "DepotReglementsDHonorairesSql",
     "DepotDevisSql",
@@ -607,3 +610,31 @@ class DepotReglementsDHonorairesSql(DepotDocument[ReglementDHonoraires]):
 
     def lister(self) -> list[ReglementDHonoraires]:
         return self._tous(self._requete().order_by(TableReglementDHonoraires.constate_le))
+
+
+class DepotAppelsDeFondsSql(DepotDocument[AppelDeFonds]):
+    """Réalisation de `DepotAppelsDeFonds`. Voir `TableAppelDeFonds`."""
+
+    _table = TableAppelDeFonds
+    _entite = AppelDeFonds
+
+    def _cle(self, entite: AppelDeFonds) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: AppelDeFonds) -> dict[str, Any]:
+        return {"niu": entite.niu, "etat": entite.etat.value, "arrete_le": entite.arrete_le}
+
+    def lire(self, identifiant: str) -> AppelDeFonds | None:
+        return self._premier(self._requete().where(TableAppelDeFonds.identifiant == identifiant))
+
+    def pour(self, niu: str) -> list[AppelDeFonds]:
+        return sorted(
+            self._tous(self._requete().where(TableAppelDeFonds.niu == niu)),
+            key=lambda a: (a.periode_debut, a.code_obligation),
+        )
+
+    def enregistrer(self, appel: AppelDeFonds) -> None:
+        self._poser(appel)
+
+    def lister(self) -> list[AppelDeFonds]:
+        return self._tous(self._requete().order_by(TableAppelDeFonds.arrete_le))

@@ -30,6 +30,7 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.fonds_de_tiers import AppelDeFonds
 from app.contextes.souscription.domaine.honoraires import (
     ContratDHonoraires,
     PeriodeDejaReglee,
@@ -433,3 +434,25 @@ class DepotReglementsDHonorairesMemoire:
 
     def lister(self) -> list[ReglementDHonoraires]:
         return sorted(self._reglements.values(), key=lambda r: r.constate_le)
+
+
+class DepotAppelsDeFondsMemoire:
+    """Réalisation en mémoire de `DepotAppelsDeFonds`."""
+
+    def __init__(self) -> None:
+        self._appels: dict[str, AppelDeFonds] = {}
+
+    def lire(self, identifiant: str) -> AppelDeFonds | None:
+        return self._appels.get(identifiant)
+
+    def pour(self, niu: str) -> list[AppelDeFonds]:
+        return sorted(
+            (a for a in self._appels.values() if a.niu == niu),
+            key=lambda a: (a.periode_debut, a.code_obligation),
+        )
+
+    def enregistrer(self, appel: AppelDeFonds) -> None:
+        self._appels[appel.identifiant] = appel
+
+    def lister(self) -> list[AppelDeFonds]:
+        return sorted(self._appels.values(), key=lambda a: a.arrete_le)

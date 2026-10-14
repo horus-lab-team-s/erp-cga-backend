@@ -28,6 +28,11 @@ dependencies = [
     # n'est pas une dégradation du dépôt de fichier, c'est le service entier qui
     # ne monte pas. Voir collecte/adaptateurs/entrant/routes_http.py.
     "python-multipart>=0.0.9",
+    # La lecture automatique des factures par Claude — contexte C (décision du cabinet, 14
+    # octobre 2026). ⚠️ La 1.x s'appuie sur `httpx2` et exige `h11>=0.16` : l'environnement doit
+    # porter `httpcore>=1.0.9` pour que `httpx` (Tara) cohabite. Sans clé configurée, rien ne
+    # part : voir `CGA_ANTHROPIC_CLE_API`.
+    "anthropic>=1,<2",
     # Le document de proforma — contexte M. ⚠️ Pur Python, et c'est la raison du
     # choix : `weasyprint` rend un plus beau document mais réclame Pango et
     # Cairo, donc des bibliothèques système que l'image du serveur n'a pas et

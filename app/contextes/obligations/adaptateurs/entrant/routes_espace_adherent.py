@@ -49,6 +49,7 @@ from app.contextes.obligations.adaptateurs.sortant.explications_adherent_yaml im
 from app.contextes.obligations.api import ObligationInstance, generer_echeancier
 from app.contextes.obligations.domaine.echeances_adherent import (
     EcheanceDeLAdherent,
+    FondsRecusParLeCabinet,
     PreuveEnvoyee,
     ReglagesDesEcheancesDeLAdherent,
     VerdictDeLaPreuve,
@@ -109,6 +110,23 @@ ACTION_RECUE = "obligations.preuve_de_paiement_recue"
 #: chaîné et conservé dix ans : la vérification d'une quittance engage le cabinet envers l'adhérent
 #: (« payée »), elle se relit au même endroit que l'envoi, et un second registre divergerait.
 ACTION_VERDICT = "obligations.preuve_de_paiement_verifiee"
+#: 14 octobre 2026 : sous mandat de paiement, les fonds de l'adhérent sont reçus par le cabinet.
+#: Écrit par l'abonné de `FondsDeTiersReçus` (`abonne_fonds_de_tiers`).
+ACTION_FONDS = "obligations.fonds_recus_par_le_cabinet"
+
+
+def _fonds_recus(niu: str) -> list[FondsRecusParLeCabinet]:
+    return [
+        FondsRecusParLeCabinet(
+            code_obligation=e.apres["obligation"],
+            periode_debut=date.fromisoformat(e.apres["periode_debut"]),
+            montant=Decimal(e.apres["montant"]),
+            canal=e.apres.get("canal", ""),
+            recus_le=e.horodatage,
+        )
+        for e in atelier().journal.lister(objet_type=OBJET_PREUVE, objet_id=niu)
+        if e.action == ACTION_FONDS
+    ]
 
 
 def _preuves(niu: str | None) -> list[PreuveEnvoyee]:
@@ -173,6 +191,7 @@ def lire_mes_echeances(acces: AccesRequis, entreprise: str) -> VueDesEcheances:
             reglages=reglages,
             montants_constates=montants,
             preuves=_preuves(entreprise),
+            fonds_recus=_fonds_recus(entreprise),
         ),
         explications_validees=reglages.statut == "VALIDE",
     )

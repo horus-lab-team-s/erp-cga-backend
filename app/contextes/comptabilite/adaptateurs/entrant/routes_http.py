@@ -37,6 +37,11 @@ from app.contextes.comptabilite.adaptateurs.sortant.donnees_demo import (
     PLAN_IMPUTATION_DEMO,
     DepotPlanImputationMemoire,
 )
+from app.contextes.comptabilite.adaptateurs.sortant.livres_legaux import (
+    EnteteDuLivre,
+    Livre,
+    rendre_le_livre,
+)
 from app.contextes.comptabilite.adaptateurs.sortant.magasins_memoire import ecritures_en_memoire
 from app.contextes.comptabilite.adaptateurs.sortant.plan_syscohada import (
     DepotJournauxMemoire,
@@ -855,6 +860,79 @@ def proposer_depuis_une_facture(
     )
 
 
+class PropositionDeLaPiece(BaseModel):
+    """Le journal et la date, quand ils diffèrent de la facture. Tout le reste vient de la pièce."""
+
+    journal: str = "AC"
+    exercice: str | None = None
+    date_operation: date | None = None
+
+
+@routeur.post(
+    "/dossiers/{entreprise}/pieces/{identifiant}/proposition",
+    summary="Proposer l'écriture d'une pièce dont la facture est lue",
+    responses={
+        404: {"description": "Pièce inconnue, hors du dossier, ou sans facture lue"},
+        409: {"description": "La facture ne permet aucune écriture équilibrée"},
+    },
+)
+def proposer_depuis_la_piece(
+    acces: AccesRequis, entreprise: str, identifiant: str, demande: PropositionDeLaPiece
+) -> PropositionDEcriture:
+    """La facture lue de la pièce, contrôlée puis imputée. **Sans rien écrire.**
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME CHEMIN QUE `POST /propositions`, ET NON UNE COPIE (14 octobre 2026).
+
+    Le moteur de proposition ne travaillait que sur les factures de démonstration :
+    une pièce réelle n'en portait pas. Elle porte désormais sa facture lue et
+    confirmée ; cette route la met dans la forme du contrôle (`FactureAControler`)
+    et appelle la route existante. Contrôle de conformité, régime lu au portefeuille,
+    numéro pressenti : rien n'est recopié, rien ne diverge.
+
+    ⚠️ La pièce est désignée par le dossier ET son identifiant : une pièce d'un autre
+    dossier rend 404, comme une pièce inconnue.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    from app.contextes.collecte.api import DepotPiecesSql, pieces_en_memoire
+    from app.contextes.conformite.api import Document, LigneFacture, Montants, Partie
+
+    session = session_de_travail()
+    pieces = pieces_en_memoire() if session is None else DepotPiecesSql(session, courant())
+    piece = pieces.par_identifiant(identifiant)
+    if piece is None or piece.entreprise != entreprise:
+        raise HTTPException(status_code=404, detail=f"pièce {identifiant} introuvable.")
+    lue = piece.facture
+    if lue is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Cette pièce n'a pas de facture lue : lisez-la avant de proposer l'écriture.",
+        )
+    facture = FactureAControler(
+        document=Document(reference=lue.reference, date_emission=lue.date_emission),
+        emetteur=Partie(denomination=lue.emetteur, niu=lue.niu_emetteur, niu_actif=lue.niu_actif),
+        destinataire=Partie(niu=entreprise),
+        montants=Montants(
+            total_ht=lue.montant_ht, total_tva=lue.montant_tva, total_ttc=lue.montant_ttc
+        ),
+        lignes=[
+            LigneFacture(designation=ligne.designation, montant_ht=ligne.montant_ht)
+            for ligne in lue.lignes
+        ],
+    )
+    return proposer_depuis_une_facture(
+        acces,
+        entreprise,
+        DemandeDeProposition(
+            facture=facture,
+            journal=demande.journal,
+            exercice=demande.exercice,
+            date_operation=demande.date_operation,
+        ),
+    )
+
+
 def _moteur_de_conformite():
     """Le moteur de contrôle, obtenu par la **surface publique** de la conformité.
 
@@ -1151,4 +1229,70 @@ def _reprendre_le_lot(
         depot=depot(entreprise),
         par=par,
         appliquer=appliquer,
+    )
+
+
+# ── Les livres obligatoires, en PDF (14 octobre 2026) ─────────────────────────────
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/livres/{livre}",
+    summary="Un livre obligatoire en PDF : livre-journal, grand livre ou balance générale",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}},
+        403: {"description": "Habilitation insuffisante sur ce dossier"},
+        422: {"description": "Livre inconnu, ou période à l'envers"},
+    },
+)
+def editer_un_livre(
+    acces: AccesRequis,
+    entreprise: str,
+    livre: Livre,
+    exercice: str = Query(description="L'exercice, par exemple « 2026 »."),
+    du: date | None = Query(None, description="Début de période (le grand livre reporte avant)."),
+    au: date | None = Query(None, description="Date d'arrêté incluse."),
+) -> Response:
+    """Le livre, mis en page sur les écritures VALIDÉES : voir `livres_legaux.py`.
+
+    ⚠️ Les chiffres sont ceux de la balance et du grand livre de l'écran, par les mêmes
+    projections : un livre légal qui divergerait de l'écran serait le pire des deux.
+    """
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    if du is not None and au is not None and du > au:
+        raise HTTPException(
+            status_code=422,
+            detail=f"période à l'envers : du {du:%d/%m/%Y} au {au:%d/%m/%Y}.",
+        )
+    dossier = _dossier_du_portefeuille(entreprise)
+    plan = {c.numero: c.intitule for c in _plan.charger()}
+
+    def intitule(numero: str) -> str:
+        # Un sous-compte de l'adhérent (401100) prend l'intitulé de sa racine au plan.
+        for longueur in range(len(numero), 0, -1):
+            if numero[:longueur] in plan:
+                return plan[numero[:longueur]]
+        return ""
+
+    octets = rendre_le_livre(
+        livre,
+        depot(entreprise).lister(exercice),
+        EnteteDuLivre(
+            niu=entreprise,
+            denomination=dossier.denomination if dossier else entreprise,
+            exercice=exercice,
+            du=du,
+            au=au,
+            edite_le=maintenant(),
+        ),
+        intitule,
+    )
+    return Response(
+        content=octets,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{entreprise}-{exercice}-{livre.value}.pdf"'
+            )
+        },
     )

@@ -134,6 +134,9 @@ class NaturePaiement(StrEnum):
     #: Une période d'honoraires d'un adhérent (14 octobre 2026). `reference_reglee`
     #: est le NIU, `echeance` le début de la période.
     HONORAIRES = "HONORAIRES"
+    #: Des fonds de tiers (14 octobre 2026) : l'adhérent remet au cabinet ce qu'il doit à
+    #: l'administration. `reference_reglee` est l'identifiant de l'appel de fonds.
+    FONDS_DE_TIERS = "FONDS_DE_TIERS"
 
 
 class StrategieRapprochement(StrEnum):

@@ -536,6 +536,22 @@ def _inscrire_les_travaux_periodiques() -> None:
 
     inscrire_un_abonne(NOM_ENTREPRISE_CREEE, abonne_d_acces_adherent)
 
+    # ⚠️ 14 octobre 2026 : les fonds de tiers. La caisse et le mobile money vivent à la
+    # Souscription, l'échéance de l'adhérent aux Obligations : les deux faits traversent par
+    # la boîte d'envoi. Sans ces lignes, l'adhérent remettrait ses fonds et lirait toujours
+    # « en retard ».
+    from app.contextes.obligations.adaptateurs.entrant.abonne_fonds_de_tiers import (
+        abonne_fonds_recus,
+        abonne_fonds_reverses,
+    )
+    from app.contextes.souscription.application.fonds_de_tiers import (
+        NOM_FONDS_RECUS,
+        NOM_FONDS_REVERSES,
+    )
+
+    inscrire_un_abonne(NOM_FONDS_RECUS, abonne_fonds_recus)
+    inscrire_un_abonne(NOM_FONDS_REVERSES, abonne_fonds_reverses)
+
     # ⚠️ **La veille des dossiers, et volontairement sans abonné.** Elle dépose des
     # `DossierEnSouffrance` que le relais publiera, et aucun code ne s'y abonne
     # aujourd'hui : l'alerte reste dans la boîte, en « publié sans abonné », et se
@@ -664,6 +680,12 @@ def creer_application() -> FastAPI:
     )
 
     application.include_router(routeur_honoraires)
+    # ⚠️ 14 octobre 2026 : les fonds de tiers, sous `/souscription/fonds-de-tiers`.
+    from app.contextes.souscription.adaptateurs.entrant.routes_fonds_de_tiers import (
+        routeur as routeur_fonds_de_tiers,
+    )
+
+    application.include_router(routeur_fonds_de_tiers)
     # Le parcours d'acquisition, en amont de la souscription : il part du
     # formulaire public et s'arrête au dossier qualifié. Monté à part parce qu'il
     # a son propre préfixe et sa propre étiquette, et parce qu'il grandira.

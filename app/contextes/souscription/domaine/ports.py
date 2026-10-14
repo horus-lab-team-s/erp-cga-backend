@@ -39,6 +39,7 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.fonds_de_tiers import AppelDeFonds
 from app.contextes.souscription.domaine.honoraires import (
     ContratDHonoraires,
     ReglementDHonoraires,
@@ -51,6 +52,7 @@ from app.contextes.souscription.domaine.relance import SuiviDeRelance
 from app.contextes.souscription.domaine.souscriptions import Souscription
 
 __all__ = [
+    "DepotAppelsDeFonds",
     "DepotContratsDHonoraires",
     "DepotReglementsDHonoraires",
     "DepotDevis",
@@ -367,3 +369,15 @@ class DepotReglementsDHonoraires(Protocol):
         ...
 
     def lister(self) -> list[ReglementDHonoraires]: ...
+
+
+class DepotAppelsDeFonds(Protocol):
+    """Les appels de fonds de tiers : un par obligation et par période."""
+
+    def lire(self, identifiant: str) -> AppelDeFonds | None: ...
+
+    def pour(self, niu: str) -> list[AppelDeFonds]: ...
+
+    def enregistrer(self, appel: AppelDeFonds) -> None: ...
+
+    def lister(self) -> list[AppelDeFonds]: ...

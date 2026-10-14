@@ -250,8 +250,12 @@ class TestLEtatDeDependance:
         indirectes = {
             s.nom: dependances_transitives(s.nom) - autorises_pour(s.nom) for s in SERVICES
         }
+        # ⚠️ Relu le 14 octobre 2026 : la Souscription lit la Collecte (la quittance d'un
+        # paiement sous mandat est-elle une pièce du dossier ?), qui lit la Conformité.
+        # Arrêter la Conformité touche donc le reversement des fonds confiés au cabinet.
         assert {nom: cibles for nom, cibles in indirectes.items() if cibles} == {
-            "cloture": {"social"}
+            "cloture": {"social"},
+            "souscription": {"conformite"},
         }, "le graphe a encore changé : ce cas doit être relu"
 
     def test_le_social_entraine_la_cloture_sans_arete_directe(self):

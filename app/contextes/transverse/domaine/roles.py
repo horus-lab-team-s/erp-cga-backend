@@ -214,6 +214,9 @@ class Permission(StrEnum):
     #: qui lisent les quittances pour comptabiliser l'impôt payé. Un verdict engage le cabinet
     #: envers l'adhérent (« payée »), il n'est donc pas donné à qui ne tient pas le dossier.
     VERIFIER_UN_REGLEMENT = "VERIFIER_UN_REGLEMENT"
+    #: Remettre au cabinet les fonds d'une échéance qu'il paie pour soi (14 octobre 2026) :
+    #: l'adhérent seul, cadré sur son dossier, et seulement sous mandat de paiement.
+    CONFIER_SES_FONDS = "CONFIER_SES_FONDS"
 
     # ── Conformité ───────────────────────────────────────────────────────────
     CONTROLER_CONFORMITE = "CONTROLER_CONFORMITE"
@@ -354,6 +357,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.REGLER_SES_RAPPELS,
         Permission.TENIR_SA_PAIE,
         Permission.REGLER_SES_HONORAIRES,
+        Permission.CONFIER_SES_FONDS,
     },
     # Le chargé de clientèle est l'interlocuteur de l'adhérent. Il voit tout du
     # dossier, il relance, et il saisit ce qu'on lui apporte — voir la note sur
