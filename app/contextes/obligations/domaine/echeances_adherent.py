@@ -205,6 +205,8 @@ class EcheanceDeLAdherent(BaseModel):
     jours: int
     #: Estimé, jamais définitif ; `None` plutôt que zéro quand rien ne s'estime.
     montant_estime: Decimal | None
+    #: D'où vient l'estimation (l'IGS réduit par l'adhésion au centre…). Voir obligations.py.
+    explication_estimation: str | None = None
     #: Pour une obligation déposée : le montant porté à l'accusé.
     montant_constate: Decimal | None
     declaree_le: date | None
@@ -342,6 +344,7 @@ def echeances_de_l_adherent(
                     if etat in (EtatPourLAdherent.EN_RETARD, EtatPourLAdherent.A_VENIR)
                     else 0,
                     montant_estime=o.montant_estime,
+                    explication_estimation=o.explication_estimation,
                     montant_constate=montants_constates.get(o.reference_depot or ""),
                     declaree_le=o.declaree_le,
                     de_quoi_s_agit_il=explication.de_quoi_s_agit_il if explication else None,

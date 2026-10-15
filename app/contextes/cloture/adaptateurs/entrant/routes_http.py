@@ -127,6 +127,11 @@ class Liasse(BaseModel):
     denomination: str
     exercice: str
     cloture: date
+    #: 15 octobre 2026 : la nature d'activité qui a fixé le seuil du système (`None` :
+    #: non renseignée, seuil des services).
+    nature_activite: str | None = None
+    #: Le secteur qui impose le réel quel que soit le chiffre (CGI art. 93 quater (2) b).
+    reel_d_office: str | None = None
     systeme: SystemeDsf
     #: Vrai si le classement repose sur un seuil non encore validé.
     systeme_non_valide: bool
@@ -215,9 +220,8 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
     # ⚠️ La projection partagée, et non une somme refaite ici : cette route portait
     # sa propre version du chiffre d'affaires, écrite avant qu'il en existe une.
     ca = chiffre_affaires(soldes)
-    systeme, systeme_non_valide = determiner_le_systeme(
-        ca, parametres(), periode.cloture
-    )
+    # 15 octobre 2026 : le régime à la clôture décide du système (décret 2019/262).
+    systeme, systeme_non_valide = determiner_le_systeme(dossier.regime_au(periode.cloture))
     seuil = _seuil_d_adhesion(periode.cloture)
     droit = apprecier_le_droit(
         dossier,
@@ -242,6 +246,8 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
         denomination=dossier.denomination,
         exercice=exercice,
         cloture=periode.cloture,
+        nature_activite=dossier.nature_activite,
+        reel_d_office=dossier.reel_d_office,
         systeme=etats.systeme,
         systeme_non_valide=etats.systeme_non_valide,
         lignes=list(etats.lignes),
@@ -301,6 +307,22 @@ def lire_plan(
     la mécanique de ventilation.
     """
     exiger(acces, Permission.LIRE_COMPTABILITE)
+    if systeme is SystemeDsf.NORMAL:
+        # 15 octobre 2026 : la table officielle du modèle DGI, celle que lit la liasse.
+        # Les comptes de correction (28, 29, 39, 49, 59) suivent l'actif qu'ils corrigent.
+        from app.contextes.cloture.domaine.etats_dgi import ACTIF, COMPTE_DE_RESULTAT, PASSIF
+
+        def ligne(code: str, libelle: str, sens: str, prefixes: tuple[str, ...]) -> LignePlan:
+            return LignePlan(code=code, libelle=libelle, sens=sens, prefixes=list(prefixes))
+
+        return [
+            *(ligne(c, lib, "ACTIF", p) for c, lib, p in ACTIF),
+            *(ligne(c, lib, "PASSIF", p) for c, lib, p in PASSIF),
+            *(
+                ligne(c, lib, "CHARGE" if n == "C" else "PRODUIT", p)
+                for c, lib, p, n in COMPTE_DE_RESULTAT
+            ),
+        ]
     return [
         LignePlan(
             code=p.code, libelle=p.libelle, sens=p.sens.value, prefixes=list(p.prefixes)

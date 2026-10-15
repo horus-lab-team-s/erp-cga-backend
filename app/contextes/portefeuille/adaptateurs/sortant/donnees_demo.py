@@ -44,6 +44,7 @@ from app.contextes.portefeuille.domaine.entites import (
     FormeJuridique,
     MandatDeclaratif,
     MandatDePaiement,
+    NatureActivite,
     RegimeFiscal,
     StatutRattachement,
     StatutRegime,
@@ -166,6 +167,7 @@ TCHOUMBA = Entreprise(
     date_creation=date(2019, 9, 2),
     rccm="RC/DLA/2019/A/1842",
     activite="Commerce général de détail",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Marché Central, Douala I",
     regimes=[
         StatutRegime(
@@ -203,6 +205,7 @@ COLOMBE = Entreprise(
     rccm="RC/YAO/2020/B/0311",
     capital=Decimal("2000000"),
     activite="Boulangerie et pâtisserie",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Mvog-Mbi, Yaoundé III",
     regimes=[
         StatutRegime(
@@ -247,6 +250,7 @@ AGRO = Entreprise(
     rccm="RC/BAF/2018/B/0145",
     capital=Decimal("50000000"),
     activite="Culture, collecte et négoce de produits agricoles",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Bafoussam I",
     etablissements=["Entrepôt de Bafoussam", "Antenne de Douala — Bonabéri"],
     regimes=[
@@ -295,6 +299,8 @@ NGUEMA = Entreprise(
     date_creation=date(2022, 4, 11),
     rccm="RC/DLA/2022/A/2510",
     activite="Conseil en gestion et assistance administrative",
+    # ⚠️ Nature laissée en blanc : qualifier le conseil en gestion de profession
+    # libérale (seuil de 30 M, CGI art. 93 quater) relève du fiscaliste du cabinet.
     siege="Akwa, Douala I",
     regimes=[
         StatutRegime(
@@ -332,6 +338,7 @@ CLINIQUE = Entreprise(
     rccm="RC/YAO/2017/B/0892",
     capital=Decimal("25000000"),
     activite="Activités hospitalières et soins ambulatoires",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Nlongkak, Yaoundé I",
     regimes=[
         StatutRegime(

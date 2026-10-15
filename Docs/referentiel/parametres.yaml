@@ -1259,13 +1259,86 @@ parametres:
               AUDCIF art. 13 ; décret n° 2019/262 du 28 mai 2019 portant application du
               système comptable OHADA révisé, consulté le 18/08/2026
         note: >-
-            ⚠️ UN SEUL SEUIL LÀ OÙ LE TEXTE EN MODULE TROIS. La valeur retenue est la
-            plus élevée des trois — celle du négoce. Une entité de services réalisant
-            45 000 000 FCFA est donc classée au Système Normal alors que le texte
-            l'admettrait au SMT. Le sur-classement est le sens d'erreur le moins
-            dommageable : une liasse plus détaillée que nécessaire est acceptée,
-            l'inverse est rejeté. `liasse.py` signale ce sur-classement plutôt que de
-            le subir. Trois paramètres sectoriels restent la bonne cible.
+            ⚠️ NON EMPLOYÉ AU CAMEROUN DEPUIS LE 15 OCTOBRE 2026. Le décret n° 2019/262
+            du 28 mai 2019 (art. 5 et 6, reproduit au CGI 2026) rattache le système de
+            la DSF au RÉGIME FISCAL : Système Normal pour le régime du réel, Système
+            Minimal de Trésorerie pour l'ancien régime simplifié, c'est-à-dire l'IGS
+            tenu à comptabilité (CGI art. C 44). Ce seuil de l'AUDCIF reste au
+            référentiel pour mémoire ; `liasse.py` ne le lit plus.
+
+  # ── Le régime d'imposition (CGI 2026, art. 93 ter à 93 quinquies) ───────────
+  - code: SEUIL_REGIME_REEL
+    libelle: >-
+      Chiffre d'affaires à partir duquel une activité commerciale, industrielle,
+      artisanale ou agropastorale relève du régime du réel plutôt que de l'IGS
+    categorie: REGIME
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 50000000
+        # Borne : « égal ou supérieur à 50 millions » relève du réel.
+        borne: INCLUSE
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              CGI art. 93 quater (1) a : relèvent de l'IGS les contribuables dont le
+              chiffre d'affaires annuel hors taxes est inférieur à 50 000 000 FCFA ;
+              (2) a i : relèvent du réel ceux qui réalisent un chiffre d'affaires égal
+              ou supérieur à 50 millions. Art. C 39 et C 48 dans le même sens.
+          source: >-
+              Code général des impôts, édition officielle au 1er janvier 2026, DGI,
+              impots.cm, consulté le 15/10/2026
+        note: >-
+            Remplace, pour la revue des régimes, SEUIL_ASSUJETTISSEMENT_TVA, dont la
+            borne (« supérieur à ») gardait à l'IGS un dossier à 50 000 000 exactement.
+
+  - code: IGS_REDUCTION_ADHERENT_CGA
+    libelle: >-
+      Réduction de l'IGS accordée à l'adhérent d'un Centre de Gestion Agréé tenu à une
+      comptabilité
+    categorie: AVANTAGE_CGA
+    unite: POURCENTAGE
+    nature: LOI
+    versions:
+      - valeur: 50
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              CGI art. C 40 (2) : pour les assujettis à l'IGS soumis à l'obligation de tenue
+              d'une comptabilité, les tarifs sont réduits de moitié en cas d'adhésion à un
+              Centre de Gestion Agréé. L'obligation de comptabilité naît à 10 000 000 FCFA
+              de chiffre d'affaires (art. C 44 (1)).
+          source: >-
+              Code général des impôts, édition officielle au 1er janvier 2026, DGI,
+              impots.cm, consulté le 15/10/2026
+        note: >-
+            C'est l'avantage le plus direct que le centre apporte à un petit adhérent : il
+            s'affiche dans son échéancier, avec le montant qu'il aurait payé sans adhérer.
+
+  - code: SEUIL_REGIME_REEL_PROFESSIONS_LIBERALES
+    libelle: >-
+      Chiffre d'affaires à partir duquel une profession libérale relève du régime du
+      réel plutôt que de l'IGS
+    categorie: REGIME
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 30000000
+        borne: INCLUSE
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              CGI art. 93 quater (1) b : relèvent de l'IGS les professions libérales
+              dont le chiffre d'affaires annuel hors taxes est inférieur à 30 000 000 FCFA.
+          source: >-
+              Code général des impôts, édition officielle au 1er janvier 2026, DGI,
+              impots.cm, consulté le 15/10/2026
 
   - code: ABATTEMENT_CGA_PLAFOND
     libelle: Plafond annuel de l'abattement consenti aux adhérents d'un centre de gestion agréé

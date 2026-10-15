@@ -247,12 +247,15 @@ def lire_echeancier(
     """
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
     dossier = _entreprise(entreprise)
+    periode = _exercice(dossier, exercice)
     instances = generer_echeancier(
         dossier,
         _catalogue.charger(a_la_date),
-        _exercice(dossier, exercice),
+        periode,
         emploie_sur=effectif_du_dossier(dossier.niu),
         accuse_de=accuses_du_portail(),
+        estimer=estimateur_de_l_igs(dossier, periode),
+        dispense=dispense_de_dsf(dossier, periode),
     )
     return [
         LigneEcheance(obligation=o, jours_restants=o.jours_restants(a_la_date))
@@ -953,6 +956,91 @@ def constater_hors_tva(
     return DepotConstate(obligation=declaree, accuse=consigne, reserves_assumees=[])
 
 
+def dispense_de_dsf(dossier: Entreprise, exercice):
+    """La DSF d'un dossier à l'IGS sous 10 M n'est pas due (15 octobre 2026).
+
+    CGI art. C 44 : seul l'assujetti à l'IGS « justifiant d'un chiffre d'affaires égal ou
+    supérieur à dix millions » tient une comptabilité au SMT et souscrit une DSF. La
+    dispense n'est constatée que sur un exercice CLOS : en cours d'année, le chiffre
+    n'est pas acquis, et l'échéance reste affichée plutôt que de disparaître à tort.
+    """
+    from app.contextes.comptabilite.api import chiffre_affaires
+
+    if not exercice.clos or dossier.regime_au(exercice.cloture) != "IGS":
+        return None
+    # ⚠️ Le seuil s'apprécie à la date du DÉPÔT, l'année qui suit la clôture : c'est la
+    # loi en vigueur quand la DSF se souscrit. Lu à la clôture, il manquait pour 2025
+    # (le paramètre court depuis 2026), et la dispense ne jouait jamais, sans bruit.
+    depot_le = date(exercice.cloture.year + 1, 1, 1)
+    try:
+        seuil = parametres_normatifs().valeur_numerique("SEUIL_COMPTABILITE_OBLIGATOIRE", depot_le)
+    except LookupError:
+        return None
+    ca = chiffre_affaires(balance(depot_ecritures(dossier.niu).toutes(exercice.libelle)))
+    if ca >= seuil:
+        return None
+    return lambda type_obligation, debut, fin: type_obligation.code == "DSF"
+
+
+def _fcfa(montant) -> str:
+    return f"{int(montant):,} FCFA".replace(",", " ")
+
+
+def estimateur_de_l_igs(dossier: Entreprise, exercice):
+    """L'estimation des versements trimestriels de l'IGS, pour `generer_echeancier`.
+
+    15 octobre 2026 (CGI art. C 40) : la classe se lit sur le chiffre d'affaires de
+    l'exercice PRÉCÉDENT, tel que les livres du cabinet le donnent ; la moitié est
+    retranchée à l'adhérent du centre tenu à une comptabilité. Sans exercice précédent
+    dans les livres, rien ne s'estime : `None`, jamais zéro.
+    """
+    from app.contextes.comptabilite.api import chiffre_affaires
+    from app.contextes.obligations.domaine.igs import estimer_l_igs
+    from app.contextes.referentiel.api import DepotBaremesYaml, ServiceBaremes
+
+    precedents = [e for e in dossier.exercices if e.cloture < exercice.ouverture]
+    if not precedents:
+        return None
+    precedent = max(precedents, key=lambda e: e.cloture)
+    ecritures = depot_ecritures(dossier.niu).toutes(precedent.libelle)
+    if not ecritures:
+        return None
+    ca = chiffre_affaires(balance(ecritures))
+    jour = exercice.ouverture
+    try:
+        bareme = ServiceBaremes.depuis_depot(
+            DepotBaremesYaml(configuration().dossier_referentiel / "baremes.yaml")
+        ).resoudre("IGS", jour)
+        parametres = parametres_normatifs()
+        reduction = parametres.valeur_numerique("IGS_REDUCTION_ADHERENT_CGA", jour)
+        seuil = parametres.valeur_numerique("SEUIL_COMPTABILITE_OBLIGATOIRE", jour)
+    except LookupError:
+        return None
+
+    def estimer(type_obligation, debut, fin):
+        if type_obligation.code != "IGS":
+            return None
+        e = estimer_l_igs(
+            ca,
+            classe=bareme.appliquer,
+            adherent_cga=dossier.adhesion_au(fin) is not None,
+            reduction_pourcent=reduction,
+            seuil_comptabilite=seuil,
+        )
+        base = f"Sur un chiffre d'affaires {precedent.libelle} de {_fcfa(ca)}"
+        if e.reduction_cga:
+            explication = (
+                f"{base} : réduit de moitié par votre adhésion au centre, soit "
+                f"{_fcfa(e.plein_tarif - e.annuel)} d'économie sur l'année "
+                f"({_fcfa(e.plein_tarif)} au plein tarif)."
+            )
+        else:
+            explication = f"{base} : {_fcfa(e.annuel)} sur l'année."
+        return e.trimestriel, explication
+
+    return estimer
+
+
 def parametres_normatifs() -> ServiceParametres:
     """Le référentiel normatif du cabinet.
 
@@ -969,20 +1057,28 @@ def parametres_normatifs() -> ServiceParametres:
     return service_parametres()
 
 
-def _seuil_de_regime(a_la_date: date) -> ParametreResolu:
-    """Le seuil d'assujettissement en vigueur à cette date.
+def _seuil_de_regime(a_la_date: date, dossier: Entreprise | None = None) -> ParametreResolu:
+    """Le seuil du régime du réel en vigueur à cette date, pour ce dossier.
+
+    ⚠️ 15 OCTOBRE 2026 : LE SEUIL DU CGI, ET CELUI DE LA NATURE DU DOSSIER. La revue
+    lisait le seuil d'assujettissement à la TVA (« supérieur à 50 M ») : à 50 M
+    exactement elle gardait l'IGS, que l'art. 93 quater refuse (« égal ou supérieur »),
+    et elle ignorait les 30 M des professions libérales. Une nature non renseignée
+    prend le seuil des activités commerciales, le plus courant.
 
     ⚠️ **Résolu à la date, jamais « la valeur actuelle ».** Une revue portant sur
     2024 doit comparer au seuil de 2024 : un seuil relevé par la loi de finances
     2026 ferait sinon disparaître rétroactivement des franchissements acquis, et
     le cabinet croirait ses dossiers en règle.
     """
-    resolu = parametres_normatifs().resoudre("SEUIL_ASSUJETTISSEMENT_TVA", a_la_date)
+    liberale = dossier is not None and dossier.nature_activite == "LIBERALE"
+    code = "SEUIL_REGIME_REEL_PROFESSIONS_LIBERALES" if liberale else "SEUIL_REGIME_REEL"
+    resolu = parametres_normatifs().resoudre(code, a_la_date)
     if resolu.borne is None:
         # ⚠️ Refuser plutôt que supposer : c'est au franc près que l'erreur coûte.
         raise HTTPException(
             status_code=409,
-            detail="SEUIL_ASSUJETTISSEMENT_TVA ne déclare pas sa borne au référentiel.",
+            detail=f"{code} ne déclare pas sa borne au référentiel.",
         )
     return resolu
 
@@ -1014,7 +1110,7 @@ def lire_le_seuil_d_un_dossier(
     """
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
     dossier = _lire_le_dossier(entreprise)
-    seuil = _seuil_de_regime(a_la_date)
+    seuil = _seuil_de_regime(a_la_date, dossier)
     return surveiller_un_dossier(
         dossier,
         soldes_de=lambda exercice: balance(depot_ecritures(entreprise).toutes(exercice)),
@@ -1059,12 +1155,18 @@ def revoir_les_seuils(
     exiger(acces, Permission.LIRE_COMPTABILITE)
     dossiers = restreindre(acces, depot_entreprises().lister(), lambda e: e.niu)
     seuil = _seuil_de_regime(a_la_date)
+
+    def seuil_de(dossier: Entreprise):
+        propre = _seuil_de_regime(a_la_date, dossier)
+        return propre.valeur_decimale, propre.borne
+
     vues = surveiller_le_portefeuille(
         dossiers,
         soldes_de=lambda niu, exercice: balance(depot_ecritures(niu).toutes(exercice)),
         seuil=seuil.valeur_decimale,
         borne=seuil.borne,
         a_la_date=a_la_date,
+        seuil_de=seuil_de,
     )
     return [v for v in vues if v.a_surveiller] if a_surveiller_seulement else vues
 

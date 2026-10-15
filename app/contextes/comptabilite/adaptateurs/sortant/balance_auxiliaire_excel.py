@@ -1,9 +1,10 @@
 """La balance auxiliaire en Excel, comme la DGI la demande en annexe de la DSF (15 octobre 2026).
 
-⚠️ PAS ENCORE LE MODÈLE DGI : celui-ci ne se télécharge qu'après connexion à la
-télédéclaration. La feuille « Balance » porte le contenu, sans fioriture, pour se
-recopier dans le modèle ou s'y aligner dès qu'il sera obtenu ; la feuille « À lire » le
-dit, pour que personne ne téléverse ce fichier tel quel en croyant au format officiel.
+⚠️ PAS UN MODÈLE DGI : impots.cm ne publie pas de modèle de balance auxiliaire (15 octobre
+2026 ; ses modèles par tiers, « MODELE FOURNISSEURS » et « MODELE TIERS », sont remplis par
+`declaration_par_tiers_dgi.py`). La feuille « Balance » porte le contenu, sans fioriture ;
+la feuille « À lire » le dit, pour que personne ne téléverse ce fichier en croyant au
+format officiel.
 
 ⚠️ LES MONTANTS SONT DES NOMBRES, pas du texte mis en forme : un fichier Excel destiné à
 être relu par une machine ne doit pas porter « 1 500 000 » en chaîne.
@@ -125,8 +126,8 @@ def rendre_la_balance_auxiliaire(
         "Une ligne « (sans tiers) » signale des écritures à ventiler avant le dépôt.",
         "",
         "Ce fichier porte le CONTENU de la balance auxiliaire demandée en annexe de la DSF.",
-        "Il n'est pas encore au modèle Excel de la DGI, qui ne se télécharge qu'après",
-        "connexion à la télédéclaration : recopier dans ce modèle avant de téléverser.",
+        "Ce n'est pas un modèle de la DGI. Les modèles officiels par tiers (MODELE",
+        "FOURNISSEURS, MODELE TIERS) se téléchargent remplis depuis la plateforme.",
     ):
         lire.append([texte])
     lire["A1"].font = Font(bold=True, size=13)

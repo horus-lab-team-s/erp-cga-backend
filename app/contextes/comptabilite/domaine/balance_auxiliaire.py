@@ -3,9 +3,9 @@
 ─────────────────────────────────────────────────────────────────────────────────
 CE QUE LA DGI DEMANDE : parmi les listings obligatoires de la DSF, la « balance
 auxiliaire clients » et la « balance auxiliaire fournisseurs », au format Excel (guide
-utilisateur DSF 2025 de la DGI, « Les listings »). Le modèle exact ne se télécharge
-qu'après connexion à la télédéclaration : ce module en donne le CONTENU, que tout
-comptable reconnaît, et l'export s'alignera sur le modèle dès qu'il sera obtenu.
+utilisateur DSF 2025 de la DGI, « Les listings »). impots.cm n'en publie pas de modèle
+(ses modèles par tiers sont dans `declaration_par_tiers.py`) : ce module en donne le
+CONTENU, que tout comptable reconnaît.
 
 UNE LIGNE PAR TIERS
     solde reporté   le journal des à-nouveaux (AN) : ce que l'exercice précédent laisse

@@ -102,6 +102,9 @@ class ObligationInstance(BaseModel):
     #: estimation n'est possible — et surtout pas zéro, qui laisserait croire
     #: qu'il n'y a rien à payer.
     montant_estime: Decimal | None = None
+    #: 15 octobre 2026 : d'où vient l'estimation, en une phrase pour l'adhérent (l'IGS
+    #: réduit de moitié par son adhésion, avec le plein tarif). `None` sans estimation.
+    explication_estimation: str | None = None
 
     #: Complétude du dossier. C'est ce que la maquette affiche à côté du montant :
     #: un montant estimé sur un dossier incomplet n'engage à rien.
@@ -237,6 +240,9 @@ def generer_echeancier(
     *,
     emploie_sur: Callable[[date, date], bool | None],
     accuse_de: Callable[[str], AccuseReception | None],
+    estimer: Callable[[TypeObligation, date, date], tuple[Decimal, str | None] | None]
+    | None = None,
+    dispense: Callable[[TypeObligation, date, date], bool] | None = None,
 ) -> list[ObligationInstance]:
     """Le calendrier complet d'un exercice, pour un dossier.
 
@@ -297,6 +303,10 @@ def generer_echeancier(
                 a_des_salaries=emploi is not False,
             ):
                 continue
+            # 15 octobre 2026 : une dispense que seul l'appelant sait constater (la DSF
+            # d'un dossier à l'IGS sous 10 M, CGI art. C 44). Voir `dispense_de_dsf`.
+            if dispense is not None and dispense(type_obligation, debut, fin):
+                continue
 
             instance = ObligationInstance(
                     entreprise=entreprise.niu,
@@ -316,6 +326,16 @@ def generer_echeancier(
                         cloture_exercice=exercice.cloture,
                     ),
                     effectif_a_confirmer=emploi is None,
+                )
+            # 15 octobre 2026 : un montant estimé quand l'appelant sait le faire (l'IGS,
+            # voir `igs.py`), avec son explication ; sinon `None`, jamais zéro.
+            estimation = estimer(type_obligation, debut, fin) if estimer else None
+            if estimation is not None:
+                instance = instance.model_copy(
+                    update={
+                        "montant_estime": estimation[0],
+                        "explication_estimation": estimation[1],
+                    }
                 )
             accuse = accuse_de(
                 reference_de_depot(entreprise.niu, type_obligation.code, debut, fin)

@@ -38,7 +38,11 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.obligations.adaptateurs.entrant.routes_http import _entreprise
+from app.contextes.obligations.adaptateurs.entrant.routes_http import (
+    _entreprise,
+    dispense_de_dsf,
+    estimateur_de_l_igs,
+)
 from app.contextes.obligations.adaptateurs.sortant.accuses import accuses_du_portail
 from app.contextes.obligations.adaptateurs.sortant.catalogue_obligations import (
     DepotTypesObligationMemoire,
@@ -101,6 +105,8 @@ def _instances(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
                 exercice,
                 emploie_sur=effectif_du_dossier(dossier.niu),
                 accuse_de=accuses,
+                estimer=estimateur_de_l_igs(dossier, exercice),
+                dispense=dispense_de_dsf(dossier, exercice),
             )
         )
     return instances

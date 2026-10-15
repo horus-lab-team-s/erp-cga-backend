@@ -1391,6 +1391,151 @@ def exporter_la_balance_auxiliaire(
     )
 
 
+# ── Les déclarations annuelles par tiers de la DGI (15 octobre 2026) ──────────────
+
+
+class MontantDeclare(BaseModel):
+    ht: Decimal
+    tva: Decimal
+
+
+class LigneDeclaree(BaseModel):
+    tiers: str
+    denomination: str | None
+    niu: str | None
+    pays: str | None
+    ouverture: MontantDeclare
+    facturation: MontantDeclare
+    paiement: MontantDeclare
+    cloture: MontantDeclare
+
+
+class DeclarationParTiers(BaseModel):
+    nature: str
+    #: Le nom exact du modèle de la DGI, qui est aussi celui du fichier à téléverser.
+    nom_du_fichier: str
+    lignes: list[LigneDeclaree]
+    avertissements: list[str]
+
+
+def _declaration_par_tiers(entreprise: str, exercice: str, nature: str):
+    """Les lignes du modèle de la DGI et la fiche de chaque tiers. « tiers » ne garde que
+    les sommes versées (locations, honoraires) : voir `domaine/declaration_par_tiers.py`."""
+    from app.contextes.comptabilite.adaptateurs.sortant.declaration_par_tiers_dgi import (
+        FicheDeclaree,
+    )
+    from app.contextes.comptabilite.domaine.declaration_par_tiers import declaration_par_tiers
+
+    if nature not in ("fournisseurs", "tiers"):
+        raise HTTPException(status_code=404, detail="« fournisseurs » ou « tiers ».")
+    lignes = declaration_par_tiers(depot(entreprise).lister(exercice))
+    if nature == "tiers":
+        lignes = [x for x in lignes if x.sommes_versees]
+    _, fiches_auxiliaires, dossier = _balance_auxiliaire_du_dossier(
+        entreprise, exercice, NatureAuxiliaire.FOURNISSEURS
+    )
+    etrangers = {t.code for t in dossier.tiers if t.etranger} if dossier else set()
+    etrangers |= {t.niu for t in dossier.tiers if t.etranger and t.niu} if dossier else set()
+    fiches = {
+        code: FicheDeclaree(
+            denomination=f.denomination,
+            niu=f.niu,
+            pays=None if code in etrangers else "CAMEROUN",
+        )
+        for code, f in fiches_auxiliaires.items()
+    }
+    avertissements = [
+        "Règlements et soldes sont des montants TTC : ils sont répartis entre HT et TVA à la "
+        "proportion des factures du même tiers sur l'exercice."
+    ]
+    if nature == "tiers":
+        avertissements.append(
+            "Sont retenus les tiers dont une facture de l'exercice touche les locations (622) "
+            "ou les honoraires et commissions (632) : lecture du modèle à faire valider par "
+            "le fiscaliste."
+        )
+    sans_nom = [
+        x.tiers for x in lignes if not (fiches.get(x.tiers) and fiches[x.tiers].denomination)
+    ]
+    if sans_nom:
+        avertissements.append(
+            f"{len(sans_nom)} tiers sans raison sociale connue : à compléter au registre "
+            "des tiers du dossier avant le dépôt."
+        )
+    if any(fiches.get(x.tiers) and fiches[x.tiers].pays is None for x in lignes):
+        avertissements.append("Pays de résidence des fournisseurs étrangers à compléter.")
+    return lignes, fiches, avertissements
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/declarations-par-tiers/{nature}",
+    summary="Achats par fournisseur ou sommes versées aux tiers, comme les modèles de la DGI",
+    responses={403: {"description": "Habilitation insuffisante sur ce dossier"}},
+)
+def lire_la_declaration_par_tiers(
+    acces: AccesRequis,
+    entreprise: str,
+    nature: str,
+    exercice: str = Query(description="L'exercice, par exemple « 2026 »."),
+) -> DeclarationParTiers:
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    from app.contextes.comptabilite.adaptateurs.sortant.declaration_par_tiers_dgi import MODELES
+
+    lignes, fiches, avertissements = _declaration_par_tiers(entreprise, exercice, nature)
+
+    def montant(m) -> MontantDeclare:
+        return MontantDeclare(ht=m.ht, tva=m.tva)
+
+    return DeclarationParTiers(
+        nature=nature,
+        nom_du_fichier=MODELES[nature],
+        avertissements=avertissements,
+        lignes=[
+            LigneDeclaree(
+                tiers=x.tiers,
+                denomination=(fiches[x.tiers].denomination or None) if x.tiers in fiches else None,
+                niu=fiches[x.tiers].niu if x.tiers in fiches else x.tiers,
+                pays=fiches[x.tiers].pays if x.tiers in fiches else "CAMEROUN",
+                ouverture=montant(x.ouverture),
+                facturation=montant(x.facturation),
+                paiement=montant(x.paiement),
+                cloture=montant(x.cloture),
+            )
+            for x in lignes
+        ],
+    )
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/declarations-par-tiers/{nature}/excel",
+    summary="Le modèle de la DGI rempli, sous son nom exact",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}},
+        403: {"description": "Habilitation insuffisante sur ce dossier"},
+    },
+)
+def exporter_la_declaration_par_tiers(
+    acces: AccesRequis,
+    entreprise: str,
+    nature: str,
+    exercice: str = Query(description="L'exercice, par exemple « 2026 »."),
+) -> Response:
+    """⚠️ Le fichier garde le NOM du modèle : le portail refuse un fichier renommé."""
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    from app.contextes.comptabilite.adaptateurs.sortant.declaration_par_tiers_dgi import (
+        MODELES,
+        remplir_la_declaration_par_tiers,
+    )
+
+    lignes, fiches, _ = _declaration_par_tiers(entreprise, exercice, nature)
+    return Response(
+        content=remplir_la_declaration_par_tiers(nature, lignes, fiches),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{MODELES[nature]}"'},
+    )
+
+
 # ── Les livres obligatoires, en PDF (14 octobre 2026) ─────────────────────────────
 
 

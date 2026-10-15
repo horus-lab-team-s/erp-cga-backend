@@ -17,6 +17,7 @@ Voir `domaine/declaration_dsf.py` et `application/dsf.py`.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -192,6 +193,179 @@ def apercu(acces: AccesRequis, entreprise: str, exercice: str, version: int) -> 
                 f'inline; filename="DSF-{entreprise}-{exercice}-v{version}.pdf"'
             )
         },
+    )
+
+
+# ── La DSF au format DGI : le modèle officiel rempli (15 octobre 2026) ───────────
+
+
+class FormatDgi(BaseModel):
+    """Ce que l'écran montre avant de proposer le fichier."""
+
+    pret: bool
+    obstacles: list[str]
+    avertissements: list[str]
+    nom_du_fichier: str
+    total_bilan: Decimal
+    resultat: Decimal
+    avec_exercice_precedent: bool
+
+
+def _format_dgi(entreprise: str, exercice: str):
+    from app.contextes.cloture.adaptateurs.entrant.routes_http import _depot_ecritures
+    from app.contextes.cloture.application.format_dgi import etat_du_format_dgi
+    from app.contextes.comptabilite.api import balance
+
+    try:
+        dossier = _depot_dossiers().lire(entreprise)
+    except EntrepriseIntrouvable as absence:
+        raise HTTPException(status_code=404, detail=str(absence)) from absence
+    periode = next((e for e in dossier.exercices if e.libelle == exercice), None)
+    if periode is None:
+        raise HTTPException(status_code=404, detail=f"l'exercice {exercice} n'existe pas.")
+    precedent = next((e for e in dossier.exercices if e.cloture < periode.ouverture), None)
+    for e in dossier.exercices:
+        if e.cloture < periode.ouverture and (precedent is None or e.cloture > precedent.cloture):
+            precedent = e
+
+    def soldes(libelle: str) -> dict[str, Decimal]:
+        return {s.compte: s.solde for s in balance(_depot_ecritures(entreprise).toutes(libelle))}
+
+    etat = etat_du_format_dgi(
+        soldes(exercice),
+        soldes_precedents=soldes(precedent.libelle) if precedent else None,
+        exercice_clos=periode.clos,
+        # Le système suit le régime à la clôture (voir `determiner_le_systeme`).
+        systeme_normal=dossier.regime_au(periode.cloture) == "REEL",
+    )
+    return dossier, periode, etat
+
+
+def _avertissements_de_la_fiche(niu: str) -> list[str]:
+    """15 octobre 2026 : la fiche signalétique (R1 à R3) que le client renseigne."""
+    dossier = _depot_dossiers().lire(niu)
+    fiche = dossier.fiche_dsf
+    if fiche is None or fiche.etat != "VALIDEE":
+        etat = "non renseignée" if fiche is None else f"à l'état {fiche.etat.value.lower()}"
+        return [
+            f"Fiche signalétique de la DSF {etat} : les fiches R1 à R3 ne reprennent que "
+            "l'identité et les dirigeants du dossier, le reste sera à compléter sur le portail. "
+            "Le client la renseigne dans son espace, le cabinet la valide."
+        ]
+    return []
+
+
+def _identite_dsf(dossier, periode):
+    """Ce que les fiches R1 à R3 reprennent. ⚠️ La fiche signalétique n'y entre que
+    VALIDÉE : la DSF ne s'établit que sur ce que le cabinet a relu."""
+    from app.contextes.cloture.adaptateurs.sortant.dsf_fiches_r import (
+        ActiviteR2,
+        IdentiteDsf,
+        PersonneR3,
+    )
+
+    precedent = max(
+        (e for e in dossier.exercices if e.cloture < periode.ouverture),
+        key=lambda e: e.cloture,
+        default=None,
+    )
+    en_fonction = [
+        d for d in dossier.dirigeants if d.jusqu_a is None or d.jusqu_a >= periode.cloture
+    ]
+    identite = {
+        "denomination": dossier.denomination,
+        "niu": dossier.niu,
+        "forme_juridique": str(dossier.forme_juridique),
+        "ouverture": periode.ouverture,
+        "cloture": periode.cloture,
+        "rccm": dossier.rccm,
+        "siege": dossier.siege,
+        "dirigeants": tuple(
+            PersonneR3(nom=d.nom, qualite=d.qualite, niu=d.niu) for d in en_fonction
+        ),
+    }
+    if precedent is not None:
+        identite["cloture_precedente"] = precedent.cloture
+        identite["duree_precedente"] = (
+            (precedent.cloture.year - precedent.ouverture.year) * 12
+            + precedent.cloture.month
+            - precedent.ouverture.month
+            + 1
+        )
+    fiche = dossier.fiche_dsf
+    if fiche is not None and fiche.etat == "VALIDEE":
+        saisie = fiche.model_dump(exclude={"activites", "conseil_d_administration", "controle"})
+        identite |= {k: v for k, v in saisie.items() if k in IdentiteDsf.__dataclass_fields__}
+        identite["controle"] = fiche.controle.value if fiche.controle else None
+        identite["activites"] = tuple(
+            ActiviteR2(a.designation, a.code_nacam, a.chiffre_affaires_ht) for a in fiche.activites
+        )
+        identite["conseil_d_administration"] = tuple(
+            PersonneR3(nom=m.nom, prenoms=m.prenoms, qualite=m.qualite, adresse=m.adresse)
+            for m in fiche.conseil_d_administration
+        )
+    return IdentiteDsf(**identite)
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/dsf/{exercice}/format-dgi",
+    summary="La DSF au format DGI : prête ou non, et pourquoi",
+)
+def etat_du_format_dgi_de_l_exercice(
+    acces: AccesRequis, entreprise: str, exercice: str
+) -> FormatDgi:
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    from app.contextes.cloture.adaptateurs.sortant.dsf_format_dgi import NOM_DU_MODELE
+
+    _, _, etat = _format_dgi(entreprise, exercice)
+    return FormatDgi(
+        pret=etat.pret,
+        obstacles=list(etat.obstacles),
+        avertissements=[*etat.etats.avertissements, *_avertissements_de_la_fiche(entreprise)],
+        nom_du_fichier=NOM_DU_MODELE,
+        total_bilan=etat.etats.passif["DZ"],
+        resultat=etat.etats.resultat["XI"],
+        avec_exercice_precedent=etat.precedents is not None,
+    )
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/dsf/{exercice}/format-dgi/fichier",
+    summary="Le modèle Excel officiel de la DGI, bilan et compte de résultat remplis",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
+            }
+        },
+        409: {"description": "Exercice ouvert, compte sans ligne officielle, bilan déséquilibré"},
+    },
+)
+def fichier_au_format_dgi(acces: AccesRequis, entreprise: str, exercice: str) -> Response:
+    """⚠️ Le fichier garde le NOM du modèle : le portail refuse un fichier renommé."""
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    from app.contextes.cloture.adaptateurs.sortant.dsf_fiches_r import valeurs_des_fiches_r
+    from app.contextes.cloture.adaptateurs.sortant.dsf_format_dgi import (
+        NOM_DU_MODELE,
+        remplir_la_dsf_normal,
+    )
+
+    dossier, periode, etat = _format_dgi(entreprise, exercice)
+    if not etat.pret:
+        raise HTTPException(status_code=409, detail=" ".join(etat.obstacles))
+    octets = remplir_la_dsf_normal(
+        etat.etats,
+        precedents=etat.precedents,
+        denomination=dossier.denomination,
+        niu=entreprise,
+        cloture=periode.cloture,
+        fiches=valeurs_des_fiches_r(_identite_dsf(dossier, periode)),
+    )
+    return Response(
+        content=octets,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{NOM_DU_MODELE}"'},
     )
 
 

@@ -38,6 +38,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.contextes.portefeuille.domaine.fiche_signaletique import FicheSignaletique
 from app.contextes.portefeuille.domaine.temporel import (
     MotifChangement,
     Periode,
@@ -67,6 +68,7 @@ __all__ = [
 DUREE_MAXIMALE_EXERCICE = timedelta(days=730)
 
 
+
 class StatutIntrouvable(LookupError):
     """Aucun statut ne couvre la date demandée.
 
@@ -75,6 +77,36 @@ class StatutIntrouvable(LookupError):
     en silence. C'est la même discipline que `AucuneVersionApplicable` au
     référentiel normatif.
     """
+
+
+class NatureActivite(StrEnum):
+    """La nature d'activité au sens du CGI 2026, art. 93 quater (15 octobre 2026).
+
+    Elle fixe le seuil entre l'IGS et le régime du réel : 50 M FCFA pour une activité
+    commerciale, industrielle, artisanale ou agropastorale, 30 M pour une profession
+    libérale. `activite`, en texte libre, ne le dit pas.
+    """
+
+    COMMERCIALE = "COMMERCIALE"
+    LIBERALE = "LIBERALE"
+
+
+class SecteurReelDOffice(StrEnum):
+    """Les contribuables relevant du réel « sans considération de leur chiffre
+    d'affaires » (CGI 2026, art. 93 quater (2) b) — 15 octobre 2026."""
+
+    PETROLIER = "PETROLIER"
+    MINIER = "MINIER"
+    GAZIER = "GAZIER"
+    CREDIT = "CREDIT"
+    MICROFINANCE = "MICROFINANCE"
+    ASSURANCE = "ASSURANCE"
+    TELEPHONIE_MOBILE = "TELEPHONIE_MOBILE"
+    #: Agrément à l'un des régimes de l'ordonnance n° 2025/002 du 18 juillet 2025.
+    AGREMENT_INVESTISSEMENT = "AGREMENT_INVESTISSEMENT"
+    CHARGE_NOTARIALE = "CHARGE_NOTARIALE"
+    #: Dérogation expresse du Directeur général des impôts.
+    DEROGATION_DGI = "DEROGATION_DGI"
 
 
 class FormeJuridique(StrEnum):
@@ -369,6 +401,14 @@ class Entreprise(BaseModel):
     rccm: str | None = None
     capital: Decimal | None = Field(default=None, ge=0)
     activite: str | None = None
+    #: Inconnue : le seuil des activités commerciales (50 M) s'applique, et la revue
+    #: des régimes le signale.
+    nature_activite: NatureActivite | None = None
+    #: Au réel quel que soit son chiffre d'affaires (art. 93 quater (2) b), s'il y a lieu.
+    reel_d_office: SecteurReelDOffice | None = None
+    #: La fiche signalétique de la DSF (fiches R1 à R3), renseignée par le client et
+    #: validée par le cabinet. Voir `fiche_signaletique.py`.
+    fiche_dsf: FicheSignaletique | None = None
     siege: str | None = None
     etablissements: list[str] = Field(default_factory=list)
 

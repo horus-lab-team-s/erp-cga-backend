@@ -36,7 +36,9 @@ from app.contextes.portefeuille.api import (
     Exercice,
     InscriptionRefusee,
     MotifChangement,
+    NatureActivite,
     RegimeFiscal,
+    SecteurReelDOffice,
     StatutIntrouvable,
     inscrire_un_regime,
     inscrire_une_adhesion,
@@ -116,6 +118,10 @@ class LigneDossier(BaseModel):
     denomination: str
     forme_juridique: str
     activite: str | None
+    #: 15 octobre 2026 : négoce, artisanat ou services (AUDCIF art. 13). `None` : non
+    #: renseignée, le seuil des services s'applique.
+    nature_activite: NatureActivite | None = None
+    reel_d_office: SecteurReelDOffice | None = None
     siege: str | None
 
     regime: RegimeFiscal
@@ -147,6 +153,8 @@ def _resoudre(entreprise: Entreprise, a_la_date: date) -> LigneDossier:
         denomination=entreprise.denomination,
         forme_juridique=entreprise.forme_juridique,
         activite=entreprise.activite,
+        nature_activite=entreprise.nature_activite,
+        reel_d_office=entreprise.reel_d_office,
         siege=entreprise.siege,
         regime=entreprise.regime_au(a_la_date),
         centre=entreprise.rattachement_au(a_la_date),
@@ -316,6 +324,40 @@ class DemandeDeRegime(BaseModel):
     #: « RAS » ne dit rien au vérificateur qui demande pourquoi ce dossier est
     #: passé au réel ce jour-là.
     justification: str = Field(min_length=30, max_length=500)
+
+
+class DemandeDeNature(BaseModel):
+    nature: NatureActivite
+    #: Le secteur qui impose le réel quel que soit le chiffre (art. 93 quater (2) b).
+    reel_d_office: SecteurReelDOffice | None = None
+    #: La pièce qui fonde la nature retenue (statuts, RCCM, carte de contribuable) :
+    #: elle part au journal d'audit avec l'accès.
+    justification: str = Field(min_length=30, max_length=500)
+
+
+@routeur.post(
+    "/entreprises/{niu}/nature-activite",
+    summary="Fixer la nature d'activité du dossier (négoce, artisanat, services)",
+    responses={403: {"description": "Habilitation insuffisante, ou justification manquante"}},
+)
+def fixer_la_nature_d_activite(
+    acces: AccesRequis, niu: str, demande: DemandeDeNature
+) -> LigneDossier:
+    """⚠️ ELLE FIXE LE SEUIL DU RÉGIME DU RÉEL (15 octobre 2026).
+
+    CGI art. 93 quater : 50 M FCFA pour une activité commerciale, industrielle,
+    artisanale ou agropastorale, 30 M pour une profession libérale. Une nature qui
+    change peut faire basculer le dossier au réel, donc sa DSF au Système Normal :
+    elle se justifie, comme un changement de régime.
+    """
+    exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
+    entreprise = _lire(niu)
+    depot().enregistrer(
+        entreprise.model_copy(
+            update={"nature_activite": demande.nature, "reel_d_office": demande.reel_d_office}
+        )
+    )
+    return _resoudre(_lire(niu), maintenant().date())
 
 
 @routeur.post(

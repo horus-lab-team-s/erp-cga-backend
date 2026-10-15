@@ -185,3 +185,60 @@ baremes:
           par le fiscaliste. Les exonérations (domestiques, ouvriers agricoles) ne sont pas
           encore portées par le contrat.
 
+
+  # ── L'impôt général synthétique (15 octobre 2026) ──────────────────────────────
+  - code: IGS
+    libelle: >-
+      Impôt général synthétique : montant ANNUEL fixe par classe de chiffre d'affaires
+      hors taxes de l'exercice précédent
+    categorie: FISCALITE
+    versions:
+      - tranches:
+          - plancher: 0
+            plafond: 500000
+            montant: 20000
+          - plancher: 500000
+            plafond: 1000000
+            montant: 30000
+          - plancher: 1000000
+            plafond: 1500000
+            montant: 40000
+          - plancher: 1500000
+            plafond: 2000000
+            montant: 50000
+          - plancher: 2000000
+            plafond: 2500000
+            montant: 60000
+          - plancher: 2500000
+            plafond: 5000000
+            montant: 150000
+          - plancher: 5000000
+            plafond: 10000000
+            montant: 300000
+          - plancher: 10000000
+            plafond: 20000000
+            montant: 500000
+          - plancher: 20000000
+            plafond: 30000000
+            montant: 1000000
+          - plancher: 30000000
+            plafond: null
+            montant: 2000000
+        applicable_du: 2026-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            CGI art. C 40 (1) : l'IGS est assis sur le chiffre d'affaires annuel hors taxes
+            et liquidé suivant dix classes, de 20 000 FCFA (moins de 500 000) à 2 000 000
+            FCFA (de 30 à 50 millions). Chaque classe va de « égal ou supérieur à » son
+            plancher à « inférieur à » son plafond.
+          source: >-
+            DGI, Code général des impôts, édition officielle 2026, art. C 40, consulté le
+            15/10/2026 : https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
+        note: >-
+          Les sites spécialisés annoncent 7, 10 ou 12 classes et des montants différents :
+          ce barème est celui du texte officiel. Au-delà de 50 millions, le dossier relève du
+          réel (art. 93 quater, C 48) : la dernière classe est ouverte au référentiel, qui
+          exige une tranche finale sans plafond, mais un dossier à plus de 50 millions ne
+          relève plus de l'IGS.

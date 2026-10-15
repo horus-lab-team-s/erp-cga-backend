@@ -240,6 +240,11 @@ class Permission(StrEnum):
     #: comptable et le réviseur : préparer n'engage rien, la validation (REVISER_DOSSIER,
     #: par un autre que le préparateur) et le dépôt (DEPOSER_DECLARATION) engagent.
     PREPARER_DSF = "PREPARER_DSF"
+    #: Renseigner la fiche signalétique de la DSF (fiches R1 à R3) : l'adhérent dans son
+    #: espace, et le cabinet pour lui (15 octobre 2026).
+    RENSEIGNER_FICHE_DSF = "RENSEIGNER_FICHE_DSF"
+    #: La valider, ou la renvoyer au client avec un motif : le réviseur.
+    VALIDER_FICHE_DSF = "VALIDER_FICHE_DSF"
     #: Instruire une mission de prestation ponctuelle (15 octobre 2026) : ouvrir, faire
     #: lire par l'agent, décider de chaque point, soumettre. Le juriste (chargé des
     #: formalités) et le réviseur.
@@ -365,6 +370,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.DEPOSER_PIECE,
         Permission.REPONDRE_AU_CABINET,
         Permission.SIGNALER_UN_CHANGEMENT,
+        Permission.RENSEIGNER_FICHE_DSF,
         Permission.REGLER_SES_RAPPELS,
         Permission.TENIR_SA_PAIE,
         Permission.REGLER_SES_HONORAIRES,
@@ -398,6 +404,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.CONTRE_PASSER,
         Permission.RELANCER_PIECES,
         Permission.PREPARER_DSF,
+        Permission.RENSEIGNER_FICHE_DSF,
     },
     # Le réviseur reprend tout ce que fait le comptable, et détient seul les
     # trois actes qui engagent le cabinet vis-à-vis de l'administration.
@@ -420,6 +427,8 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.CLOTURER_EXERCICE,
         Permission.INSCRIRE_STATUT,
         Permission.PREPARER_DSF,
+        Permission.RENSEIGNER_FICHE_DSF,
+        Permission.VALIDER_FICHE_DSF,
         Permission.TRAITER_MISSION,
         Permission.VALIDER_MISSION,
     },

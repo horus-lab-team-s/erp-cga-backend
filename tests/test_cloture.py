@@ -166,17 +166,22 @@ class TestAssemblage:
         etats = assembler_les_etats(avec_zero, SystemeDsf.NORMAL)
         assert all(ligne.montant != 0 for ligne in etats.lignes)
 
-    def test_les_amortissements_restent_negatifs(self):
-        """Ils viennent en diminution de l'actif brut. Les mettre en valeur
-        absolue doublerait l'actif immobilisé."""
+    def test_l_amortissement_se_retranche_de_son_immobilisation(self):
+        """Il vient en diminution de l'actif brut, sur la ligne de l'actif qu'il corrige.
+
+        15 octobre 2026 : la liasse en faisait un poste d'actif négatif (« AZ »), quand
+        le modèle officiel réserve AZ au TOTAL de l'actif immobilisé et retranche
+        l'amortissement ligne à ligne (brut, amortissements, net)."""
         soldes = [
             _solde("241", debit="10000000"),
             _solde("2841", credit="4000000"),
             _solde("101", credit="6000000"),
         ]
         etats = assembler_les_etats(soldes, SystemeDsf.NORMAL)
-        amortissements = next(ligne for ligne in etats.lignes if ligne.poste == "AZ")
-        assert amortissements.montant == Decimal(-4000000)
+        materiel = next(ligne for ligne in etats.lignes if ligne.poste == "AM")
+        assert materiel.montant == Decimal(6000000)
+        assert materiel.comptes == ("241", "2841")
+        assert not [ligne for ligne in etats.lignes if ligne.poste == "AZ"]
         assert etats.total_actif == Decimal(6000000)
 
     def test_chaque_ligne_porte_les_comptes_qui_l_ont_alimentee(self):
@@ -188,49 +193,23 @@ class TestAssemblage:
 
 # ══ Le système de présentation ════════════════════════════════════════════════
 class TestSysteme:
-    def test_le_systeme_se_constate_a_partir_du_chiffre_d_affaires(self, parametres):
-        petit, _ = determiner_le_systeme(Decimal(10000000), parametres, CLOTURE)
-        grand, _ = determiner_le_systeme(Decimal(200000000), parametres, CLOTURE)
-        assert petit is SystemeDsf.MINIMAL
-        assert grand is SystemeDsf.NORMAL
+    """⚠️ 15 OCTOBRE 2026 : LE SYSTÈME SUIT LE RÉGIME (décret n° 2019/262, art. 5 et 6).
 
-    def test_a_la_valeur_meme_du_seuil_le_systeme_est_normal(self, parametres):
-        """⚠️ **La borne vient du référentiel.** Le système minimal est réservé à qui
-        « reste sous » le seuil : à 60 000 000 exactement, la liasse relève du normal.
+    Le Système Normal pour le régime du réel, le Système Minimal de Trésorerie pour
+    l'IGS tenu à comptabilité (CGI art. C 44). Ces cas comparaient le chiffre
+    d'affaires au seuil de l'AUDCIF, règle OHADA générale que le décret camerounais
+    remplace : le seuil, c'est le régime qui l'a appliqué (CGI art. 93 quater).
+    """
 
-        La comparaison était écrite ici avec `>=`, et elle avait raison. Ce cas la
-        rattache au texte, pour qu'elle ne reste pas juste par hasard.
-        """
-        seuil = parametres.resoudre("SEUIL_SYSTEME_NORMAL", CLOTURE).valeur_decimale
-        au_seuil, _ = determiner_le_systeme(seuil, parametres, CLOTURE)
-        juste_sous, _ = determiner_le_systeme(seuil - 1, parametres, CLOTURE)
-        assert au_seuil is SystemeDsf.NORMAL
-        assert juste_sous is SystemeDsf.MINIMAL
+    def test_le_reel_depose_au_systeme_normal(self):
+        assert determiner_le_systeme("REEL") == (SystemeDsf.NORMAL, False)
 
-    def test_le_seuil_non_valide_est_signale(self, parametres_non_arretes):
-        _, non_valide = determiner_le_systeme(
-            Decimal(10000000), parametres_non_arretes, CLOTURE
-        )
-        assert non_valide, "un seuil A_VALIDER : le classement doit le dire"
+    def test_l_igs_depose_au_systeme_minimal(self):
+        assert determiner_le_systeme("IGS") == (SystemeDsf.MINIMAL, False)
 
-    def test_le_seuil_valide_ne_declenche_aucune_reserve(self, parametres):
-        """Le pendant du précédent, et il compte autant.
-
-        Un produit qui signalerait une réserve sur *toute* valeur, validée ou non,
-        n'apprendrait rien au lecteur : le bandeau deviendrait décor. Depuis que
-        `SEUIL_SYSTEME_NORMAL` est validé sur l'AUDCIF, le classement doit se
-        taire."""
-        _, non_valide = determiner_le_systeme(Decimal(10000000), parametres, CLOTURE)
-        assert not non_valide
-
-    def test_un_seuil_absent_rend_le_systeme_normal(self):
-        """Le régime de droit commun : le retenir par défaut ne fait courir aucun
-        risque de rejet, là où un SMT indu est refusé."""
-        systeme, non_valide = determiner_le_systeme(
-            Decimal(1000), ServiceParametres([]), CLOTURE
-        )
-        assert systeme is SystemeDsf.NORMAL
-        assert non_valide
+    def test_un_regime_inconnu_rend_le_normal_et_le_signale(self):
+        """Le droit commun, que le portail accepte toujours, et une réserve visible."""
+        assert determiner_le_systeme("INCONNU") == (SystemeDsf.NORMAL, True)
 
 
 # ══ La moisson des réintégrations ═════════════════════════════════════════════

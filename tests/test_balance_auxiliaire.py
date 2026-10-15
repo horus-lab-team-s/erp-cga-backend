@@ -6,7 +6,7 @@
 * ce qui n'a pas de tiers figure, sur une ligne à part, pour que le total retombe sur le
   compte collectif ;
 * les clients (41) et les fournisseurs (40) ne se mêlent pas ;
-* l'Excel porte des NOMBRES, le NIU du tiers, et dit qu'il n'est pas encore au modèle DGI ;
+* l'Excel porte des NOMBRES, le NIU du tiers, et dit qu'il n'est pas un modèle de la DGI ;
 * un compte d'un autre dossier n'y accède pas.
 """
 
@@ -167,7 +167,7 @@ class TestParLesRoutes:
         # Toutes les cellules de montant, total compris : une machine les relira.
         assert all(isinstance(v, int) for r in rangees[1:] for v in r[3:]), rangees
         lire = " ".join(str(r[0]) for r in classeur["À lire"].iter_rows(values_only=True))
-        assert "pas encore au modèle Excel de la DGI" in lire
+        assert "Ce n'est pas un modèle de la DGI" in lire
 
     def test_un_autre_dossier_n_y_accede_pas(self, plateforme):
         client = plateforme
