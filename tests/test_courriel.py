@@ -93,6 +93,42 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "niu": "M091122334455X",
         "lien": "https://app.cga-brcg.cm/connexion",
     },
+    # 15 octobre 2026 : les avis à l'adhérent. `prenom` est posé par `prevenir_les_adherents`.
+    "adherent.quittance_verifiee": {
+        # Recopié de `routes_espace_adherent._prevenir_du_verdict`.
+        "prenom": "Jean-Pierre",
+        "obligation": "Cotisations sociales CNPS",
+        "periode": "juillet 2026",
+        "denomination": "SARL BATIMENT PLUS",
+        "lien": "https://app.cga-brcg.cm/fr/mon-espace/echeances",
+    },
+    "adherent.quittance_refusee": {
+        # Recopié de `routes_espace_adherent._prevenir_du_verdict`.
+        "prenom": "Jean-Pierre",
+        "obligation": "Cotisations sociales CNPS",
+        "periode": "juillet 2026",
+        "denomination": "SARL BATIMENT PLUS",
+        "motif": "Quittance de juin, pas de juillet.",
+        "lien": "https://app.cga-brcg.cm/fr/mon-espace/echeances",
+    },
+    "adherent.fonds_recus": {
+        # Recopié de `abonne_fonds_de_tiers._prevenir_des_fonds`.
+        "prenom": "Jean-Pierre",
+        "obligation": "Cotisations sociales CNPS",
+        "periode": "juin 2026",
+        "montant": "184 500",
+        "denomination": "SARL BATIMENT PLUS",
+        "lien": "https://app.cga-brcg.cm/fr/mon-espace/echeances",
+    },
+    "adherent.honoraires_regles": {
+        # Recopié de `abonne_avis_honoraires.prevenir_du_reglement`.
+        "prenom": "Jean-Pierre",
+        "periode": "octobre 2026",
+        "montant": "45 000",
+        "reference": "Reçu de caisse 2026-0777",
+        "denomination": "SARL BATIMENT PLUS",
+        "lien": "https://app.cga-brcg.cm/fr/mon-espace/honoraires",
+    },
     "proforma.acceptation": {
         # Recopié de `routes_acquisition._accuser_l_acceptation`.
         "prenom": "Sylvie NGONO",

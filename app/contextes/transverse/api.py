@@ -134,6 +134,7 @@ from app.contextes.transverse.application.autorisation import (
     SecondFacteurRequis,
     resoudre_acces,
 )
+from app.contextes.transverse.application.avis_adherent import prevenir_les_adherents
 from app.contextes.transverse.contrats import (
     DUREE_RENFORCEMENT,
     DUREE_SESSION,
@@ -305,6 +306,7 @@ __all__ = [
     "fermer_habilitation",
     "fermer_session",
     "habilitations_actives",
+    "prevenir_les_adherents",
     # Pas 111 : savoir si l'adhérent a lu la relance qui lui a été envoyée.
     "depot_des_lectures",
     "creer_l_administrateur_d_un_tenant",

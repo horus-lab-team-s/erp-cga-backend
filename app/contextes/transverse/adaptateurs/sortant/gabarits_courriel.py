@@ -139,12 +139,7 @@ def cles_du_gabarit(gabarit_: Gabarit) -> frozenset[str]:
     if gabarit_.avertissement is not None:
         morceaux.append(gabarit_.avertissement)
     lecteur = Formatter()
-    return frozenset(
-        nom
-        for morceau in morceaux
-        for _, nom, _, _ in lecteur.parse(morceau)
-        if nom
-    )
+    return frozenset(nom for morceau in morceaux for _, nom, _, _ in lecteur.parse(morceau) if nom)
 
 
 def cles_manquantes(gabarit_: Gabarit, contexte: dict[str, Any]) -> frozenset[str]:
@@ -202,9 +197,7 @@ def _texte(
     # les clients de messagerie le reconnaissent et replient ce qui suit. Un tiret
     # cadratin ne leur dit rien, et le cabinet n'en veut nulle part.
     lignes.append("-- ")
-    lignes.append(
-        "CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048"
-    )
+    lignes.append("CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048")
     lignes.append("Douala Akwa · Yaoundé Elig-Essono · Bafoussam")
     return "\n".join(lignes)
 
@@ -240,9 +233,7 @@ def _tableau_html(tableau: list[tuple[str, str]]) -> str:
         )
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="margin:6px 0 22px;border-collapse:collapse;">'
-        + "".join(rangees)
-        + "</table>"
+        'style="margin:6px 0 22px;border-collapse:collapse;">' + "".join(rangees) + "</table>"
     )
 
 
@@ -360,11 +351,7 @@ def _tableau_du_contexte(
     brut = contexte.get(gabarit_.tableau)
     if not isinstance(brut, (list, tuple)):
         return None
-    rangees = [
-        (str(r[0]), str(r[1]))
-        for r in brut
-        if isinstance(r, (list, tuple)) and len(r) == 2
-    ]
+    rangees = [(str(r[0]), str(r[1])) for r in brut if isinstance(r, (list, tuple)) and len(r) == 2]
     return rangees or None
 
 
@@ -611,8 +598,7 @@ CATALOGUE: dict[str, Gabarit] = {
                 # corps était un demi-geste : le même raisonnement valait des
                 # deux côtés, et je ne l'avais pas tiré jusqu'au bout.
                 # ─────────────────────────────────────────────────────────────
-                "Votre demande concernant <strong>{service}</strong> nous est "
-                "bien parvenue.",
+                "Votre demande concernant <strong>{service}</strong> nous est bien parvenue.",
                 "Un responsable l'examine et vous recontacte au "
                 "<strong>{telephone}</strong>. Vous n'avez rien à faire d'ici "
                 "là : si un document nous est nécessaire, il vous sera demandé "
@@ -907,6 +893,75 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Sans réponse de votre part, cette proposition cessera d'être "
                 "relancée automatiquement et votre dossier sera repris par votre "
                 "interlocuteur."
+            ),
+        ),
+        # ── 15 octobre 2026 : l'adhérent apprend ce que le cabinet a fait pour lui ──
+        #
+        # Il voyait le résultat en se connectant, et seulement alors. Une quittance
+        # refusée qu'il ne découvre pas laisse courir l'échéance.
+        Gabarit(
+            code="adherent.quittance_verifiee",
+            objet="Votre quittance {obligation} est vérifiée",
+            titre="C'est en ordre, {prenom}",
+            paragraphes=(
+                "Le cabinet a vérifié la quittance que vous avez envoyée pour "
+                "<strong>{obligation}</strong> ({periode}) : l'échéance de "
+                "<strong>{denomination}</strong> est désormais payée.",
+            ),
+            action=("Voir mes échéances", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        Gabarit(
+            code="adherent.quittance_refusee",
+            objet="Votre quittance {obligation} est à renvoyer",
+            titre="Une précision est nécessaire, {prenom}",
+            paragraphes=(
+                "Le cabinet n'a pas pu valider la quittance envoyée pour "
+                "<strong>{obligation}</strong> ({periode}) de <strong>{denomination}</strong>.",
+                "Motif : {motif}",
+                "Renvoyez la bonne quittance depuis votre espace : l'échéance reste à "
+                "régler tant qu'elle n'est pas vérifiée.",
+            ),
+            action=("Renvoyer la quittance", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        Gabarit(
+            code="adherent.fonds_recus",
+            objet="Le cabinet a reçu vos fonds pour {obligation}",
+            titre="Vos fonds sont reçus, {prenom}",
+            paragraphes=(
+                "Le cabinet a reçu <strong>{montant} FCFA</strong> pour "
+                "<strong>{obligation}</strong> ({periode}) de <strong>{denomination}</strong>.",
+                "Il règle l'administration en votre nom. L'échéance passera à « payée » "
+                "avec la quittance de l'administration, que vous retrouverez dans votre "
+                "espace.",
+            ),
+            action=("Suivre mes échéances", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        Gabarit(
+            code="adherent.honoraires_regles",
+            objet="Reçu de vos honoraires, {periode}",
+            titre="Merci, {prenom}",
+            paragraphes=(
+                "Le règlement de <strong>{montant} FCFA</strong> pour les honoraires de "
+                "<strong>{periode}</strong> de <strong>{denomination}</strong> est bien reçu "
+                "(référence {reference}).",
+                "Votre reçu est disponible dans votre espace, rubrique Honoraires.",
+            ),
+            action=("Voir mon reçu", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
             ),
         ),
     )

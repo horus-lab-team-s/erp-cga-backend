@@ -374,6 +374,49 @@ class VerdictDemande(BaseModel):
     motif: str | None = Field(default=None, max_length=500)
 
 
+def _prevenir_du_verdict(entreprise: str, demande, motif: str, jour: date) -> None:
+    """15 octobre 2026 : l'adhérent apprend le verdict par courriel, pas à sa prochaine visite.
+
+    ⚠️ Un refus qu'il ne découvre pas laisse courir l'échéance : c'est le cas qui compte.
+    Ne lève jamais (voir `prevenir_les_adherents`).
+    """
+    from app.contextes.transverse.api import prevenir_les_adherents
+
+    dossier = _entreprise(entreprise)
+    reglages = _reglages()
+    instance = next(
+        (
+            o
+            for o in _instances(dossier, jour, reglages.horizon_jours)
+            if o.code_obligation == demande.code_obligation
+            and o.periode_debut == demande.periode_debut
+        ),
+        None,
+    )
+    contexte = {
+        "obligation": instance.libelle if instance else demande.code_obligation,
+        "periode": (
+            libelle_de_periode(instance.periode_debut, instance.periode_fin)
+            if instance
+            else f"{demande.periode_debut:%m/%Y}"
+        ),
+        "denomination": dossier.denomination,
+        "lien": f"{configuration().adresse_publique_site.rstrip('/')}/fr/mon-espace/echeances",
+    }
+    if demande.verdict is VerdictDeLaPreuve.REFUSEE:
+        prevenir_les_adherents(
+            atelier(),
+            entreprise,
+            "adherent.quittance_refusee",
+            {**contexte, "motif": motif},
+            jour=jour,
+        )
+    else:
+        prevenir_les_adherents(
+            atelier(), entreprise, "adherent.quittance_verifiee", contexte, jour=jour
+        )
+
+
 @routeur.post(
     "/dossiers/{entreprise}/preuves-de-paiement/verdict",
     summary="Valider ou refuser la quittance envoyée par l'adhérent",
@@ -430,6 +473,7 @@ def juger_une_quittance(
             **({"motif": motif} if motif else {}),
         },
     )
+    _prevenir_du_verdict(entreprise, demande, motif, horodatage.date())
     return preuve.model_copy(
         update={
             "verdict": demande.verdict,

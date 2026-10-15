@@ -26,7 +26,7 @@
 # échouer le démarrage plutôt que de sortir un bulletin faux.
 
 version_referentiel: "2026.1"
-mis_a_jour_le: 2026-08-17
+mis_a_jour_le: 2026-10-15
 
 baremes:
 
@@ -56,7 +56,9 @@ baremes:
           texte: >-
             CGI art. 69 — barème de l'IRPP applicable au revenu net catégoriel des
             traitements, salaires, pensions et rentes viagères
-          source: Document de cadrage ; sources secondaires concordantes
+          source: >-
+            DGI, Code général des impôts, édition officielle 2026, art. 69(1), inchangé par
+            la LF 2026, consulté le 15/10/2026 : https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
         note: >-
           ⚠️ TROIS RÉSERVES, toutes à lever par le fiscaliste avant toute paie réelle.
           1. Le barème est **annuel** : l'appliquer à un salaire mensuel donnerait un
@@ -69,56 +71,117 @@ baremes:
 
   - code: TDL_SALAIRES
     libelle: >-
-      Taxe de développement local retenue sur salaires — barème par tranche de
-      salaire de base mensuel
+      Taxe de développement local retenue sur salaires — montant ANNUEL fixe par palier
+      de salaire de base mensuel
     categorie: PAIE
     versions:
       - tranches:
           - plancher: 0
             plafond: 62000
-            taux: 0
+            montant: 0
           - plancher: 62000
-            plafond: 75000
-            taux: 0.4
-          - plancher: 75000
-            plafond: 100000
-            taux: 0.5
-          - plancher: 100000
-            plafond: 125000
-            taux: 0.6
-          - plancher: 125000
-            plafond: 150000
-            taux: 0.8
-          - plancher: 150000
-            plafond: 200000
-            taux: 1.0
-          - plancher: 200000
-            plafond: 250000
-            taux: 1.2
-          - plancher: 250000
-            plafond: 300000
-            taux: 1.4
-          - plancher: 300000
-            plafond: 500000
-            taux: 1.6
-          - plancher: 500000
+            plafond: 75001
+            montant: 3000
+          - plancher: 75001
+            plafond: 100001
+            montant: 6000
+          - plancher: 100001
+            plafond: 125001
+            montant: 9000
+          - plancher: 125001
+            plafond: 150001
+            montant: 12000
+          - plancher: 150001
+            plafond: 200001
+            montant: 15000
+          - plancher: 200001
+            plafond: 250001
+            montant: 18000
+          - plancher: 250001
+            plafond: 300001
+            montant: 24000
+          - plancher: 300001
+            plafond: 500001
+            montant: 27000
+          - plancher: 500001
             plafond: null
-            taux: 2.0
+            montant: 30000
         applicable_du: 2012-01-01
         applicable_au: null
         statut: A_VALIDER
         fondement:
           texte: >-
-            Loi n° 2009/019 portant fiscalité locale — taxe de développement local
-            retenue à la source sur les salaires
-          source: Sources secondaires
+            CGI art. C86 et C87 : taxe de développement local des salariés, montant annuel
+            par palier de salaire de base mensuel, perçue avec l'IRPP. LF 2026 : « sans
+            changement » pour les salariés.
+          source: >-
+            DGI, Code général des impôts, édition officielle 2026, art. C86-C87, consulté
+            le 15/10/2026 : https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
         note: >-
-          ⚠️ RÉSERVE MAJEURE, ET DE NATURE DIFFÉRENTE DES AUTRES.
-          La TDL est en réalité un barème **par paliers à montant fixe** — un montant
-          mensuel forfaitaire par tranche de salaire, non un pourcentage. Elle est
-          modélisée ici en taux faute de structure « montant fixe par tranche », ce
-          qui donne un ordre de grandeur et **non le montant exact**.
-          Deux issues possibles, à trancher par le fiscaliste : soit les montants
-          réels s'expriment correctement en taux et ce barème se corrige, soit il
-          faut ajouter au référentiel un type de tranche à montant fixe. Tant que
-          cette réserve n'est pas levée, la TDL du bulletin est indicative.
+          Montants ANNUELS, tels que le texte les donne : le bulletin en retient le
+          douzième chaque mois. Cette mensualisation est une pratique de retenue, pas une
+          lettre du texte : à confirmer par le fiscaliste. Bornes inclusives au texte
+          (« 62 000 à 75 000 », puis « 75 001 ») : chaque plafond exclu en est le
+          lendemain. Remplace, le 15 octobre 2026, la modélisation en taux faite faute de
+          tranche à montant fixe au référentiel.
+
+  - code: RAV_SALAIRES
+    libelle: >-
+      Redevance audiovisuelle retenue sur salaires — montant MENSUEL fixe par palier de
+      salaire brut
+    categorie: PAIE
+    versions:
+      - tranches:
+          - plancher: 0
+            plafond: 50001
+            montant: 0
+          - plancher: 50001
+            plafond: 100001
+            montant: 750
+          - plancher: 100001
+            plafond: 200001
+            montant: 1950
+          - plancher: 200001
+            plafond: 300001
+            montant: 3250
+          - plancher: 300001
+            plafond: 400001
+            montant: 4550
+          - plancher: 400001
+            plafond: 500001
+            montant: 5850
+          - plancher: 500001
+            plafond: 600001
+            montant: 7150
+          - plancher: 600001
+            plafond: 700001
+            montant: 8450
+          - plancher: 700001
+            plafond: 800001
+            montant: 9750
+          - plancher: 800001
+            plafond: 900001
+            montant: 11050
+          - plancher: 900001
+            plafond: 1000001
+            montant: 12350
+          - plancher: 1000001
+            plafond: null
+            montant: 13000
+        applicable_du: 2003-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+            Ordonnance n° 89/004 du 13/12/1989, art. 3 et 6, modifiée par la loi de finances
+            2003 : redevance audiovisuelle mensuelle sur les salaires, par palier de salaire
+            brut. Exonérés : personnels domestiques, ouvriers agricoles, pensions.
+          source: >-
+            Reproduite en annexe du Code général des impôts, édition officielle 2026 (DGI),
+            consulté le 15/10/2026 : https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
+        note: >-
+          L'assiette est le salaire brut ; le texte ne dit pas si les avantages en nature
+          y entrent : le bulletin retient le brut en espèces (base et primes), à confirmer
+          par le fiscaliste. Les exonérations (domestiques, ouvriers agricoles) ne sont pas
+          encore portées par le contrat.
+

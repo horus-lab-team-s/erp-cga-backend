@@ -205,6 +205,7 @@ class Comptoir:
             NaturePaiement.HONORAIRES: SuiteDHonoraires(
                 reglements=self.reglements_honoraires,
                 journal=self.journal,
+                boite=_boite_du_parcours(),
             ),
             # ⚠️ 14 octobre 2026 : les fonds de tiers (TVA, CNPS sous mandat de paiement).
             NaturePaiement.FONDS_DE_TIERS: SuiteDeFondsDeTiers(

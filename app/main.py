@@ -98,6 +98,9 @@ from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
 from app.contextes.souscription.adaptateurs.entrant.routes_http import (
     routeur as routeur_souscription,
 )
+from app.contextes.souscription.adaptateurs.entrant.routes_missions import (
+    routeur as routeur_missions,
+)
 from app.contextes.transverse.adaptateurs.entrant.limitation import (
     IntergicielLimitationDebit,
 )
@@ -555,6 +558,24 @@ def _inscrire_les_travaux_periodiques() -> None:
     inscrire_un_abonne(NOM_FONDS_RECUS, abonne_fonds_recus)
     inscrire_un_abonne(NOM_FONDS_REVERSES, abonne_fonds_reverses)
 
+    # ⚠️ 15 octobre 2026 : un règlement d'honoraires propose son écriture (brouillon) dans
+    # les livres de l'adhérent. Pas de double saisie. Voir `abonne_honoraires.py`.
+    from app.contextes.comptabilite.adaptateurs.entrant.abonne_honoraires import (
+        abonne_honoraires_regles,
+    )
+    from app.contextes.souscription.application.reglement_des_honoraires import (
+        NOM_HONORAIRES_REGLES,
+    )
+
+    inscrire_un_abonne(NOM_HONORAIRES_REGLES, abonne_honoraires_regles)
+    # Et l'avis à l'adhérent, par un abonné à part : un courriel en panne n'empêche pas
+    # l'écriture, ni l'inverse.
+    from app.contextes.souscription.adaptateurs.entrant.abonne_avis_honoraires import (
+        abonne_avis_honoraires,
+    )
+
+    inscrire_un_abonne(NOM_HONORAIRES_REGLES, abonne_avis_honoraires)
+
     # ⚠️ **La veille des dossiers, et volontairement sans abonné.** Elle dépose des
     # `DossierEnSouffrance` que le relais publiera, et aucun code ne s'y abonne
     # aujourd'hui : l'alerte reste dans la boîte, en « publié sans abonné », et se
@@ -663,6 +684,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_social)
     application.include_router(routeur_cloture)
     application.include_router(routeur_dsf)
+    application.include_router(routeur_missions)
     # J · Pilotage vient en dernier des contextes métier : il les agrège tous.
     application.include_router(routeur_pilotage)
     # Pas 104 : le plan de travail des collaborateurs, qui réutilise les relevés du pilotage.
@@ -684,6 +706,12 @@ def creer_application() -> FastAPI:
     )
 
     application.include_router(routeur_honoraires)
+    # 15 octobre 2026 : la cliente d'une création retrouve sa proforma et son reçu.
+    from app.contextes.souscription.adaptateurs.entrant.routes_mes_documents import (
+        routeur as routeur_mes_documents,
+    )
+
+    application.include_router(routeur_mes_documents)
     # ⚠️ 14 octobre 2026 : les fonds de tiers, sous `/souscription/fonds-de-tiers`.
     from app.contextes.souscription.adaptateurs.entrant.routes_fonds_de_tiers import (
         routeur as routeur_fonds_de_tiers,

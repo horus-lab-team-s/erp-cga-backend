@@ -34,6 +34,7 @@ from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
 __all__ = [
     "TableAppelDeFonds",
+    "TableMission",
     "TableContratDHonoraires",
     "TableDevis",
     "TableReglementDHonoraires",
@@ -433,3 +434,16 @@ class TableAppelDeFonds(Cloisonne, Document, Base):
     niu: Mapped[str] = mapped_column(String(64), nullable=False)
     etat: Mapped[str] = mapped_column(String(20), nullable=False)
     arrete_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableMission(Cloisonne, Document, Base):
+    """Une mission de prestation ponctuelle (15 octobre 2026) : analyse ou rédaction de
+    contrat, DSF ciblée. Voir `domaine/missions.py`."""
+
+    __tablename__ = "mission"
+    __table_args__ = (Index("ix_mission_etat", "locataire", "etat", "ouverte_le"),)
+
+    identifiant: Mapped[str] = mapped_column(String(32), primary_key=True)
+    type: Mapped[str] = mapped_column(String(24), nullable=False)
+    etat: Mapped[str] = mapped_column(String(16), nullable=False)
+    ouverte_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)

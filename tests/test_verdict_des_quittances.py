@@ -96,6 +96,11 @@ class TestLeCabinetJuge:
         carte = echeances._carte(adherent.get(echeances.ECHEANCES).json(), "CNPS", "2026-07-01")
         assert carte["etat"] == "PAYEE"
         assert all(q["piece"] != "PJ-2026-0013" for q in reviseur.get(A_VERIFIER).json())
+        from app.contextes.transverse.api import atelier
+
+        (avis,) = atelier().notifications.derniers("adherent.quittance_verifiee")
+        assert avis.destinataire == "jp.nkoa@batimentplus.cm"
+        assert "SARL BATIMENT PLUS" == avis.contexte["denomination"]
 
     def test_un_refus_dit_pourquoi_et_l_adherent_peut_renvoyer(self):
         adherent = _quittance_envoyee()
@@ -112,6 +117,13 @@ class TestLeCabinetJuge:
         carte = echeances._carte(adherent.get(echeances.ECHEANCES).json(), "CNPS", "2026-07-01")
         assert carte["etat"] == "EN_RETARD"
         assert carte["preuve"]["motif"] == "Quittance de juin, pas de juillet."
+        # 15 octobre 2026 : l'adhérent l'apprend par courriel, avec le motif.
+        from app.contextes.transverse.api import atelier
+
+        (avis,) = atelier().notifications.derniers("adherent.quittance_refusee")
+        assert avis.destinataire == "jp.nkoa@batimentplus.cm"
+        assert avis.contexte["motif"] == "Quittance de juin, pas de juillet."
+        assert avis.contexte["lien"].endswith("/fr/mon-espace/echeances")
         # La bonne quittance, même pièce corrigée ou non : l'envoi est de nouveau reçu.
         assert adherent.post(echeances.PREUVES, json=QUITTANCE).status_code == 201
 

@@ -1450,3 +1450,75 @@ parametres:
           refuse de classer si l'ordre est inversé : un dossier ne peut pas être
           « modéré » au-delà du seuil « élevé », et le laisser passer produirait un
           tableau de bord où les couleurs mentent.
+
+  - code: IRPP_PLAFOND_FRAIS_PROFESSIONNELS_ANNUEL
+    libelle: Plafond annuel de l'abattement pour frais professionnels
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 4800000
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              CGI art. 34 : la déduction forfaitaire de 30 % pour frais professionnels est plafonnée à 4 800 000 FCFA par an
+          source: >-
+              DGI, Code général des impôts, édition officielle 2026, consulté le 15/10/2026 : https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
+        note: >-
+          Sans ce plafond, l'abattement de 30 % d'un salaire annuel supérieur à 16 000 000 serait trop élevé, et l'IRPP trop faible.
+
+  - code: IRPP_SEUIL_DISPENSE_MENSUEL
+    libelle: Salaire brut mensuel en dessous duquel l'IRPP n'est pas retenu
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 62000
+        applicable_du: 2015-01-01
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              CGI art. 81 : dispense de retenue de l'IRPP pour les salaires bruts mensuels inférieurs à 62 000 FCFA
+          source: >-
+              DGI, Code général des impôts, édition officielle 2026, consulté le 15/10/2026 : https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
+        note: >-
+          Lu sur l'édition 2026 en extraction de texte : le seuil est net, la rédaction exacte de l'article est à relire par le fiscaliste. Les CAC suivent l'IRPP.
+
+  - code: SMIG_MENSUEL_NON_AGRICOLE
+    libelle: Salaire minimum interprofessionnel garanti, secteurs non agricoles
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 60000
+        applicable_du: 2023-03-21
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              Décret n° 2023/00338/PM du 21/03/2023, art. 1 : SMIG des « autres secteurs » à 60 000 FCFA par mois
+          source: >-
+              Services du Premier ministre, https://spm.gov.cm/site/sites/default/files/dpm_2023-00338_s.pdf, consulté le 15/10/2026
+        note: >-
+          Une revalorisation a été annoncée le 1er mai 2026, sans décret trouvé au 15 octobre 2026. Le bulletin alerte quand le salaire de base est inférieur, il ne bloque pas.
+
+  - code: SMIG_MENSUEL_AGRICOLE
+    libelle: Salaire minimum interprofessionnel garanti, secteur agricole et assimilé
+    categorie: PAIE
+    unite: FCFA
+    nature: LOI
+    versions:
+      - valeur: 45000
+        applicable_du: 2023-03-21
+        applicable_au: null
+        statut: A_VALIDER
+        fondement:
+          texte: >-
+              Décret n° 2023/00338/PM du 21/03/2023, art. 1 : SMIG du secteur agricole et assimilé à 45 000 FCFA par mois
+          source: >-
+              Services du Premier ministre, https://spm.gov.cm/site/sites/default/files/dpm_2023-00338_s.pdf, consulté le 15/10/2026
+        note: >-
+          Le contrat ne porte pas encore le secteur : le bulletin compare au SMIG non agricole, le plus protecteur.

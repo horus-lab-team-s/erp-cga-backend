@@ -170,6 +170,13 @@ class TestDeLaRemiseAuReversement:
         carte = _carte(client, echeance)
         assert carte["etat"] == "FONDS_RECUS", carte
         assert carte["fonds"]["canal"] == "GUICHET"
+        # 15 octobre 2026 : l'adhérent reçoit l'avis, une fois.
+        from app.contextes.transverse.adaptateurs.entrant.dependances import (
+            service_de_notification,
+        )
+
+        (avis,) = service_de_notification().derniers("adherent.fonds_recus")
+        assert avis.destinataire == ADHERENT and avis.contexte["montant"] == "184 500"
 
         quittance = _quittance(client)
         reverse = _reverser(client, appel, quittance)
@@ -189,7 +196,11 @@ class TestDeLaRemiseAuReversement:
         assert _reverser(client, appel, d_ailleurs).status_code == 404
         assert _reverser(client, appel, "PJ-INVENTEE").status_code == 404
         _en_tant_que(client, REVISEUR)
-        (vu,) = [a for a in client.get(FONDS).json()["appels"] if a["identifiant"] == appel["identifiant"]]
+        (vu,) = [
+            a
+            for a in client.get(FONDS).json()["appels"]
+            if a["identifiant"] == appel["identifiant"]
+        ]
         assert vu["etat"] == "FONDS_RECUS"
 
     def test_on_ne_reverse_que_des_fonds_recus(self, plateforme):

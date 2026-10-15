@@ -1118,7 +1118,13 @@ class TestLeReglementNotifieParLOperateur:
         assert reponse.status_code == 200, reponse.text
 
     def _dossier_accepte(
-        self, client, *, accepter: bool = True, service: str = "CREATION"
+        self,
+        client,
+        *,
+        accepter: bool = True,
+        service: str = "CREATION",
+        reference: str = "dos-reglement",
+        numero: str = "PRO-2026-0010",
     ):
         """Un dossier jusqu'à l'acceptation de sa proforma, par les routes réelles.
 
@@ -1144,7 +1150,6 @@ class TestLeReglementNotifieParLOperateur:
         from app.partage.horloge import maintenant
         from app.partage.locataire import etabli
 
-        reference, numero = "dos-reglement", "PRO-2026-0010"
         instant = maintenant()
         demande = DemandeDeContact(
             identifiant=f"dc-{reference}",

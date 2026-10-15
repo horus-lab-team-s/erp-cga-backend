@@ -240,6 +240,13 @@ class Permission(StrEnum):
     #: comptable et le réviseur : préparer n'engage rien, la validation (REVISER_DOSSIER,
     #: par un autre que le préparateur) et le dépôt (DEPOSER_DECLARATION) engagent.
     PREPARER_DSF = "PREPARER_DSF"
+    #: Instruire une mission de prestation ponctuelle (15 octobre 2026) : ouvrir, faire
+    #: lire par l'agent, décider de chaque point, soumettre. Le juriste (chargé des
+    #: formalités) et le réviseur.
+    TRAITER_MISSION = "TRAITER_MISSION"
+    #: Valider une mission soumise : le second regard, jamais celui qui a soumis. Le
+    #: réviseur et la direction.
+    VALIDER_MISSION = "VALIDER_MISSION"
 
     # ── Portefeuille ─────────────────────────────────────────────────────────
     #
@@ -413,6 +420,8 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.CLOTURER_EXERCICE,
         Permission.INSCRIRE_STATUT,
         Permission.PREPARER_DSF,
+        Permission.TRAITER_MISSION,
+        Permission.VALIDER_MISSION,
     },
     # Le fiscaliste ne tient aucune comptabilité : il fixe la norme que les
     # autres appliquent. C'est le seul à pouvoir toucher au référentiel, et cette
@@ -430,6 +439,8 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         # Il reçoit les demandes de création : c'est lui qui les qualifie.
         Permission.LIRE_PROSPECT,
         Permission.QUALIFIER_PROSPECT,
+        # 15 octobre 2026 : le juriste du cabinet instruit les prestations ponctuelles.
+        Permission.TRAITER_MISSION,
     },
     Role.DIRECTION: _LECTURE_DOSSIER
     | {
@@ -441,6 +452,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.CLOTURER_EXERCICE,
         Permission.INSCRIRE_STATUT,
         Permission.ARRETER_POLITIQUE,
+        Permission.VALIDER_MISSION,
         Permission.EDITER_VITRINE,
         Permission.LIRE_PROSPECT,
         Permission.QUALIFIER_PROSPECT,

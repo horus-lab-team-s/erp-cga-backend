@@ -52,6 +52,11 @@ CODES_MESSAGES: dict[str, str] = {
     "creation.dossier_ouvert_avec_compte": (
         "Dossier de formalité ouvert, compte client créé : choisir son mot de passe"
     ),
+    # 15 octobre 2026 : ce que le cabinet a fait pour l'adhérent, sans qu'il se connecte.
+    "adherent.quittance_verifiee": "Quittance vérifiée : l'échéance est payée",
+    "adherent.quittance_refusee": "Quittance à renvoyer, avec le motif",
+    "adherent.fonds_recus": "Fonds reçus par le cabinet, qui règle l'administration",
+    "adherent.honoraires_regles": "Honoraires réglés : le reçu est dans l'espace",
     "compte.adhesion_ajoutee": (
         "Votre société est immatriculée, l'espace adhérent s'ajoute à votre compte"
     ),

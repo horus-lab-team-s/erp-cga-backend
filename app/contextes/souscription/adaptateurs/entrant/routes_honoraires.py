@@ -29,7 +29,7 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.contextes.portefeuille.api import (
@@ -51,6 +51,7 @@ from app.contextes.souscription.domaine.paiements import NaturePaiement, Paiemen
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
+    atelier,
     exiger,
     exiger_dossier,
     session_de_travail,
@@ -300,8 +301,18 @@ def encaisser_au_guichet(acces: AccesRequis, niu: str, corps: ConstatAuGuichet) 
     à la main est la première source d'écart de caisse."""
     exiger(acces, Permission.ENCAISSER)
     _, echeance = _echeance_non_reglee(niu, corps.periode)
+    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+        _boite_du_parcours,
+    )
+    from app.contextes.souscription.application.reglement_des_honoraires import (
+        constater_le_reglement,
+    )
+
     try:
-        _comptoir().reglements_honoraires.enregistrer(
+        # 15 octobre 2026 : écrit ET publié, pour que l'écriture se propose chez l'adhérent.
+        constater_le_reglement(
+            _comptoir().reglements_honoraires,
+            _boite_du_parcours(),
             ReglementDHonoraires(
                 identifiant=f"RH-{uuid.uuid4().hex[:16]}",
                 niu=niu,
@@ -311,8 +322,53 @@ def encaisser_au_guichet(acces: AccesRequis, niu: str, corps: ConstatAuGuichet) 
                 reference_externe=corps.reference_externe.strip(),
                 constate_le=maintenant(),
                 constate_par=acces.compte,
-            )
+            ),
         )
     except PeriodeDejaReglee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     return _mes_honoraires(niu)
+
+
+@routeur.get(
+    "/{niu}/reglements/{identifiant}/recu",
+    summary="Le reçu PDF d'un règlement d'honoraires",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def recu_du_reglement(acces: AccesRequis, niu: str, identifiant: str) -> Response:
+    """15 octobre 2026 : l'adhérent classe et produit le reçu de ce qu'il a réglé.
+
+    ⚠️ Même garde que son échéancier (son dossier, ou le cabinet) ; le règlement est
+    cherché DANS ce dossier : l'identifiant d'un autre adhérent rend 404.
+    """
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    from app.contextes.souscription.adaptateurs.sortant.document_recu_honoraires import (
+        rendre_le_recu,
+    )
+    from app.partage.formats import MOIS
+
+    vue = _mes_honoraires(niu)
+    echeance = next(
+        (e for e in vue.echeances if e.reglement and e.reglement.identifiant == identifiant),
+        None,
+    )
+    if echeance is None:
+        raise HTTPException(status_code=404, detail=f"aucun règlement {identifiant} à ce dossier.")
+    reglement = echeance.reglement
+    if (echeance.fin - echeance.debut).days <= 31:
+        periode = f"{MOIS[echeance.debut.month - 1]} {echeance.debut.year}"
+    else:
+        periode = f"du {echeance.debut:%d/%m/%Y} au {echeance.fin:%d/%m/%Y}"
+    noms = {c.identifiant: c.nom_affiche for c in atelier().comptes.lister()}
+    encaisse_par = (
+        "paiement en ligne (mobile money)"
+        if reglement.constate_par == "systeme"
+        else noms.get(reglement.constate_par, reglement.constate_par)
+    )
+    return Response(
+        content=rendre_le_recu(
+            reglement, adherent=_denomination(niu), periode=periode, encaisse_par=encaisse_par
+        ),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="recu-{identifiant}.pdf"'},
+    )

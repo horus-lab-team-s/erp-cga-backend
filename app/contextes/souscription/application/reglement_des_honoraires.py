@@ -33,14 +33,45 @@ from app.contextes.souscription.domaine.honoraires import (
     PeriodeDejaReglee,
     ReglementDHonoraires,
 )
+from app.orchestration.boite_d_envoi import deposer
 
-__all__ = ["SuiteDHonoraires"]
+__all__ = ["NOM_HONORAIRES_REGLES", "SuiteDHonoraires", "constater_le_reglement"]
+
+#: 15 octobre 2026 : un règlement d'honoraires constaté traverse vers la Comptabilité,
+#: qui propose l'écriture dans les livres de l'adhérent. Personne ne la ressaisit.
+NOM_HONORAIRES_REGLES = "HonorairesRéglés"
+
+
+def constater_le_reglement(reglements, boite, reglement: ReglementDHonoraires) -> None:
+    """Écrit le règlement, puis le publie. **Le seul chemin**, guichet comme mobile money.
+
+    ⚠️ Lève `PeriodeDejaReglee` avant toute publication : un double règlement ne doit pas
+    proposer deux écritures.
+    """
+    reglements.enregistrer(reglement)
+    deposer(
+        boite,
+        f"hr-{reglement.identifiant}",
+        NOM_HONORAIRES_REGLES,
+        reglement.identifiant,
+        {
+            "identifiant": reglement.identifiant,
+            "niu": reglement.niu,
+            "periode": reglement.periode.isoformat(),
+            "montant": str(reglement.montant),
+            "canal": reglement.canal.value,
+            "reference": reglement.reference_externe,
+            "constate_le": reglement.constate_le.isoformat(),
+        },
+        reglement.constate_le,
+    )
 
 
 class SuiteDHonoraires:
-    def __init__(self, *, reglements, journal) -> None:
+    def __init__(self, *, reglements, journal, boite) -> None:
         self._reglements = reglements
         self._journal = journal
+        self._boite = boite
 
     def encaisser(self, paiement, a_l_instant: datetime) -> Aboutissement:
         niu = paiement.reference_reglee
@@ -62,7 +93,9 @@ class SuiteDHonoraires:
                 a_l_instant,
             )
         try:
-            self._reglements.enregistrer(
+            constater_le_reglement(
+                self._reglements,
+                self._boite,
                 ReglementDHonoraires(
                     identifiant=f"RH-{paiement.identifiant}",
                     niu=niu,
@@ -72,7 +105,7 @@ class SuiteDHonoraires:
                     reference_externe=reference,
                     constate_le=a_l_instant,
                     constate_par="systeme",
-                )
+                ),
             )
         except PeriodeDejaReglee as course:
             return self._echec(paiement, f"DOUBLE RÈGLEMENT : {course}", a_l_instant)

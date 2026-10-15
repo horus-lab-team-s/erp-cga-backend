@@ -180,6 +180,8 @@ ROUTES_ASYNCHRONES = {
     "deposer_fichier_de_formalite": "await fichier.read()",
     "deposer_fichier_de_creation": "await fichier.read()",
     "reprendre": "await fichier.read()",
+    # 15 octobre 2026 : le contrat d'une mission. Lecture bornée, rangement dans un fil.
+    "verser": "await fichier.read()",
     "notification_tara": "await requete.json()",
 }
 

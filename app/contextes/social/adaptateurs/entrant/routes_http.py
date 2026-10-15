@@ -18,7 +18,7 @@ from datetime import date
 from decimal import Decimal
 from functools import lru_cache
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.referentiel.api import (
@@ -223,6 +223,70 @@ def lire_bulletin(
     ),
 ) -> Bulletin:
     exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    bulletin, _ = _bulletin_du_mois(entreprise, annee, mois, matricule, groupe_risque)
+    return bulletin
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/bulletins/{annee}/{mois}/{matricule}/pdf",
+    summary="Le bulletin de paie imprimable, du même calcul que l'écran",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def imprimer_le_bulletin(
+    acces: AccesRequis,
+    entreprise: str,
+    annee: int,
+    mois: int,
+    matricule: str,
+    groupe_risque: GroupeRisque = Query(GroupeRisque.A),
+) -> Response:
+    """15 octobre 2026 : le bulletin se remet au salarié. Même garde, même calcul."""
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    bulletin, contrat = _bulletin_du_mois(entreprise, annee, mois, matricule, groupe_risque)
+    depot_salaries, _ = depots()
+    salarie = depot_salaries.lire(matricule)
+    from app.contextes.portefeuille.api import (
+        DepotEntreprisesSql,
+        EntrepriseIntrouvable,
+        entreprises_en_memoire,
+    )
+    from app.contextes.social.adaptateurs.sortant.document_bulletin import rendre_le_bulletin
+    from app.contextes.transverse.api import session_de_travail
+    from app.partage.locataire import courant
+
+    session = session_de_travail()
+    depot_dossiers = (
+        entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
+    )
+    try:
+        employeur = depot_dossiers.lire(entreprise).denomination
+    except EntrepriseIntrouvable:
+        employeur = entreprise
+    octets = rendre_le_bulletin(
+        bulletin,
+        employeur=employeur,
+        niu=entreprise,
+        salarie=f"{salarie.prenom} {salarie.nom}",
+        matricule_cnps=salarie.matricule_cnps,
+        poste=contrat.poste,
+    )
+    return Response(
+        content=octets,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="bulletin-{matricule}-{annee}-{mois:02d}.pdf"'
+            )
+        },
+    )
+
+
+def _bulletin_du_mois(
+    entreprise: str, annee: int, mois: int, matricule: str, groupe_risque: GroupeRisque
+):
+    """Le bulletin du mois et le contrat qui le fonde. Extrait le 15 octobre 2026 pour que
+    l'écran et le PDF portent le même calcul ; l'accès reste à l'appelant."""
     periode = _periode(annee, mois)
     _, depot_contrats = depots()
     contrats = [
@@ -250,7 +314,7 @@ def lire_bulletin(
                 "prorata que le cabinet n'a pas arrêtée : à traiter à la main."
             ),
         )
-    return _calculer(contrats[0], entreprise, periode, groupe_risque)
+    return _calculer(contrats[0], entreprise, periode, groupe_risque), contrats[0]
 
 
 @routeur.get(
