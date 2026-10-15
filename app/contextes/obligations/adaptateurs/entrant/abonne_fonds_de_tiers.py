@@ -26,6 +26,7 @@ pour le même appel ne s'écrit pas deux fois.
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -71,7 +72,10 @@ def _ecrire(
                 apres={**apres, "appel": evenement.cle},
             )
         if nouvelles and si_nouveau is not None:
-            si_nouveau(boutique)
+            try:
+                si_nouveau(boutique)
+            except Exception:  # noqa: BLE001 — les fonds sont notés ; l'avis ne les annule pas
+                logging.getLogger(__name__).exception("Avis à l'adhérent %s non envoyé.", niu)
 
 
 def noter_les_fonds_recus(evenement: EvenementSortant, *, unite: Any = None) -> None:

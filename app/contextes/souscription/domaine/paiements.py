@@ -64,6 +64,7 @@ from app.partage.telephone import normaliser_telephone
 
 __all__ = [
     "DELAI_EXPIRATION",
+    "debit_en_attente",
     "FENETRE_RAPPROCHEMENT",
     "EvenementPaiement",
     "ESPACEMENT_MAXIMAL",
@@ -467,3 +468,26 @@ def rapprocher(
             )
 
     return None
+
+
+def debit_en_attente(
+    paiements: list[Paiement], *, echeance: str | None, a_l_instant: datetime
+) -> Paiement | None:
+    """Le débit déjà demandé pour cette échéance et qui attend encore la réponse de
+    l'opérateur, s'il y en a un (15 octobre 2026).
+
+    ⚠️ Deux clics, deux demandes de débit : rien ne l'empêchait, et l'adhérent pouvait être
+    débité deux fois ; le double règlement n'était que journalisé après coup. Une demande
+    en attente depuis moins que la fenêtre de rapprochement bloque la suivante ; au-delà,
+    la réconciliation l'a tranchée ou va le faire, et l'adhérent peut réessayer.
+    """
+    return next(
+        (
+            p
+            for p in paiements
+            if p.statut is StatutPaiement.EN_ATTENTE
+            and p.echeance == echeance
+            and a_l_instant - p.initie_le < FENETRE_RAPPROCHEMENT
+        ),
+        None,
+    )

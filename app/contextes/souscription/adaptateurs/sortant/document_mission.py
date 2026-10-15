@@ -11,7 +11,6 @@ humaine), parce que le cabinet s'y est engagé.
 
 from __future__ import annotations
 
-from datetime import timedelta
 from io import BytesIO
 
 from reportlab.lib.colors import HexColor
@@ -28,6 +27,7 @@ from app.contextes.souscription.domaine.missions import (
     Rubrique,
     TypeMission,
 )
+from app.partage.horloge import a_douala
 
 __all__ = ["rendre_le_livrable"]
 
@@ -42,6 +42,15 @@ _ORDRE = [
     (Rubrique.CLAUSE_A_RISQUE, "Clauses à surveiller"),
     (Rubrique.MANQUE, "Ce qui manque"),
     (Rubrique.RECOMMANDATION, "Nos recommandations"),
+]
+#: 15 octobre 2026 : une DSF ciblée parlait « d'objet du contrat » au client. Ses intitulés.
+_ORDRE_DSF = [
+    (Rubrique.RESUME, "Synthèse de la déclaration"),
+    (Rubrique.CLAUSE_A_RISQUE, "Points à surveiller"),
+    (Rubrique.MANQUE, "Ce qui manque"),
+    (Rubrique.RECOMMANDATION, "Nos recommandations"),
+    (Rubrique.PARTIES, "Les parties"),
+    (Rubrique.OBLIGATION, "Obligations"),
 ]
 _GRAVITES = {"ELEVEE": "risque élevé", "MOYENNE": "risque moyen", "FAIBLE": "risque faible"}
 
@@ -59,7 +68,7 @@ def _p(texte: str, style=_TEXTE) -> Paragraph:
 
 
 def _douala(instant) -> str:
-    return f"{instant + timedelta(hours=1):%d/%m/%Y}"
+    return f"{a_douala(instant):%d/%m/%Y}"
 
 
 def _projet_de_contrat(contenu: list, mission: Mission, retenues) -> None:
@@ -126,22 +135,31 @@ def rendre_le_livrable(mission: Mission, *, noms: dict[str, str] | None = None) 
         _projet_de_contrat(contenu, mission, retenues)
     else:
         assiste = any(p.origine is OrigineProposition.AGENT for p in retenues)
+        dsf = mission.type is TypeMission.DSF_CIBLEE
+        objet = (
+            f"Ce document présente les constats et recommandations du cabinet sur la "
+            f"déclaration statistique et fiscale de l'exercice {mission.exercice} "
+            f"(NIU {mission.dossier_niu}). La déclaration elle-même est préparée, validée "
+            "et déposée par son propre parcours. "
+            if dsf
+            else "Ce document présente l'avis du cabinet sur le contrat qui lui a été confié. "
+        )
         contenu.append(
             _p(
-                "Ce document présente l'avis du cabinet sur le contrat qui lui a été confié. "
+                objet
                 + (
                     "Une lecture assistée a préparé des propositions ; chaque point "
-                    "ci-dessous a été examiné, retenu et rédigé par le juriste du cabinet, "
-                    "puis validé par un second regard."
+                    "ci-dessous a été examiné, retenu et rédigé par un collaborateur du "
+                    "cabinet, puis validé par un second regard."
                     if assiste
-                    else "Chaque point ci-dessous a été rédigé par le juriste du cabinet, "
-                    "puis validé par un second regard."
+                    else "Chaque point ci-dessous a été rédigé par un collaborateur du "
+                    "cabinet, puis validé par un second regard."
                 ),
                 _NOTE,
             )
         )
         contenu.append(Spacer(0, 6 * mm))
-        for rubrique, titre in _ORDRE:
+        for rubrique, titre in _ORDRE_DSF if dsf else _ORDRE:
             points = [p for p in retenues if p.rubrique is rubrique]
             if not points:
                 continue

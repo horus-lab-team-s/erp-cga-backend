@@ -47,7 +47,7 @@ from app.contextes.souscription.domaine.honoraires import (
     ReglementDHonoraires,
     echeancier_d_honoraires,
 )
-from app.contextes.souscription.domaine.paiements import NaturePaiement, Paiement
+from app.contextes.souscription.domaine.paiements import NaturePaiement, Paiement, debit_en_attente
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
@@ -262,6 +262,22 @@ def payer_en_ligne(acces: AccesRequis, niu: str, corps: DemandeDeDebit) -> Debit
     from app.contextes.souscription.application.engagement import nouvelle_cle_idempotence
 
     boutique = _comptoir()
+    if debit_en_attente(
+        [
+            p
+            for p in boutique.paiements.par_souscription(niu)
+            if p.nature is NaturePaiement.HONORAIRES
+        ],
+        echeance=echeance.debut.isoformat(),
+        a_l_instant=maintenant(),
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Un débit est déjà en attente de confirmation sur votre téléphone pour cette "
+                "échéance. Validez-le, ou réessayez dans une demi-heure."
+            ),
+        )
     paiement = Paiement(
         identifiant=f"pay-{uuid.uuid4().hex[:16]}",
         nature=NaturePaiement.HONORAIRES,

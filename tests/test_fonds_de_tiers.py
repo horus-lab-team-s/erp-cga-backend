@@ -226,6 +226,12 @@ class TestDeLaRemiseAuReversement:
             json={"telephone": "+237655102030"},
         )
         assert demande.status_code == 202, demande.text
+        # 15 octobre 2026 : un second clic pendant que le premier débit attend ne débite pas.
+        second = client.post(
+            f"{FONDS}/appels/{appel['identifiant']}/paiement-en-ligne",
+            json={"telephone": "+237655102030"},
+        )
+        assert second.status_code == 409, second.text
         with moteur_test.connect() as connexion:
             (cle,) = connexion.execute(
                 text(

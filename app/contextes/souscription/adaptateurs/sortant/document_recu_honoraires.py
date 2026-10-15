@@ -8,7 +8,7 @@ altéré, comme sur la proforma.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 
@@ -27,6 +27,7 @@ from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
 )
 from app.contextes.souscription.domaine.honoraires import CanalDeReglement, ReglementDHonoraires
 from app.partage.formats import MOIS, en_toutes_lettres
+from app.partage.horloge import a_douala
 
 __all__ = ["rendre_le_recu", "rendre_un_recu"]
 
@@ -82,7 +83,7 @@ def rendre_un_recu(
     page.setFillColor(_INDIGO)
     page.setFont("Helvetica-Bold", 15)
     page.drawString(_MARGE, y, titre)
-    local = le + timedelta(hours=1)  # horodaté en UTC, lu à Douala
+    local = a_douala(le)
     page.setFont("Helvetica", 9)
     page.setFillColor(_GRIS)
     page.drawString(

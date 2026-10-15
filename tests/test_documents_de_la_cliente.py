@@ -74,7 +74,7 @@ class TestElleRetrouveSesDocuments:
         assert recu.status_code == 200, recu.text
         assert recu.headers["content-type"] == "application/pdf"
         texte = recu_texte._texte(recu.content)
-        assert "REÇU DE RÈGLEMENT" in texte and numero in texte
+        assert "REÇU DE RÈGLEMENT" in texte and f"N° R-{numero}" in texte
         assert "250 000" in texte and "au guichet du cabinet" in texte
 
     def test_pas_de_recu_avant_le_reglement(self, plateforme):
@@ -98,6 +98,24 @@ class TestRienDUneAutre:
         )
         assert client.get(f"/mes-documents/creation/{autre}/recu").status_code == 404
         assert [v["dossier"] for v in client.get("/mes-documents/creation").json()] == [sien]
+
+    def test_une_proforma_annulee_ne_s_ouvre_pas(self, plateforme):
+        """Revue du 15 octobre 2026 : le document suivait le dossier, pas l'état."""
+        from app.contextes.souscription.adaptateurs.sortant.depots_sql import DepotProformasSql
+        from app.contextes.souscription.domaine.proforma import EtatProforma
+        from app.contextes.transverse.api import unite_de_travail
+        from app.partage.locataire import etabli
+
+        client = plateforme
+        reference, numero = _vente(client, reglee=False)
+        with etabli("CGA-BRCG"), unite_de_travail("CGA-BRCG") as boutique:
+            depot = DepotProformasSql(boutique.session, "CGA-BRCG")
+            depot.enregistrer(depot.lire(numero).model_copy(update={"etat": EtatProforma.ANNULEE}))
+        _sa_session(client, reference)
+
+        assert client.get(f"/mes-documents/creation/proformas/{numero}/document").status_code == 404
+        (vue,) = client.get("/mes-documents/creation").json()
+        assert vue["proformas"] == []
 
     def test_un_collaborateur_n_emprunte_pas_ces_routes(self, plateforme):
         client = plateforme

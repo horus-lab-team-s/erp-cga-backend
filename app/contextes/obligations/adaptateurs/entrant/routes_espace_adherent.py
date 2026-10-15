@@ -31,6 +31,7 @@ registre divergerait.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -473,7 +474,10 @@ def juger_une_quittance(
             **({"motif": motif} if motif else {}),
         },
     )
-    _prevenir_du_verdict(entreprise, demande, motif, horodatage.date())
+    try:
+        _prevenir_du_verdict(entreprise, demande, motif, horodatage.date())
+    except Exception:  # noqa: BLE001 — le verdict est écrit ; l'avis ne doit pas l'annuler
+        logging.getLogger(__name__).exception("Avis du verdict sur %s non envoyé.", entreprise)
     return preuve.model_copy(
         update={
             "verdict": demande.verdict,

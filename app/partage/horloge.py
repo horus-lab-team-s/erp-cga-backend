@@ -48,7 +48,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 __all__ = ["horloge_figee", "maintenant"]
 
@@ -62,9 +62,20 @@ __all__ = ["horloge_figee", "maintenant"]
 #:
 #: ⚠️ Rien en production ne la renseigne, et rien ne doit le faire. Le défaut
 #: `None` est l'horloge réelle ; c'est une couture de test, pas un réglage.
-_INSTANT_IMPOSE: ContextVar[datetime | None] = ContextVar(
-    "instant_impose", default=None
-)
+_INSTANT_IMPOSE: ContextVar[datetime | None] = ContextVar("instant_impose", default=None)
+
+
+#: Douala vit à UTC+1 toute l'année (heure d'Afrique de l'Ouest, sans heure d'été).
+DECALAGE_DE_DOUALA = timedelta(hours=1)
+
+
+def a_douala(instant: datetime) -> datetime:
+    """L'instant UTC du système, lu à Douala : ce qu'un document remis au client affiche.
+
+    ⚠️ 15 octobre 2026 : trois documents ajoutaient chacun leur heure, et le livre légal
+    affichait l'heure UTC sans le dire. Un seul calcul désormais.
+    """
+    return instant + DECALAGE_DE_DOUALA
 
 
 def maintenant() -> datetime:

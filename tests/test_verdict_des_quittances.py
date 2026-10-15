@@ -127,6 +127,24 @@ class TestLeCabinetJuge:
         # La bonne quittance, même pièce corrigée ou non : l'envoi est de nouveau reçu.
         assert adherent.post(echeances.PREUVES, json=QUITTANCE).status_code == 201
 
+    def test_un_avis_en_panne_ne_fait_pas_perdre_le_verdict(self, monkeypatch):
+        """Revue du 15 octobre 2026 : l'avis levait après l'écriture du verdict, et la
+        transaction annulée l'emportait avec elle."""
+        from app.contextes.obligations.adaptateurs.entrant import routes_espace_adherent
+
+        def en_panne(*_a, **_k):
+            raise RuntimeError("serveur de courriel en panne")
+
+        monkeypatch.setattr(routes_espace_adherent, "_prevenir_du_verdict", en_panne)
+        adherent = _quittance_envoyee()
+        reviseur = echeances._client(echeances.REVISEUR)
+
+        verdict = reviseur.post(VERDICT, json={**QUITTANCE, "verdict": "VALIDEE"})
+
+        assert verdict.status_code == 200, verdict.text
+        carte = echeances._carte(adherent.get(echeances.ECHEANCES).json(), "CNPS", "2026-07-01")
+        assert carte["etat"] == "PAYEE"
+
     def test_un_verdict_ne_se_donne_qu_une_fois(self):
         _quittance_envoyee()
         reviseur = echeances._client(echeances.REVISEUR)

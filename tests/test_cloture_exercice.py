@@ -894,3 +894,68 @@ class TestLaFinDeLExerciceSuivant:
             self._depot(avec_2027=True), cloture_du_suivant=date(2027, 12, 31)
         )
         assert rapport.possible is True, [o.motif for o in rapport.obstacles]
+
+
+@exige_postgresql
+class TestLeReportGardeLesTiers:
+    """15 octobre 2026 : l'à-nouveau d'un compte de tiers se fait tiers par tiers.
+
+    Par les routes : une dette fournisseur saisie et validée sur un tiers doit se
+    retrouver, au 1er janvier, au nom de ce tiers. Le détail lui-même est éprouvé dans
+    `test_a_nouveau_par_tiers.py` ; ce cas garde le branchement dans la clôture.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _au_lendemain_de_l_exercice(self):
+        """Comme `TestLaClotureParLaRoute` : un cabinet clôt 2026 en janvier 2027."""
+        with horloge_figee(datetime(2027, 1, 15, 9, 0)):
+            yield
+
+    def test_la_dette_du_fournisseur_passe_a_son_nom(self, plateforme):
+        client = plateforme
+        fournisseur = "M012345678901A"
+        ouvrir_une_session(client, COMPTABLE)
+        saisie = client.post(
+            f"/comptabilite/dossiers/{DOSSIER}/ecritures",
+            json={
+                "journal": "OD",
+                "exercice": "2026",
+                "date_operation": "2026-06-15",
+                "libelle": "Facture ALUCAM non réglée",
+                "piece_justificative": "FA-ALU-0612",
+                "lignes": [
+                    {"compte": "602", "libelle": "Achat", "sens": "DEBIT", "montant": "2500000"},
+                    {
+                        "compte": "401",
+                        "libelle": "ALUCAM",
+                        "sens": "CREDIT",
+                        "montant": "2500000",
+                        "tiers": fournisseur,
+                    },
+                ],
+            },
+        )
+        assert saisie.status_code == 201, saisie.text
+        numero = saisie.json()["numero"]
+        validation = client.post(
+            f"/comptabilite/dossiers/{DOSSIER}/ecritures/2026/OD/{numero}/validation"
+        )
+        assert validation.status_code == 200, validation.text
+
+        ouvrir_une_session(client, REVISEUR)
+        assert _clore(client, appliquer=True)["applique"] is True
+
+        corps = client.get(
+            f"/comptabilite/dossiers/{DOSSIER}/ecritures", params={"exercice": "2027"}
+        ).json()
+        ecritures = corps if isinstance(corps, list) else corps.get("ecritures", [])
+        au_nom = [
+            ligne
+            for e in ecritures
+            if e["journal"] == "AN"
+            for ligne in e["lignes"]
+            if ligne["compte"] == "401" and ligne.get("tiers") == fournisseur
+        ]
+        assert [(x["sens"], Decimal(x["montant"])) for x in au_nom] == [
+            ("CREDIT", Decimal(2500000))
+        ], au_nom

@@ -22,7 +22,6 @@ ACTION_AVIS = "souscription.avis_honoraires_envoye"
 
 def prevenir_du_reglement(evenement: EvenementSortant, *, unite: Any = None) -> bool:
     """Rend `True` si l'avis est parti à ce passage."""
-    from app.contextes.souscription.adaptateurs.entrant.routes_honoraires import _denomination
     from app.contextes.transverse.api import prevenir_les_adherents
     from app.contextes.transverse.api import unite_de_travail as unite_de_la_plateforme
     from app.infrastructure.config import configuration
@@ -58,6 +57,21 @@ def prevenir_du_reglement(evenement: EvenementSortant, *, unite: Any = None) -> 
             apres={"dossier": c["niu"], "periode": c["periode"]},
         )
         return True
+
+
+def _denomination(niu: str) -> str:
+    """La dénomination au portefeuille, sinon le NIU.
+
+    ⚠️ 15 octobre 2026 : l'abonné empruntait la garde de la route, qui lève 404 ; le relais
+    rejouait l'événement jusqu'à la quarantaine et l'avis ne partait jamais. Un nom absent
+    ne doit pas empêcher de prévenir l'adhérent.
+    """
+    from app.contextes.portefeuille.api import depot_entreprises
+
+    try:
+        return depot_entreprises().lire(niu).denomination
+    except LookupError:
+        return niu
 
 
 def abonne_avis_honoraires(unite: Any = None):

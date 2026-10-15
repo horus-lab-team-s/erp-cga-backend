@@ -3658,7 +3658,7 @@ def _solliciter_le_telephone(
         montant=paiement.montant,
         telephone=paiement.telephone,
         cle_idempotence=paiement.cle_idempotence,
-        libelle=f"{proforma.service} — {proforma.numero}",
+        libelle=f"{proforma.service} · {proforma.numero}",
     )
     if initiation.reference_externe:
         boutique.paiements.enregistrer(

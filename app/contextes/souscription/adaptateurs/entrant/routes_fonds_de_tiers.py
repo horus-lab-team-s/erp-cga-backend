@@ -44,7 +44,7 @@ from app.contextes.souscription.domaine.fonds_de_tiers import (
     identifiant_d_appel,
 )
 from app.contextes.souscription.domaine.honoraires import CanalDeReglement
-from app.contextes.souscription.domaine.paiements import NaturePaiement, Paiement
+from app.contextes.souscription.domaine.paiements import NaturePaiement, Paiement, debit_en_attente
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
@@ -221,6 +221,18 @@ def confier_en_ligne(
     from app.contextes.souscription.application.engagement import nouvelle_cle_idempotence
 
     boutique = _comptoir()
+    if debit_en_attente(
+        boutique.paiements.par_souscription(appel.identifiant),
+        echeance=None,
+        a_l_instant=maintenant(),
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Un débit est déjà en attente de confirmation sur votre téléphone pour cette "
+                "échéance. Validez-le, ou réessayez dans une demi-heure."
+            ),
+        )
     paiement = Paiement(
         identifiant=f"pay-{uuid.uuid4().hex[:16]}",
         nature=NaturePaiement.FONDS_DE_TIERS,
@@ -235,7 +247,7 @@ def confier_en_ligne(
         montant=paiement.montant,
         telephone=paiement.telephone,
         cle_idempotence=paiement.cle_idempotence,
-        libelle=f"{appel.libelle} {appel.periode_debut:%m/%Y} — {appel.denomination}",
+        libelle=f"{appel.libelle} {appel.periode_debut:%m/%Y}, {appel.denomination}",
     )
     if initiation.reference_externe:
         boutique.paiements.enregistrer(paiement.avec_reference(initiation.reference_externe))

@@ -42,6 +42,8 @@ dependencies = [
     # ⚠️ Sa police Helvetica intégrée couvre le Latin-1, donc les accents
     # français et le signe degré de « n° ». Aucun fichier de police à embarquer.
     "reportlab>=4.0",
+    # 15 octobre 2026 : les balances auxiliaires que la DGI demande au format Excel.
+    "openpyxl>=3.1,<4",
 ]
 
 [project.optional-dependencies]

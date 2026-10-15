@@ -289,6 +289,19 @@ class TestLeLivrable:
         assert "Force majeure" not in livre  # écartée
         assert "Bernadette MBALLA" in livre
 
+    def test_une_dsf_ciblee_ne_parle_pas_de_contrat(self):
+        """15 octobre 2026 : le livrable d'une DSF ciblée disait « objet du contrat »."""
+        m = _avec_points(
+            _mission(type=TypeMission.DSF_CIBLEE, dossier_niu="P027788990011M", exercice="2025")
+        )
+        for rang in (1, 2, 3):
+            m = m.decider(rang, decision=DecisionProposition.RETENUE, par="C-003", a_l_instant=LE)
+
+        texte = _texte_pdf(rendre_le_livrable(m))
+
+        assert "Synthèse de la déclaration" in texte and "exercice 2025" in texte
+        assert "contrat" not in texte.lower().replace("dsf ciblée", "")
+
 
 # ── Par les routes, sur une vraie base ────────────────────────────────────────────
 

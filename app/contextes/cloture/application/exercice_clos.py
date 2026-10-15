@@ -52,6 +52,7 @@ from app.contextes.cloture.domaine.a_nouveau import (
     MotifEmpechement,
     lignes_d_a_nouveau,
     obstacles_a_la_cloture,
+    soldes_par_tiers,
 )
 from app.contextes.comptabilite.api import (
     BrouillonEcriture,
@@ -251,7 +252,9 @@ def clore_un_exercice(
         )
 
     gain = resultat(soldes)
-    lignes = lignes_d_a_nouveau(soldes, plan=plan)
+    lignes = lignes_d_a_nouveau(
+        soldes, plan=plan, detail_par_tiers=soldes_par_tiers(ecritures)
+    )
 
     if obstacles or not appliquer:
         return RapportDeCloture(

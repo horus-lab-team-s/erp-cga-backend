@@ -32,6 +32,8 @@ __all__ = ["routeur"]
 routeur = APIRouter(prefix="/mes-documents", tags=["Espace client"])
 
 _PREFIXE = "CRE-"
+#: Les états d'une proforma que la cliente a reçue.
+_TRANSMISES = (EtatProforma.TRANSMISE, EtatProforma.ACCEPTEE)
 
 
 def _dossiers_commerciaux(acces: AccesRequis) -> list[str]:
@@ -90,7 +92,7 @@ def mes_documents(acces: AccesRequis) -> list[MesDocumentsDeCreation]:
             )
             for p in _proformas().par_dossier(reference)
             # Ce qu'on lui a transmis : une proforma émise mais jamais envoyée reste au cabinet.
-            if p.etat in (EtatProforma.TRANSMISE, EtatProforma.ACCEPTEE)
+            if p.etat in _TRANSMISES
         ]
         payee = dossier.etat is EtatDossier.PAYEE and dossier.payee_le is not None
         vues.append(
@@ -123,7 +125,9 @@ def ma_proforma(acces: AccesRequis, numero: str) -> Response:
         proforma = _proformas().lire(numero)
     except ProformaIntrouvable as absente:
         raise HTTPException(status_code=404, detail=f"proforma {numero} introuvable.") from absente
-    if proforma.dossier not in _dossiers_commerciaux(acces):
+    # ⚠️ La même règle que la liste : ce qu'on lui a transmis, rien d'autre. Une proforma
+    # émise mais jamais envoyée, ou annulée, reste au cabinet.
+    if proforma.dossier not in _dossiers_commerciaux(acces) or proforma.etat not in _TRANSMISES:
         raise HTTPException(status_code=404, detail=f"proforma {numero} introuvable.")
     return _le_document(proforma)
 
@@ -173,7 +177,9 @@ def mon_recu(acces: AccesRequis, dossier: str) -> Response:
     )
     octets = rendre_un_recu(
         titre="REÇU DE RÈGLEMENT · ACQUITTÉ",
-        numero=f"RC-{dossier}",
+        # Le numéro de la proforma soldée : lisible par la cliente, unique (un dossier ne
+        # solde qu'une proforma), et sans seconde numérotation à tenir.
+        numero=f"R-{proforma.numero}",
         le=commercial.payee_le,
         avant=[
             ("Client", commercial.demande.nom),
@@ -185,5 +191,5 @@ def mon_recu(acces: AccesRequis, dossier: str) -> Response:
     return Response(
         content=octets,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="recu-{dossier}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="recu-{proforma.numero}.pdf"'},
     )

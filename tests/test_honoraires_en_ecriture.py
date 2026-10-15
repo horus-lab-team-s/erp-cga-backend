@@ -187,3 +187,14 @@ class TestLEcritureProposee:
         assert avis.contexte["lien"].endswith("/fr/mon-espace/honoraires")
         assert prevenir_du_reglement(rejouee) is False
         assert len(service_de_notification().derniers("adherent.honoraires_regles")) == 1
+
+        # Revue du 15 octobre 2026 : un NIU absent du portefeuille levait 404 dans l'abonné,
+        # et le relais rejouait l'événement jusqu'à la quarantaine.
+        inconnu = EvenementSortant(
+            identifiant="hr-RH-INCONNU",
+            nom=NOM_HONORAIRES_REGLES,
+            cle="RH-INCONNU",
+            charge={**rejouee.charge, "identifiant": "RH-INCONNU", "niu": "M000000000000Z"},
+            depose_le=datetime(2026, 10, 15, 9, 0),
+        )
+        assert prevenir_du_reglement(inconnu) is True

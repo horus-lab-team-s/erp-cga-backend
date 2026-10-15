@@ -161,6 +161,13 @@ class TestLeReglementEnLigne:
         )
         assert demande.status_code == 202, demande.text
         assert demande.json()["simule"] is True
+        # 15 octobre 2026 : un second clic, le débit précédent encore en attente, ne débite
+        # pas une seconde fois.
+        second = client.post(
+            f"/souscription/honoraires/{BATIMENT}/paiement-en-ligne",
+            json={"periode": periode["debut"], "telephone": "+237655102030"},
+        )
+        assert second.status_code == 409, second.text
         # ⚠️ Un clic n'est pas un paiement : la période est toujours due.
         assert _du_mois(client.get(f"/souscription/honoraires/{BATIMENT}").json(), "A_REGLER")
 

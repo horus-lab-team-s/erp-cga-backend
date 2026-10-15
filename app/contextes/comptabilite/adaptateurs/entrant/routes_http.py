@@ -82,6 +82,7 @@ from app.contextes.comptabilite.application.reprise import (
     RapportDeReprise,
     reprendre_un_lot,
 )
+from app.contextes.comptabilite.domaine.balance_auxiliaire import NatureAuxiliaire
 from app.contextes.comptabilite.domaine.cloture_mensuelle import (
     PeriodeVerrouillee,
     periodes_verrouillees,
@@ -1229,6 +1230,164 @@ def _reprendre_le_lot(
         depot=depot(entreprise),
         par=par,
         appliquer=appliquer,
+    )
+
+
+# ── Les balances auxiliaires, annexes de la DSF (15 octobre 2026) ────────────────
+
+
+class LigneAuxiliaire(BaseModel):
+    tiers: str | None
+    denomination: str | None
+    niu: str | None
+    report: Decimal
+    debit: Decimal
+    credit: Decimal
+    solde: Decimal
+
+
+def _balance_auxiliaire_du_dossier(entreprise: str, exercice: str, nature):
+    """Les lignes, et la fiche de chaque tiers : le registre du dossier d'abord, puis le
+    code lui-même quand il a la forme d'un NIU au référentiel (une écriture née d'une
+    facture lue porte le NIU du fournisseur)."""
+    import re
+
+    from app.contextes.comptabilite.adaptateurs.sortant.balance_auxiliaire_excel import (
+        FicheDuTiers,
+    )
+    from app.contextes.comptabilite.domaine.balance_auxiliaire import balance_auxiliaire
+    from app.contextes.referentiel.api import (
+        AucuneVersionApplicable,
+        ParametreInconnu,
+        service_parametres,
+    )
+
+    lignes = balance_auxiliaire(depot(entreprise).lister(exercice), nature)
+    dossier = _dossier_du_portefeuille(entreprise)
+    fiches: dict[str, FicheDuTiers] = {}
+    for t in dossier.tiers if dossier else []:
+        fiche = FicheDuTiers(denomination=t.denomination, niu=t.niu)
+        fiches[t.code] = fiche
+        if t.niu:
+            fiches.setdefault(t.niu, fiche)
+    try:
+        motif = service_parametres().valeur_texte("FORMAT_NIU", maintenant().date())
+    except (ParametreInconnu, AucuneVersionApplicable):  # sans format, on ne devine pas
+        motif = None
+    noms = _noms_des_emetteurs(entreprise)
+    for ligne in lignes:
+        if ligne.tiers and ligne.tiers not in fiches and motif and re.match(motif, ligne.tiers):
+            fiches[ligne.tiers] = FicheDuTiers(
+                denomination=noms.get(ligne.tiers, ""), niu=ligne.tiers
+            )
+    return lignes, fiches, dossier
+
+
+def _noms_des_emetteurs(entreprise: str) -> dict[str, str]:
+    """Le nom de chaque émetteur d'une facture du dossier, par son NIU (15 octobre 2026).
+
+    Une écriture née d'une facture porte le NIU du fournisseur, pas son nom : sans ceci,
+    la balance auxiliaire montrait une colonne « raison sociale » vide. Deux sources, les
+    factures lues à la collecte puis celles du contrôle de conformité ; la première lue
+    l'emporte, et une source en panne laisse la colonne vide plutôt que l'export en échec.
+    """
+    import logging
+
+    journal = logging.getLogger(__name__)
+    noms: dict[str, str] = {}
+    try:
+        from app.contextes.collecte.api import DepotPiecesSql, pieces_en_memoire
+
+        session = session_de_travail()
+        pieces = pieces_en_memoire() if session is None else DepotPiecesSql(session, courant())
+        for piece in pieces.du_dossier(entreprise):
+            lue = piece.facture
+            if lue is not None and lue.niu_emetteur:
+                noms.setdefault(lue.niu_emetteur, lue.emetteur)
+    except Exception:  # noqa: BLE001 — un nom manquant ne bloque pas une balance
+        journal.warning("Noms des émetteurs : pièces de %s illisibles.", entreprise)
+    try:
+        from app.contextes.conformite.api import FACTURES_DEMO
+
+        for facture in FACTURES_DEMO.values():
+            e = facture.emetteur
+            if facture.destinataire.niu == entreprise and e.niu and e.denomination:
+                noms.setdefault(e.niu, e.denomination)
+    except Exception:  # noqa: BLE001
+        journal.warning("Noms des émetteurs : factures de conformité illisibles.")
+    return noms
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/balances-auxiliaires/{nature}",
+    summary="La balance auxiliaire clients ou fournisseurs, tiers par tiers",
+    responses={403: {"description": "Habilitation insuffisante sur ce dossier"}},
+)
+def lire_la_balance_auxiliaire(
+    acces: AccesRequis,
+    entreprise: str,
+    nature: NatureAuxiliaire,
+    exercice: str = Query(description="L'exercice, par exemple « 2026 »."),
+) -> list[LigneAuxiliaire]:
+    """Sur les écritures VALIDÉES. Voir `domaine/balance_auxiliaire.py`."""
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    lignes, fiches, _ = _balance_auxiliaire_du_dossier(entreprise, exercice, nature)
+    return [
+        LigneAuxiliaire(
+            tiers=x.tiers,
+            denomination=(fiches[x.tiers].denomination or None) if x.tiers in fiches else None,
+            niu=fiches[x.tiers].niu if x.tiers in fiches else None,
+            report=x.report,
+            debit=x.debit,
+            credit=x.credit,
+            solde=x.solde,
+        )
+        for x in lignes
+    ]
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/balances-auxiliaires/{nature}/excel",
+    summary="La balance auxiliaire en Excel, annexe de la DSF",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}},
+        403: {"description": "Habilitation insuffisante sur ce dossier"},
+    },
+)
+def exporter_la_balance_auxiliaire(
+    acces: AccesRequis,
+    entreprise: str,
+    nature: NatureAuxiliaire,
+    exercice: str = Query(description="L'exercice, par exemple « 2026 »."),
+) -> Response:
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    from app.contextes.comptabilite.adaptateurs.sortant.balance_auxiliaire_excel import (
+        EnteteBalanceAuxiliaire,
+        rendre_la_balance_auxiliaire,
+    )
+
+    lignes, fiches, dossier = _balance_auxiliaire_du_dossier(entreprise, exercice, nature)
+    octets = rendre_la_balance_auxiliaire(
+        lignes,
+        EnteteBalanceAuxiliaire(
+            niu=entreprise,
+            denomination=dossier.denomination if dossier else entreprise,
+            exercice=exercice,
+            nature=nature,
+            editee_le=maintenant(),
+        ),
+        fiches,
+    )
+    return Response(
+        content=octets,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{entreprise}-{exercice}-balance-auxiliaire-'
+                f'{nature.value}.xlsx"'
+            )
+        },
     )
 
 

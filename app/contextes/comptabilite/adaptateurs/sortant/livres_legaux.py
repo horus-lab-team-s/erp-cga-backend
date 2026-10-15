@@ -38,6 +38,7 @@ from app.contextes.comptabilite.domaine.entites import EcritureComptable, EtatEc
 from app.contextes.comptabilite.domaine.projections import balance, grand_livre
 from app.partage.formats import ESPACE_FINE
 from app.partage.formats import montant as _montant_ecran
+from app.partage.horloge import a_douala
 
 __all__ = ["Livre", "EnteteDuLivre", "rendre_le_livre"]
 
@@ -391,7 +392,7 @@ def rendre_le_livre(
             marge,
             9 * mm,
             f"Tenu par CGA Broad Range Consulting Group · édité le "
-            f"{entete.edite_le:%d/%m/%Y à %H:%M}",
+            f"{a_douala(entete.edite_le):%d/%m/%Y à %H:%M} (heure de Douala)",
         )
         toile.drawRightString(taille[0] - marge, 9 * mm, f"Page {doc.page}")
         toile.restoreState()

@@ -178,7 +178,7 @@ class FournisseurTara:
             "webHookUrl": self.adresse_de_rappel(),
             # Vide délibérément : Tara déduit l'opérateur du préfixe.
             "network": "",
-            "productDescription": f"{libelle} — CGA Broad Range Consulting Group",
+            "productDescription": f"{libelle} · CGA Broad Range Consulting Group",
             "returnUrl": f"{self._adresse_publique}/souscription/retour",
         }
         try:

@@ -52,6 +52,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
+from app.partage.en_tetes import disposition_en_ligne
 from app.partage.erreurs import message_lisible
 from app.partage.horloge import maintenant
 from app.partage.locataire import courant
@@ -168,7 +169,7 @@ def document(acces: AccesRequis, identifiant: str) -> Response:
     return Response(
         content=contenu,
         media_type=detecter_le_type(contenu) or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{mission.document_nom or "document"}"'},
+        headers={"Content-Disposition": disposition_en_ligne(mission.document_nom or "document")},
     )
 
 

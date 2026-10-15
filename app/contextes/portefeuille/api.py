@@ -23,6 +23,7 @@ Consommateurs prévus : `conformite` (portée des règles par régime), `comptab
 
 from __future__ import annotations
 
+from app.contextes.portefeuille.adaptateurs.sortant.depot_courant import depot_entreprises
 from app.contextes.portefeuille.adaptateurs.sortant.depot_entreprises_memoire import (
     DepotEntreprisesMemoire,
     EntrepriseIntrouvable,
@@ -85,6 +86,7 @@ from app.contextes.portefeuille.domaine.regimes import (
 from app.contextes.portefeuille.domaine.temporel import verifier_succession
 
 __all__ = [
+    "depot_entreprises",
     "entreprises_en_memoire",
     "vider_les_entreprises_en_memoire",
     "AdhesionRefusee",

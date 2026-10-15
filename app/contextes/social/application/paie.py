@@ -184,7 +184,7 @@ def calculer_bulletin(
 
     pension_salariale = _ligne(
         code="CNPS_PVID_S",
-        libelle="CNPS — pension vieillesse, invalidité, décès",
+        libelle="CNPS, pension vieillesse, invalidité, décès",
         assiette=assiette_plafonnee,
         resolu=_lire(parametres, "CNPS_PVID_TAUX_SALARIE", periode),
         a_charge_du_salarie=True,
@@ -200,21 +200,21 @@ def calculer_bulletin(
         ),
         _ligne(
             code="CNPS_PVID_P",
-            libelle="CNPS — pension vieillesse, invalidité, décès (patronale)",
+            libelle="CNPS, pension vieillesse, invalidité, décès (patronale)",
             assiette=assiette_plafonnee,
             resolu=_lire(parametres, "CNPS_PVID_TAUX_EMPLOYEUR", periode),
             a_charge_du_salarie=False,
         ),
         _ligne(
             code="CNPS_PF",
-            libelle="CNPS — prestations familiales",
+            libelle="CNPS, prestations familiales",
             assiette=assiette_plafonnee,
             resolu=_lire(parametres, "CNPS_PRESTATIONS_FAMILIALES_TAUX", periode),
             a_charge_du_salarie=False,
         ),
         _ligne(
             code="CNPS_AT",
-            libelle=f"CNPS — accidents du travail, groupe {groupe_risque}",
+            libelle=f"CNPS, accidents du travail, groupe {groupe_risque}",
             # Non plafonnée : voir le commentaire ci-dessus.
             assiette=brut_taxable,
             resolu=_lire(parametres, CODE_ACCIDENTS_TRAVAIL[groupe_risque], periode),

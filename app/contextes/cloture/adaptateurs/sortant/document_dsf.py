@@ -17,7 +17,6 @@ page, pour qu'aucun adhérent ne le prenne pour sa déclaration officielle.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 
@@ -38,6 +37,7 @@ from reportlab.platypus import (
 from app.contextes.cloture.domaine.declaration_dsf import DeclarationDSF, EtatDSF
 from app.partage.formats import ESPACE_FINE
 from app.partage.formats import montant as _montant_ecran
+from app.partage.horloge import a_douala
 
 __all__ = ["rendre_la_dsf"]
 
@@ -129,7 +129,7 @@ def rendre_la_dsf(dsf: DeclarationDSF, *, noms: dict[str, str] | None = None) ->
 
     def _douala(instant) -> str:
         # Horodaté en UTC (`partage/horloge.py`) ; lu à Douala, UTC+1 sans heure d'été.
-        return f"{instant + timedelta(hours=1):%d/%m/%Y %H:%M}"
+        return f"{a_douala(instant):%d/%m/%Y %H:%M}"
 
     def qui(compte: str | None) -> str:
         if not compte:
