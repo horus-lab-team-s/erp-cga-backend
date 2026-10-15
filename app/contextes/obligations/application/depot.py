@@ -644,7 +644,12 @@ def constater_depot(
 
 #: Les obligations qui ont leur propre parcours de dépôt, contrôles compris. Les
 #: constater ici contournerait ces contrôles.
-PARCOURS_DEDIES = {"TVA": "/obligations/dossiers/{entreprise}/depot-tva"}
+PARCOURS_DEDIES = {
+    "TVA": "/obligations/dossiers/{entreprise}/depot-tva",
+    # 14 octobre 2026 : la DSF se prépare, se valide et se dépose sur sa version figée,
+    # et l'accusé y est confronté à l'empreinte. Un constat libre la contournerait.
+    "DSF": "/cloture/dossiers/{entreprise}/dsf/{{exercice}}",
+}
 
 
 def constater_un_depot_hors_tva(

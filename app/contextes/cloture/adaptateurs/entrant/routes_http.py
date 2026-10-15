@@ -185,7 +185,16 @@ def lire_liasse(
     rien : il n'est plus lu.
     """
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    return assembler_la_liasse(entreprise, exercice)
 
+
+def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
+    """La liasse d'un exercice, telle que l'écran la lit et que la DSF la fige.
+
+    Extraite de la route le 14 octobre 2026 : la DSF préparée doit porter exactement
+    la liasse que le réviseur a lue, par le même calcul, et non une copie de celui-ci.
+    Le contrôle d'accès reste à l'appelant.
+    """
     try:
         dossier = _depot_dossiers().lire(entreprise)
     except EntrepriseIntrouvable as absence:

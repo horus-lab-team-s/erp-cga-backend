@@ -236,6 +236,10 @@ class Permission(StrEnum):
     # ── Obligations et clôture ───────────────────────────────────────────────
     DEPOSER_DECLARATION = "DEPOSER_DECLARATION"
     CLOTURER_EXERCICE = "CLOTURER_EXERCICE"
+    #: Figer la liasse d'un exercice clos en une version de DSF (14 octobre 2026). Le
+    #: comptable et le réviseur : préparer n'engage rien, la validation (REVISER_DOSSIER,
+    #: par un autre que le préparateur) et le dépôt (DEPOSER_DECLARATION) engagent.
+    PREPARER_DSF = "PREPARER_DSF"
 
     # ── Portefeuille ─────────────────────────────────────────────────────────
     #
@@ -386,6 +390,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.VALIDER_ECRITURE,
         Permission.CONTRE_PASSER,
         Permission.RELANCER_PIECES,
+        Permission.PREPARER_DSF,
     },
     # Le réviseur reprend tout ce que fait le comptable, et détient seul les
     # trois actes qui engagent le cabinet vis-à-vis de l'administration.
@@ -407,6 +412,7 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.DEPOSER_DECLARATION,
         Permission.CLOTURER_EXERCICE,
         Permission.INSCRIRE_STATUT,
+        Permission.PREPARER_DSF,
     },
     # Le fiscaliste ne tient aucune comptabilité : il fixe la norme que les
     # autres appliquent. C'est le seul à pouvoir toucher au référentiel, et cette

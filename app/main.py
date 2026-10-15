@@ -14,6 +14,9 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.contextes.cloture.adaptateurs.entrant.routes_dsf import (
+    routeur as routeur_dsf,
+)
 from app.contextes.cloture.adaptateurs.entrant.routes_http import (
     routeur as routeur_cloture,
 )
@@ -659,6 +662,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_creations)
     application.include_router(routeur_social)
     application.include_router(routeur_cloture)
+    application.include_router(routeur_dsf)
     # J · Pilotage vient en dernier des contextes métier : il les agrège tous.
     application.include_router(routeur_pilotage)
     # Pas 104 : le plan de travail des collaborateurs, qui réutilise les relevés du pilotage.
