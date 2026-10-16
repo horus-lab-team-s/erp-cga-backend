@@ -23,11 +23,20 @@ from app.contextes.cloture.adaptateurs.entrant.routes_http import (
 from app.contextes.cloture.adaptateurs.entrant.routes_pieces_dsf import (
     routeur as routeur_pieces_dsf,
 )
+from app.contextes.collecte.adaptateurs.entrant.routes_facture_lue import (
+    routeur as routeur_facture_lue,
+)
 from app.contextes.collecte.adaptateurs.entrant.routes_http import (
     routeur as routeur_collecte,
 )
+from app.contextes.comptabilite.adaptateurs.entrant.routes_annexes_dsf import (
+    routeur as routeur_annexes_dsf,
+)
 from app.contextes.comptabilite.adaptateurs.entrant.routes_cloture_mensuelle import (
     routeur as routeur_cloture_mensuelle,
+)
+from app.contextes.comptabilite.adaptateurs.entrant.routes_echange import (
+    routeur as routeur_echange,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_fiche_ecriture import (
     routeur as routeur_fiche_ecriture,
@@ -46,6 +55,9 @@ from app.contextes.comptabilite.adaptateurs.entrant.routes_revue import (
 )
 from app.contextes.conformite.adaptateurs.entrant.routes_http import (
     routeur as routeur_conformite,
+)
+from app.contextes.conformite.adaptateurs.entrant.routes_regles_du_cabinet import (
+    routeur as routeur_regles_du_cabinet,
 )
 from app.contextes.creation_entreprise.adaptateurs.entrant.routes_http import (
     routeur as routeur_creations,
@@ -116,8 +128,14 @@ from app.contextes.souscription.adaptateurs.entrant.routes_proforma import (
 from app.contextes.transverse.adaptateurs.entrant.limitation import (
     IntergicielLimitationDebit,
 )
+from app.contextes.transverse.adaptateurs.entrant.routes_comptes import (
+    routeur as routeur_comptes,
+)
 from app.contextes.transverse.adaptateurs.entrant.routes_http import (
     routeur as routeur_transverse,
+)
+from app.contextes.transverse.adaptateurs.entrant.routes_mandats import (
+    routeur as routeur_mandats,
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_orchestration import (
     routeur as routeur_orchestration,
@@ -127,6 +145,9 @@ from app.contextes.transverse.adaptateurs.entrant.routes_referentiel import (
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_registre import (
     routeur as routeur_registre,
+)
+from app.contextes.transverse.adaptateurs.entrant.routes_second_facteur import (
+    routeur as routeur_second_facteur,
 )
 from app.contextes.transverse.api import IntergicielUniteDeTravail, garnir_le_repertoire
 from app.contextes.vitrine.adaptateurs.entrant.routes_http import (
@@ -663,6 +684,9 @@ def creer_application() -> FastAPI:
     # le transverse dit qui parle et ce qu'il a le droit de faire, le référentiel
     # dit ce que la loi prévoit.
     application.include_router(routeur_transverse)
+    application.include_router(routeur_comptes)
+    application.include_router(routeur_second_facteur)
+    application.include_router(routeur_mandats)
     # Le registre des services, sous le même préfixe : c'est une surface
     # d'administration de la plateforme, au même titre que le journal d'audit.
     application.include_router(routeur_registre)
@@ -675,8 +699,12 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_referentiel)
     application.include_router(routeur_portefeuille)
     application.include_router(routeur_collecte)
+    application.include_router(routeur_facture_lue)
     application.include_router(routeur_conformite)
+    application.include_router(routeur_regles_du_cabinet)
     application.include_router(routeur_comptabilite)
+    application.include_router(routeur_echange)
+    application.include_router(routeur_annexes_dsf)
     # Pas 101 : le rapprochement bancaire, même préfixe, module à part.
     application.include_router(routeur_rapprochement)
     # Pas 102 : la revue d'un mois transmis, même préfixe, module à part.

@@ -364,7 +364,7 @@ class TestLaLectureParLaRoute:
         assert refus.status_code == 503, refus.text
 
     def test_avec_un_moteur_elle_propose_sans_rien_enregistrer(self, plateforme, monkeypatch):
-        from app.contextes.collecte.adaptateurs.entrant import routes_http as collecte
+        from app.contextes.collecte.adaptateurs.entrant import routes_facture_lue as collecte
 
         faux = FauxClient(reponse=_reponse(LUE))
         monkeypatch.setattr(
