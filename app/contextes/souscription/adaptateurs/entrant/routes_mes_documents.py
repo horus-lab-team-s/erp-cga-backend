@@ -117,7 +117,7 @@ def mes_documents(acces: AccesRequis) -> list[MesDocumentsDeCreation]:
 )
 def ma_proforma(acces: AccesRequis, numero: str) -> Response:
     exiger(acces, Permission.SUIVRE_MA_CREATION)
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+    from app.contextes.souscription.adaptateurs.entrant.routes_proforma import (
         servir_le_pdf_de_la_proforma,
     )
     from app.contextes.souscription.adaptateurs.entrant.sources import (

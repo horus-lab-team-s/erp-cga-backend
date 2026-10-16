@@ -110,6 +110,9 @@ from app.contextes.souscription.adaptateurs.entrant.routes_inscription import (
 from app.contextes.souscription.adaptateurs.entrant.routes_missions import (
     routeur as routeur_missions,
 )
+from app.contextes.souscription.adaptateurs.entrant.routes_proforma import (
+    routeur as routeur_proforma,
+)
 from app.contextes.transverse.adaptateurs.entrant.limitation import (
     IntergicielLimitationDebit,
 )
@@ -734,6 +737,7 @@ def creer_application() -> FastAPI:
     # formulaire public et s'arrête au dossier qualifié. Monté à part parce qu'il
     # a son propre préfixe et sa propre étiquette, et parce qu'il grandira.
     application.include_router(routeur_acquisition)
+    application.include_router(routeur_proforma)
     # Le socle d'orchestration, monté en dernier : il n'appartient à aucun
     # contexte métier, et c'est lui qui les relie. Ses routes sont des gestes
     # d'exploitation, jamais du parcours client.

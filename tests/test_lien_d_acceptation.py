@@ -436,7 +436,7 @@ class TestLAcceptationLaisseUneTraceChezLeClient:
         contractuelle** — pour un accusé. C'est le raisonnement déjà tenu par la
         route pour la transition du dossier.
         """
-        import app.contextes.souscription.adaptateurs.entrant.routes_acquisition as routes
+        import app.contextes.souscription.adaptateurs.entrant.routes_proforma as routes
 
         client = plateforme
         proforma = _proforma_emise(client, "699445511")

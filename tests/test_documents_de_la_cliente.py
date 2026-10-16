@@ -24,7 +24,7 @@ CAISSIERE = "n.essama@cga-brcg.cm"
 
 def _vente(client, *, reglee: bool) -> tuple[str, str]:
     """Une création acceptée, son PDF rangé au magasin comme l'émission le range."""
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+    from app.contextes.souscription.adaptateurs.entrant.routes_proforma import (
         magasin_des_proformas,
     )
     from app.contextes.souscription.domaine.proforma import empreinte
