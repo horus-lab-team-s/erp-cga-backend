@@ -51,11 +51,14 @@ from pydantic import (
 )
 from sqlalchemy.exc import IntegrityError
 
+from app.contextes.souscription.adaptateurs.entrant.sources import (
+    boite_du_parcours,
+    depot_dossiers,
+    depot_proformas,
+    referentiel_d_acquisition,
+)
 from app.contextes.souscription.adaptateurs.sortant.annuaire_des_candidats import (
     monter_les_candidatures,
-)
-from app.contextes.souscription.adaptateurs.sortant.catalogue_modeles import (
-    CatalogueDeModeles,
 )
 from app.contextes.souscription.adaptateurs.sortant.compositions_proforma import (
     RepertoireDesCompositions,
@@ -70,17 +73,11 @@ from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     RappelIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
-    DepotDossiersSql,
-    DepotProformasSql,
     DepotQualificationsSql,
     DepotRappelsSql,
 )
 from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
     rendre_le_document,
-)
-from app.contextes.souscription.adaptateurs.sortant.grille_tarifaire import (
-    charger_les_baremes,
-    charger_les_regles_de_tarification,
 )
 from app.contextes.souscription.adaptateurs.sortant.magasins_memoire import (
     dossiers_memoire,
@@ -91,15 +88,8 @@ from app.contextes.souscription.adaptateurs.sortant.motifs_de_classement import 
     MotifDeClassement,
     charger_les_motifs_de_classement,
 )
-from app.contextes.souscription.adaptateurs.sortant.plan_de_contact import (
-    charger_le_plan_de_contact,
-)
 from app.contextes.souscription.adaptateurs.sortant.questionnaires import (
     QuestionnaireIntrouvable,
-    RepertoireDeQuestionnaires,
-)
-from app.contextes.souscription.adaptateurs.sortant.regles_affectation import (
-    charger_la_grille_d_affectation,
 )
 from app.contextes.souscription.api import (
     BaremeIntrouvable,
@@ -206,45 +196,11 @@ _journal_acceptation = logging.getLogger(__name__)
 
 
 
-@lru_cache
-def _referentiel_d_acquisition() -> dict[str, Any]:
-    """Les quatre paquets de configuration, lus une fois par processus.
-
-    Mémoïsés parce qu'ils sont sur disque et ne changent qu'au déploiement ou par
-    un geste d'exploitation. Les relire à chaque requête ferait quatre lectures de
-    fichiers sur le chemin critique d'un formulaire public.
-
-    ⚠️ La contrepartie est qu'un fichier modifié à chaud n'est pas repris. C'est
-    assumé : le référentiel est versionné avec le code, et une reprise à chaud
-    demanderait un rechargement explicite, qui n'existe pas encore.
-    """
-    # ⚠️ LE DOSSIER DU RÉFÉRENTIEL VIENT DE LA CONFIGURATION, JAMAIS DU DÉPÔT.
-    #
-    # Il était écrit en dur, `RACINE_DEPOT / "Docs" / "referentiel"`. Les tests
-    # tournent depuis le dépôt, où ce chemin existe : ils passaient. L'image, elle,
-    # range le référentiel dans `/application/donnees/referentiel` et le dit par
-    # `CGA_DOSSIER_REFERENTIEL`. Le chemin en dur n'y menait à rien, et TOUTE la
-    # surface d'acquisition répondait 500 — la demande de contact publique
-    # comprise, c'est-à-dire la seule porte par laquelle un prospect demande à être
-    # rappelé. Constaté sur la pile déployée.
-    REFERENTIEL = configuration().dossier_referentiel
-    return {
-        "affectation": charger_la_grille_d_affectation(REFERENTIEL / "affectation"),
-        "questionnaires": RepertoireDeQuestionnaires.depuis(
-            REFERENTIEL / "qualification"
-        ),
-        "plan": charger_le_plan_de_contact(REFERENTIEL / "messagerie"),
-        "modeles": CatalogueDeModeles.depuis(REFERENTIEL / "messagerie" / "modeles"),
-        "baremes": charger_les_baremes(REFERENTIEL / "tarification"),
-        "regles_tarifaires": charger_les_regles_de_tarification(
-            REFERENTIEL / "tarification"
-        ),
-    }
 
 
 def recharger_le_referentiel() -> None:
     """Repart d'une lecture neuve. Destiné aux tests et à l'exploitation."""
-    _referentiel_d_acquisition.cache_clear()
+    referentiel_d_acquisition.cache_clear()
 
 
 #: ⚠️ **L'unique magasin, importé et non redéclaré.** En mémoire, ceci *est* la
@@ -264,17 +220,6 @@ def reinitialiser_dossiers() -> None:
     _qualifications_memoire.cache_clear()
 
 
-def _dossiers():
-    """Le dépôt en vigueur — de la requête en SQL, du processus en mémoire.
-
-    Reconstruit à chaque appel en SQL, parce qu'il porte la session de la requête.
-    Le mémoïser conserverait une session déjà fermée, panne qui n'apparaîtrait
-    qu'à la seconde requête.
-    """
-    session = session_de_travail()
-    if session is None:
-        return _dossiers_memoire()
-    return DepotDossiersSql(session, courant())
 
 
 def _reference(prefixe: str) -> str:
@@ -372,7 +317,7 @@ def _preremplir_la_qualification(
     if not demande.declarations:
         return
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(
             demande.service_souhaite
         )
     except QuestionnaireIntrouvable:
@@ -417,7 +362,7 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
     ce qui se produira. Lui promettre un canal qu'on n'exploite pas serait la
     manière la plus simple de le décevoir au premier contact.
     """
-    referentiel = _referentiel_d_acquisition()
+    referentiel = referentiel_d_acquisition()
     instant = maintenant()
     try:
         # ⚠️ Avant tout le reste : un code inconnu ne doit pas créer de dossier.
@@ -443,7 +388,7 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
         raise HTTPException(status_code=422, detail=message_lisible(echec)) from echec
 
     depot = deposer_une_demande(
-        demande, _dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
+        demande, depot_dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
     )
     _preremplir_la_qualification(depot.dossier.reference, demande, instant)
 
@@ -551,7 +496,7 @@ def demander_le_rappel_d_un_devis(reference: str) -> AccuseDeDemande:
         origine=f"devis {reference}",
     )
     deposer_une_demande(
-        demande, _dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
+        demande, depot_dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
     )
     return AccuseDeDemande(
         canal_de_rappel=demande.canal_prefere,
@@ -651,7 +596,7 @@ def lister_les_dossiers(
     """
     exiger(acces, Permission.LIRE_PROSPECT)
     noms = _noms_des_collaborateurs()
-    depot = _dossiers()
+    depot = depot_dossiers()
     if etat in ETATS_TERMINAUX:
         dossiers = sorted(
             (d for d in depot.lister() if d.etat is etat),
@@ -742,7 +687,7 @@ def lister_les_dossiers_en_souffrance(acces: AccesRequis) -> list[DossierEnSouff
     exiger(acces, Permission.LIRE_PROSPECT)
     delais = _referentiel_de_veille()
     instant = maintenant()
-    depot = _dossiers()
+    depot = depot_dossiers()
 
     lignes: list[DossierEnSouffrance] = []
     for etat, delai in delais.items():
@@ -823,7 +768,7 @@ class FicheDuDossier(DossierCommercial):
 def lire_le_dossier(acces: AccesRequis, reference: str) -> FicheDuDossier:
     exiger(acces, Permission.LIRE_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
     # ⚠️ Les proformas du dossier (pas 68) : sans elles, la fiche d'un dossier accepté
@@ -838,7 +783,7 @@ def lire_le_dossier(acces: AccesRequis, reference: str) -> FicheDuDossier:
             "emise_le": proforma.emise_le.isoformat(),
             "transmise_le": proforma.transmise_le.isoformat() if proforma.transmise_le else None,
         }
-        for proforma in sorted(_proformas().par_dossier(reference), key=lambda p: p.version)
+        for proforma in sorted(depot_proformas().par_dossier(reference), key=lambda p: p.version)
     ]
     noms = _noms_des_collaborateurs()
     return FicheDuDossier.model_validate(
@@ -937,14 +882,14 @@ def affecter(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.AFFECTER_DOSSIER)
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
     if corps.candidats is None:
-        candidatures = _candidatures_du_cabinet(
+        candidatures = candidatures_du_cabinet(
             dossier.service, depot
         )
     else:
@@ -983,7 +928,7 @@ def affecter(
     conduire = reaffecter_le_dossier if passer_la_main else affecter_le_dossier
     try:
         resultat = conduire(
-            dossier, candidatures, _referentiel_d_acquisition()["affectation"], maintenant()
+            dossier, candidatures, referentiel_d_acquisition()["affectation"], maintenant()
         )
     except TransitionDossierRefusee as echec:
         raise HTTPException(status_code=409, detail=str(echec)) from echec
@@ -1023,7 +968,7 @@ def lire_le_questionnaire(acces: AccesRequis, service: str) -> QuestionnairePubl
     """
     exiger(acces, Permission.LIRE_PROSPECT)
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(service)
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(service)
     except QuestionnaireIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
     return QuestionnairePublie(
@@ -1073,7 +1018,7 @@ def lire_les_questions_du_visiteur(service: str) -> QuestionnaireDuVisiteur:
     ─────────────────────────────────────────────────────────────────────────
     """
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(service)
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(service)
     except QuestionnaireIntrouvable:
         return QuestionnaireDuVisiteur(service=service, questions=[])
     return QuestionnaireDuVisiteur(
@@ -1186,12 +1131,12 @@ def qualifier(
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(
             dossier.service
         )
     except QuestionnaireIntrouvable as echec:
@@ -1261,7 +1206,7 @@ def lister_les_canaux() -> EtatDesCanaux:
     des canaux que le centre exploite réellement. Lui en proposer un autre
     produirait une préférence impossible à honorer et une déception au premier
     rappel."""
-    referentiel = _referentiel_d_acquisition()
+    referentiel = referentiel_d_acquisition()
     plan = referentiel["plan"]
     return EtatDesCanaux(
         actifs=[c.value for c in plan.actifs()],
@@ -1360,7 +1305,7 @@ def chiffrer_la_prestation(
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
@@ -1375,7 +1320,7 @@ def chiffrer_la_prestation(
     # rendu 409 en nommant les réponses manquantes.
     if dossier.etat in (EtatDossier.QUALIFIEE, EtatDossier.EN_CONVERSATION):
         try:
-            _dossiers().enregistrer(dossier.chiffrer(maintenant()))
+            depot_dossiers().enregistrer(dossier.chiffrer(maintenant()))
         except TransitionDossierRefusee as echec:
             raise HTTPException(status_code=409, detail=str(echec)) from echec
     return PropositionChiffree.model_validate(proposition.model_dump())
@@ -1479,7 +1424,7 @@ def _proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEnt
     enregistrée est incomplète : un prix sur des faits absents ne se défend pas.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    referentiel = _referentiel_d_acquisition()
+    referentiel = referentiel_d_acquisition()
     jour = aujourd_hui()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1727,7 +1672,7 @@ def retenir_un_autre_service(
     except ValueError as refus:
         raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -1792,7 +1737,7 @@ def declarer_le_premier_contact(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -1868,7 +1813,7 @@ def _consigner_le_premier_contact(reference: str, instant: datetime) -> None:
     silence.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable:
@@ -1886,12 +1831,12 @@ def _rappels():
     Le responsable ne verrait jamais rien, sans qu'aucune erreur ne se produise.
     """
     from app.contextes.souscription.adaptateurs.entrant.abonne_de_relance import (
-        _rappels_memoire,
+        rappels_memoire,
     )
 
     session = session_de_travail()
     if session is None:
-        return _rappels_memoire()
+        return rappels_memoire()
     return DepotRappelsSql(session, courant())
 
 
@@ -1919,7 +1864,7 @@ def lire_la_qualification(acces: AccesRequis, reference: str) -> EtatDeQualifica
     """
     exiger(acces, Permission.LIRE_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
@@ -1930,7 +1875,7 @@ def lire_la_qualification(acces: AccesRequis, reference: str) -> EtatDeQualifica
     # `FORMATION`, `DOMICILIATION`, ou un dossier déposé sous un ancien code.
     # Le collaborateur voyait une page d'erreur au lieu du dossier de son client.
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(
             dossier.service
         )
     except QuestionnaireIntrouvable as echec:
@@ -1975,7 +1920,7 @@ def _qualifications_memoire() -> DepotQualificationsMemoire:
     return DepotQualificationsMemoire()
 
 
-def _candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:
+def candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:
     """Les collaborateurs en mesure de prendre ce dossier, et ce qu'ils portent déjà.
 
     ⚠️ **La charge est lue au moment de l'affectation**, jamais mémorisée. Deux
@@ -2457,7 +2402,7 @@ def emettre_la_proforma(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -2492,7 +2437,7 @@ def emettre_la_proforma(
     except ValueError as refus:
         raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
 
-    proformas = _proformas()
+    proformas = depot_proformas()
     numero = numero_suivant(
         proformas.dernier_numero(config.serie_proforma, instant.year),
         serie=config.serie_proforma,
@@ -2720,11 +2665,11 @@ def lien_de_la_proforma(acces: AccesRequis, numero: str) -> LienDeLaProforma:
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
     try:
-        proforma = _proformas().lire(numero)
+        proforma = depot_proformas().lire(numero)
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    demande = _dossiers().lire(proforma.dossier).demande
+    demande = depot_dossiers().lire(proforma.dossier).demande
     lien = _lien_de(proforma)
     return LienDeLaProforma(
         numero=proforma.numero,
@@ -2758,7 +2703,7 @@ def transmettre(acces: AccesRequis, numero: str) -> ProformaEmise:
     n'est relancée par personne, et le dossier dort.
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
-    proformas = _proformas()
+    proformas = depot_proformas()
     try:
         proforma = proformas.lire(numero)
     except ProformaIntrouvable as echec:
@@ -2891,7 +2836,7 @@ def consulter_la_proforma(
     except LienInvalide as refus:
         raise HTTPException(status_code=422, detail=str(refus)) from refus
     try:
-        proforma = _proformas().lire(numero)
+        proforma = depot_proformas().lire(numero)
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
     return ProformaConsultee(
@@ -2930,7 +2875,7 @@ def consulter_la_proforma(
 def _dossier_regle(proforma: Proforma) -> bool:
     """Le dossier de cette proposition est-il encaissé ? Faux si on ne sait pas."""
     try:
-        return _dossiers().lire(proforma.dossier).etat is EtatDossier.PAYEE
+        return depot_dossiers().lire(proforma.dossier).etat is EtatDossier.PAYEE
     except DossierIntrouvable:
         return False
 
@@ -3011,10 +2956,10 @@ def payer_en_ligne(numero: str, corps: DemandeDePaiementEnLigne) -> PaiementEnLi
     except LienInvalide as refus:
         raise HTTPException(status_code=422, detail=str(refus)) from refus
     try:
-        proforma = _proformas().lire(numero)
+        proforma = depot_proformas().lire(numero)
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(proforma.dossier)
     except DossierIntrouvable as echec:
@@ -3043,7 +2988,7 @@ def payer_en_ligne(numero: str, corps: DemandeDePaiementEnLigne) -> PaiementEnLi
     )
 
 
-def _le_document(proforma: Proforma) -> Response:
+def servir_le_pdf_de_la_proforma(proforma: Proforma) -> Response:
     """Sert le PDF d'une proforma, après avoir vérifié qu'il est intact.
 
     ─────────────────────────────────────────────────────────────────────────────
@@ -3133,7 +3078,7 @@ def lire_le_document_de_la_proforma(
     except LienInvalide as refus:
         raise HTTPException(status_code=422, detail=str(refus)) from refus
     try:
-        return _le_document(_proformas().lire(numero))
+        return servir_le_pdf_de_la_proforma(depot_proformas().lire(numero))
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
@@ -3160,7 +3105,7 @@ def relire_le_document_de_la_proforma(acces: AccesRequis, numero: str) -> Respon
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
     try:
-        return _le_document(_proformas().lire(numero))
+        return servir_le_pdf_de_la_proforma(depot_proformas().lire(numero))
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
@@ -3207,7 +3152,7 @@ def accepter_la_proforma(
     except LienInvalide as refus:
         raise HTTPException(status_code=422, detail=str(refus)) from refus
 
-    proformas = _proformas()
+    proformas = depot_proformas()
     try:
         proforma = proformas.lire(numero)
     except ProformaIntrouvable as echec:
@@ -3239,7 +3184,7 @@ def accepter_la_proforma(
     # Une transition impossible est ignorée plutôt que levée : le client a bien
     # accepté, et lui rendre une erreur pour une raison d'état interne ferait
     # perdre une signature contractuelle.
-    dossiers = _dossiers()
+    dossiers = depot_dossiers()
     try:
         dossier = dossiers.lire(acceptee.dossier)
         if dossier.etat is EtatDossier.PROFORMA_EMISE:
@@ -3279,7 +3224,7 @@ def _accuser_l_acceptation(proforma, acceptation) -> None:
     ─────────────────────────────────────────────────────────────────────────────
     """
     try:
-        demande = _dossiers().lire(proforma.dossier).demande
+        demande = depot_dossiers().lire(proforma.dossier).demande
         courriel = (demande.courriel or "").strip()
         if not courriel:
             return
@@ -3302,12 +3247,6 @@ def _accuser_l_acceptation(proforma, acceptation) -> None:
         )
 
 
-def _proformas():
-    """Le dépôt des proformas, durable si la base est là."""
-    session = session_de_travail()
-    if session is None:
-        return _proformas_memoire()
-    return DepotProformasSql(session, courant())
 
 
 #: ⚠️ **L'unique magasin, importé et non redéclaré.** Voir `magasins_memoire` :
@@ -3360,7 +3299,7 @@ def _avancer_le_dossier(dossier, qualification, questionnaire, instant) -> None:
     travail du responsable au moment où il corrige une réponse.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    depot = _dossiers()
+    depot = depot_dossiers()
     courant_ = dossier
     if courant_.etat is EtatDossier.AFFECTEE:
         courant_ = courant_.premier_contact(instant)
@@ -3455,7 +3394,7 @@ def lire_l_ouverture(acces: AccesRequis, reference: str) -> OuvertureDeLEspace:
     # demander.
     try:
         sans_objet = not ouvre_un_locataire(
-            _dossiers().lire(reference).demande.service_souhaite
+            depot_dossiers().lire(reference).demande.service_souhaite
         )
     except DossierIntrouvable:
         sans_objet = False
@@ -3741,13 +3680,13 @@ def demander_le_reglement(
     # droit ; voir `Permission.ENCAISSER`.
     exiger(acces, Permission.ENCAISSER)
 
-    proformas = _proformas()
+    proformas = depot_proformas()
     try:
         proforma = proformas.lire(numero)
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(proforma.dossier)
     except DossierIntrouvable as echec:
@@ -3802,10 +3741,10 @@ def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
     ─────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.ENCAISSER)
-    proformas = _proformas()
+    proformas = depot_proformas()
     dus: list[tuple[datetime, ReglementDeCaisse]] = []
     regles: list[tuple[datetime, ReglementDeCaisse]] = []
-    for dossier in _dossiers().lister():
+    for dossier in depot_dossiers().lister():
         if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
             continue
         # ⚠️ C'est l'ÉTAT DU DOSSIER qui dit qu'un règlement est dû, pas celui
@@ -3927,7 +3866,7 @@ def encaisser(
     # responsable de caisse qui constate un règlement. L'administrateur garde ce
     # droit ; voir `Permission.ENCAISSER`.
     exiger(acces, Permission.ENCAISSER)
-    proformas = _proformas()
+    proformas = depot_proformas()
     try:
         proforma = proformas.lire(numero)
     except ProformaIntrouvable as echec:
@@ -3935,7 +3874,7 @@ def encaisser(
 
     adresse = _adresse_voulue(proforma, corps.slug)
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(proforma.dossier)
     except DossierIntrouvable as echec:
@@ -3945,7 +3884,7 @@ def encaisser(
         resultat = encaisser_l_acceptation(
             dossier,
             proforma,
-            boite=_boite_du_parcours(),
+            boite=boite_du_parcours(),
             slug=adresse or "",
             tenant=f"tnt-{adresse}" if adresse else "",
             a_l_instant=maintenant(),
@@ -3972,18 +3911,6 @@ def encaisser(
     )
 
 
-def _boite_du_parcours():
-    """La boîte d'envoi, par la **surface publique** du Transverse.
-
-    ⚠️ La première rédaction importait l'atelier d'orchestration directement, et le
-    test d'architecture l'a refusée : on n'entre chez un autre contexte que par sa
-    surface déclarée. Il avait raison, et le remède a été d'exposer la boîte plutôt
-    que de la reconstruire — deux fabriques seraient deux boîtes en mémoire, l'une
-    déposerait et l'autre publierait.
-    """
-    from app.contextes.transverse.api import boite_d_envoi
-
-    return boite_d_envoi()
 
 
 @routeur.get(
@@ -4070,7 +3997,7 @@ def classer_sans_suite(
             ),
         )
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -4122,7 +4049,7 @@ def chercher_un_dossier_commercial(
     except NumeroInvalide:
         requete = q
     resultats = []
-    for dossier in _dossiers().ouverts():
+    for dossier in depot_dossiers().ouverts():
         demande = dossier.demande
         score = pertinence(
             requete,

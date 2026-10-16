@@ -26,7 +26,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire
+from app.contextes.portefeuille.adaptateurs.entrant.routes_http import lire_le_dossier
 from app.contextes.transverse.api import (
     AccesRequis,
     EtatCompte,
@@ -112,7 +112,7 @@ def _adherents(niu: str):
 )
 def lire_les_acces(acces: AccesRequis, niu: str) -> list[AccesDUnAdherent]:
     exiger_dossier(acces, Permission.RELANCER_ADHERENT, niu)
-    _lire(niu)
+    lire_le_dossier(niu)
     return [
         AccesDUnAdherent(
             compte=c.identifiant,
@@ -148,7 +148,7 @@ def renvoyer_un_lien(
     acces: AccesRequis, niu: str, compte: str, demande: DemandeDeLien
 ) -> LienRenvoye:
     exiger_dossier(acces, Permission.RELANCER_ADHERENT, niu)
-    dossier = _lire(niu)
+    dossier = lire_le_dossier(niu)
     reglages = reglages_du_renvoi()
     verification = demande.verification.strip()
     if len(verification) < reglages.verification_minimum:

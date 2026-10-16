@@ -23,8 +23,8 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.cloture.adaptateurs.entrant.routes_http import (
-    _depot_dossiers,
     assembler_la_liasse,
+    depot_dossiers,
 )
 from app.contextes.cloture.adaptateurs.sortant.depots_dsf import DepotDSFSql, dsf_en_memoire
 from app.contextes.cloture.adaptateurs.sortant.document_dsf import rendre_la_dsf
@@ -152,7 +152,7 @@ def preparer(acces: AccesRequis, entreprise: str, exercice: str) -> VersionDSF:
     exiger_dossier(acces, Permission.PREPARER_DSF, entreprise)
     liasse = assembler_la_liasse(entreprise, exercice)
     try:
-        dossier = _depot_dossiers().lire(entreprise)
+        dossier = depot_dossiers().lire(entreprise)
     except EntrepriseIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
     (periode,) = [e for e in dossier.exercices if e.libelle == exercice]
@@ -212,12 +212,12 @@ class FormatDgi(BaseModel):
 
 
 def _format_dgi(entreprise: str, exercice: str):
-    from app.contextes.cloture.adaptateurs.entrant.routes_http import _depot_ecritures
+    from app.contextes.cloture.adaptateurs.entrant.routes_http import depot_ecritures
     from app.contextes.cloture.application.format_dgi import etat_du_format_dgi
     from app.contextes.comptabilite.api import balance
 
     try:
-        dossier = _depot_dossiers().lire(entreprise)
+        dossier = depot_dossiers().lire(entreprise)
     except EntrepriseIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
     periode = next((e for e in dossier.exercices if e.libelle == exercice), None)
@@ -229,7 +229,7 @@ def _format_dgi(entreprise: str, exercice: str):
             precedent = e
 
     def soldes(libelle: str) -> dict[str, Decimal]:
-        return {s.compte: s.solde for s in balance(_depot_ecritures(entreprise).toutes(libelle))}
+        return {s.compte: s.solde for s in balance(depot_ecritures(entreprise).toutes(libelle))}
 
     etat = etat_du_format_dgi(
         soldes(exercice),
@@ -243,7 +243,7 @@ def _format_dgi(entreprise: str, exercice: str):
 
 def _avertissements_de_la_fiche(niu: str) -> list[str]:
     """15 octobre 2026 : la fiche signalétique (R1 à R3) que le client renseigne."""
-    dossier = _depot_dossiers().lire(niu)
+    dossier = depot_dossiers().lire(niu)
     fiche = dossier.fiche_dsf
     if fiche is None or fiche.etat != "VALIDEE":
         etat = "non renseignée" if fiche is None else f"à l'état {fiche.etat.value.lower()}"

@@ -71,11 +71,11 @@ def _comptoir():
 
 
 def _boite():
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _boite_du_parcours,
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        boite_du_parcours,
     )
 
-    return _boite_du_parcours()
+    return boite_du_parcours()
 
 
 def _entreprise(niu: str):

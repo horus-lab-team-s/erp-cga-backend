@@ -34,9 +34,10 @@ from app.contextes.pilotage.adaptateurs.entrant.routes_charge import (
     lire_la_charge_et_la_production,
 )
 from app.contextes.pilotage.adaptateurs.entrant.routes_http import (
-    _aujourd_hui,
-    _depot_dossiers,
     lire_tableau_de_bord,
+)
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_dossiers,
 )
 from app.contextes.pilotage.adaptateurs.sortant.depots_decisions import (
     depot_des_decisions_de_direction,
@@ -53,7 +54,7 @@ from app.contextes.pilotage.domaine.decisions import DecisionDeDirection
 from app.contextes.pilotage.domaine.rapport_mensuel import RapportMensuel, SectionDuRapport
 from app.contextes.transverse.api import Acces, AccesRequis, Permission, atelier, exiger
 from app.infrastructure.config import configuration
-from app.partage.horloge import jour_a_douala, maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · rapport mensuel"])
 
@@ -94,7 +95,7 @@ def _lectures(acces: Acces):
         depot = depot_des_decisions_de_direction()
         prises = [
             d
-            for dossier in _depot_dossiers().lister()
+            for dossier in depot_dossiers().lister()
             for d in depot.du_dossier(dossier.niu)
             if du <= jour_a_douala(d.prise_le) <= au
         ]
@@ -123,7 +124,7 @@ def generer(acces: AccesRequis, demande: DemandeDeRapport) -> RapportMensuel:
     try:
         rapport = generer_le_rapport(
             mois=demande.mois,
-            jour=_aujourd_hui(),
+            jour=aujourd_hui(),
             lectures=_lectures(acces),
             reglages=charger_les_reglages_du_rapport(configuration().dossier_referentiel),
             par=acces.compte,

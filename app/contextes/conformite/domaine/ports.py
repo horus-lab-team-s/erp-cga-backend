@@ -14,11 +14,9 @@ from typing import Protocol
 
 from app.contextes.conformite.domaine.ecarts import EcartDeConstat
 from app.contextes.conformite.domaine.entites import Regle
-from app.contextes.conformite.domaine.regles_du_cabinet import PropositionDeRegle
 
 __all__ = [
     "DepotEcarts",
-    "DepotPropositions",
     "DepotRegles",
 ]
 
@@ -59,15 +57,3 @@ class DepotEcarts(Protocol):
         ...
 
 
-#: ⚠️ Pas 104 : ce dépôt existait depuis le pas 97 **sans aucun port**. Rien ne confrontait
-#: ses réalisations en mémoire et SQL.
-class DepotPropositions(Protocol):
-    """Les règles construites par le cabinet (pas 97), refusées et retirées comprises."""
-
-    def toutes(self) -> list[PropositionDeRegle]:
-        """De la plus ancienne à la plus récente."""
-        ...
-
-    def trouver(self, identifiant: str) -> PropositionDeRegle | None: ...
-
-    def enregistrer(self, proposition: PropositionDeRegle) -> None: ...

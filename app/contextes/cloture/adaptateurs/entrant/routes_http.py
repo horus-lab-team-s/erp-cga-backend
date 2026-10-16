@@ -95,14 +95,14 @@ from app.partage.locataire import courant
 routeur = APIRouter(prefix="/cloture", tags=["Clôture et DSF"])
 
 
-def _depot_ecritures(entreprise: str):
+def depot_ecritures(entreprise: str):
     session = session_de_travail()
     if session is None:
         return ecritures_en_memoire(entreprise)
     return DepotEcrituresSql(session, courant(), entreprise)
 
 
-def _depot_dossiers():
+def depot_dossiers():
     session = session_de_travail()
     if session is None:
         return entreprises_en_memoire()
@@ -204,7 +204,7 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
     Le contrôle d'accès reste à l'appelant.
     """
     try:
-        dossier = _depot_dossiers().lire(entreprise)
+        dossier = depot_dossiers().lire(entreprise)
     except EntrepriseIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
 
@@ -217,7 +217,7 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
             f"Connus : {connus}.",
         )
 
-    ecritures = _depot_ecritures(entreprise).toutes(exercice)
+    ecritures = depot_ecritures(entreprise).toutes(exercice)
     soldes = balance(ecritures)
 
     # ⚠️ La projection partagée, et non une somme refaite ici : cette route portait
@@ -460,8 +460,8 @@ def clore(
             entreprise,
             exercice,
             motif=demande.motif,
-            entreprises=_depot_dossiers(),
-            depot=_depot_ecritures(entreprise),
+            entreprises=depot_dossiers(),
+            depot=depot_ecritures(entreprise),
             journaux=list(JOURNAUX_CABINET),
             plan=list(COMPTES_SYSCOHADA),
             par=acces.compte,

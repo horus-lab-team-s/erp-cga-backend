@@ -32,7 +32,7 @@ from app.contextes.conformite.api import (
     moteur_par_defaut,
     rapport_arbitre,
 )
-from app.contextes.pilotage.adaptateurs.entrant.routes_http import _depot_pieces, _sans_echouer
+from app.contextes.pilotage.adaptateurs.entrant.sources import depot_pieces, sans_echouer
 from app.contextes.pilotage.adaptateurs.sortant.file_d_anomalies_yaml import (
     charger_les_reglages_de_la_file,
 )
@@ -95,7 +95,7 @@ def lire_la_file(
     for dossier_niu in {
         f.destinataire.niu for f in FACTURES_DEMO.values() if f.destinataire and f.destinataire.niu
     }:
-        for piece in _sans_echouer(lambda niu=dossier_niu: _depot_pieces().du_dossier(niu), []):
+        for piece in sans_echouer(lambda niu=dossier_niu: depot_pieces().du_dossier(niu), []):
             if piece.reference_document:
                 pieces[(piece.entreprise, piece.reference_document)] = piece
 
@@ -158,9 +158,9 @@ def lire_la_file(
 
 
 def _entreprises() -> list[Entreprise]:
-    from app.contextes.pilotage.adaptateurs.entrant.routes_http import _depot_dossiers
+    from app.contextes.pilotage.adaptateurs.entrant.sources import depot_dossiers
 
-    return _sans_echouer(lambda: _depot_dossiers().lister(), [])
+    return sans_echouer(lambda: depot_dossiers().lister(), [])
 
 
 __all__ = ["routeur"]

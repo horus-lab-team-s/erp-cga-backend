@@ -29,11 +29,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 from app.contextes.obligations.adaptateurs.entrant.routes_espace_adherent import (
-    _instances,
-    _preuves,
+    instances_de_l_echeancier,
+    preuves_du_dossier,
 )
 from app.contextes.obligations.adaptateurs.entrant.routes_espace_adherent import (
-    _reglages as _reglages_des_echeances,
+    reglages_des_echeances as _reglages_des_echeances,
 )
 from app.contextes.obligations.adaptateurs.entrant.routes_http import depot_entreprises
 from app.contextes.obligations.adaptateurs.entrant.routes_rappels import (
@@ -90,10 +90,10 @@ def envoyer_les_rappels() -> str:
         if not comptes:
             continue
         a_venir = echeances_a_rappeler(
-            instances=_instances(dossier, jour, reglages.horizon_jours),
+            instances=instances_de_l_echeancier(dossier, jour, reglages.horizon_jours),
             jour=jour,
             reglages=reglages,
-            preuves=_preuves(dossier.niu),
+            preuves=preuves_du_dossier(dossier.niu),
         )
         for compte in comptes:
             preference = preference_du_compte(compte.identifiant, rappels)

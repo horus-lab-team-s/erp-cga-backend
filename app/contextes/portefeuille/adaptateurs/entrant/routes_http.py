@@ -169,7 +169,7 @@ def _resoudre(entreprise: Entreprise, a_la_date: date) -> LigneDossier:
     )
 
 
-def _lire(niu: str) -> Entreprise:
+def lire_le_dossier(niu: str) -> Entreprise:
     try:
         return depot().lire(niu)
     except EntrepriseIntrouvable as absence:
@@ -221,7 +221,7 @@ def lire_entreprise(acces: AccesRequis, niu: str) -> Entreprise:
     ces deux questions n'ont de réponse que dans les motifs des périodes.
     """
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    return _lire(niu)
+    return lire_le_dossier(niu)
 
 
 class StatutsResolus(BaseModel):
@@ -252,7 +252,7 @@ def lire_statuts(
     acces: AccesRequis, niu: str, a_la_date: date = Query(...)
 ) -> StatutsResolus:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         regime = entreprise.regime_au(a_la_date)
         centre = entreprise.rattachement_au(a_la_date)
@@ -351,13 +351,13 @@ def fixer_la_nature_d_activite(
     elle se justifie, comme un changement de régime.
     """
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     depot().enregistrer(
         entreprise.model_copy(
             update={"nature_activite": demande.nature, "reel_d_office": demande.reel_d_office}
         )
     )
-    return _resoudre(_lire(niu), aujourd_hui())
+    return _resoudre(lire_le_dossier(niu), aujourd_hui())
 
 
 @routeur.post(
@@ -393,7 +393,7 @@ def inscrire_regime(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         nouvelle = inscrire_un_regime(
             entreprise,
@@ -476,7 +476,7 @@ def admettre(acces: AccesRequis, niu: str, demande: DemandeDAdhesion) -> Statuts
     la règle d'antidate éprouvable.
     """
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     portefeuille = depot().lister()
     seuil = _seuil_d_adhesion(demande.a_compter_du)
     try:
@@ -512,7 +512,7 @@ def resilier(acces: AccesRequis, niu: str, demande: DemandeDeResiliation) -> Sta
     """Ferme l'adhésion en cours ; le dossier n'est plus adhérent le jour `au`."""
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
     try:
-        resiliee = resilier_l_adhesion(_lire(niu), demande.au)
+        resiliee = resilier_l_adhesion(lire_le_dossier(niu), demande.au)
         depot().enregistrer(resiliee)
     except (AdhesionRefusee, HistoireAmputee) as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus

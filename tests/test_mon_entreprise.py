@@ -214,11 +214,11 @@ class TestLesRoutes:
 
     def test_seuls_les_dirigeants_en_fonction(self, monkeypatch):
         from app.contextes.portefeuille.adaptateurs.entrant import routes_espace_adherent
-        from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire
+        from app.contextes.portefeuille.adaptateurs.entrant.routes_http import lire_le_dossier
         from app.contextes.portefeuille.domaine.entites import Dirigeant
 
         def avec_un_ancien(niu):
-            dossier = _lire(niu)
+            dossier = lire_le_dossier(niu)
             ancien = Dirigeant(
                 nom="ANCIEN Gérant",
                 qualite="Gérant",
@@ -228,7 +228,7 @@ class TestLesRoutes:
             futur = Dirigeant(nom="FUTUR Cogérant", qualite="Cogérant", depuis=date(2027, 1, 1))
             return dossier.model_copy(update={"dirigeants": [*dossier.dirigeants, ancien, futur]})
 
-        monkeypatch.setattr(routes_espace_adherent, "_lire", avec_un_ancien)
+        monkeypatch.setattr(routes_espace_adherent, "lire_le_dossier", avec_un_ancien)
         fiche = _client(ADHERENT).get(FICHE).json()
         assert [d["nom"] for d in fiche["dirigeants"]] == ["NKOA Jean-Pierre"]
 

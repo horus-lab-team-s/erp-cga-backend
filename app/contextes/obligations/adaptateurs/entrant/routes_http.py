@@ -153,7 +153,7 @@ def depot_ecritures(entreprise: str) -> DepotEcritures:
     return DepotEcrituresSql(session, courant(), entreprise)
 
 
-def _entreprise(niu: str) -> Entreprise:
+def entreprise_du_portefeuille(niu: str) -> Entreprise:
     try:
         return depot_entreprises().lire(niu)
     except EntrepriseIntrouvable as absence:
@@ -246,7 +246,7 @@ def lire_echeancier(
     encore n'a plus aucun effet.
     """
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
-    dossier = _entreprise(entreprise)
+    dossier = entreprise_du_portefeuille(entreprise)
     periode = _exercice(dossier, exercice)
     instances = generer_echeancier(
         dossier,
@@ -405,7 +405,7 @@ def lire_declaration_tva(
     `credit_reporte_au_debut_de`). La réponse porte en plus les lignes du formulaire, avec les
     écritures qui les composent, la complétude des pièces et la revue du mois."""
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
-    dossier = _entreprise(entreprise)
+    dossier = entreprise_du_portefeuille(entreprise)
     exercice = _exercice_contenant(dossier, periode_fin, exercice)
     if not dossier.assujettie_tva_au(periode_fin):
         raise HTTPException(
@@ -495,7 +495,7 @@ def impact_de_la_contrepassation(
         periodes_verrouillees_du_dossier,
     )
 
-    dossier = _entreprise(entreprise)
+    dossier = entreprise_du_portefeuille(entreprise)
     debut = date_operation.replace(day=1)
     fin = (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     exercice_de_la_date = _exercice_contenant(dossier, date_operation, None)
@@ -675,7 +675,7 @@ def _dossier_tva(
     a_la_date: date,
 ) -> tuple[DossierDeDepot, ObligationInstance]:
     """Assemble le dossier de TVA d'une période, contrôles compris."""
-    dossier = _entreprise(entreprise)
+    dossier = entreprise_du_portefeuille(entreprise)
     exercice = _exercice_contenant(dossier, periode_fin, exercice)
     obligations = generer_echeancier(
         dossier,
@@ -892,7 +892,7 @@ def constater_hors_tva(
     le `404` le dit, avec les périodes qui existent.
     """
     exiger_dossier(acces, Permission.DEPOSER_DECLARATION, entreprise)
-    dossier = _entreprise(entreprise)
+    dossier = entreprise_du_portefeuille(entreprise)
     exercice = next(
         (
             e for e in dossier.exercices

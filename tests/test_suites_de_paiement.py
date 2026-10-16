@@ -26,9 +26,11 @@ from decimal import Decimal
 import pytest
 
 from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-    _dossiers,
-    _proformas,
     reinitialiser_dossiers,
+)
+from app.contextes.souscription.adaptateurs.entrant.sources import (
+    depot_dossiers,
+    depot_proformas,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     DepotPaiementsMemoire,
@@ -85,14 +87,12 @@ def _suite(journal) -> SuiteDeProforma:
     rien chercher elle-même, sans quoi la couche application dépendrait des
     adaptateurs. Le test d'architecture a refusé la première version.
     """
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _boite_du_parcours,
-    )
+    from app.contextes.souscription.adaptateurs.entrant.sources import boite_du_parcours
 
     return SuiteDeProforma(
-        dossiers=_dossiers(),
-        proformas=_proformas(),
-        boite=_boite_du_parcours(),
+        dossiers=depot_dossiers(),
+        proformas=depot_proformas(),
+        boite=boite_du_parcours(),
         journal=journal,
     )
 
@@ -144,7 +144,7 @@ def _poser_un_dossier_accepte(service: str):
     dossier = dossier.affecter("mballa", T0, motif="essai")
     dossier = dossier.premier_contact(T0).qualifier(T0)
     dossier = dossier.chiffrer(T0).emettre_la_proforma(T0).accepter(T0)
-    _dossiers().enregistrer(dossier)
+    depot_dossiers().enregistrer(dossier)
 
     tarif = TarifArrete(
         montant=Decimal("250000"),
@@ -156,7 +156,7 @@ def _poser_un_dossier_accepte(service: str):
         valide_par="direction",
         arrete_le=T0,
     )
-    _proformas().enregistrer(
+    depot_proformas().enregistrer(
         emettre(
             numero=NUMERO,
             dossier=REFERENCE,
@@ -210,7 +210,7 @@ class TestQuandLAdresseNAPasEteRetenue:
         assert "aucune adresse retenue" in aboutissement.message
         # ⚠️ Le dossier reste à l'acceptation : rien n'a été encaissé côté métier,
         # et il reste donc visible dans la file des impayées.
-        assert _dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
 
     def test_l_echec_se_cherche_en_une_requete(self, dossier_accepte):
         """⚠️ L'argent est arrivé et rien ne s'est ouvert : c'est exactement le cas
@@ -234,7 +234,7 @@ class TestQuandLAdresseNAPasEteRetenue:
 
         assert aboutissement.abouti is True, aboutissement.message
         assert "n'ouvre pas d'espace" in aboutissement.message
-        dossier = _dossiers().lire(REFERENCE)
+        dossier = depot_dossiers().lire(REFERENCE)
         assert dossier.etat.value == "PAYEE"
         assert dossier.slug_retenu is None
         assert journal.actions() == []
@@ -242,13 +242,13 @@ class TestQuandLAdresseNAPasEteRetenue:
     def test_avec_une_adresse_retenue_le_dossier_est_encaisse(self, dossier_accepte):
         """⚠️ La contre-épreuve. Sans elle, une suite qui échouerait toujours
         passerait les deux cas précédents sans broncher."""
-        _dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
+        depot_dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
         journal = _JournalFactice()
 
         aboutissement = _suite(journal).encaisser(_paiement(), T0)
 
         assert aboutissement.abouti is True
-        assert _dossiers().lire(REFERENCE).etat.value == "PAYEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "PAYEE"
         assert journal.actions() == []
 
 
@@ -309,7 +309,7 @@ class TestLeRefusDUneProforma:
 
         suite.refuser(_paiement(), "code expiré", T0)
 
-        assert _dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
         assert journal.actions() == ["paiement.proforma_refusee"]
 
     def test_un_refus_ne_lance_aucune_exception_meme_sans_proforma(self):
@@ -333,7 +333,7 @@ class TestLesDeuxCheminsSontLeMeme:
         elle qui porte désormais l'effet, et la partager à moitié serait pire que
         pas du tout.
         """
-        _dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
+        depot_dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
         paiements = DepotPaiementsMemoire()
         paiements.enregistrer(_paiement())
         journal = _JournalFactice()
@@ -350,4 +350,4 @@ class TestLesDeuxCheminsSontLeMeme:
 
         assert resultat.statut.value == "VALIDE"
         assert resultat.reference_reglee == NUMERO
-        assert _dossiers().lire(REFERENCE).etat.value == "PAYEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "PAYEE"

@@ -455,12 +455,12 @@ class TestLExerciceRepris:
         """⚠️ Écrit à la main en comptabilité (qui ne lit pas la clôture) : il doit rester
         identique, ligne à ligne, à `lignes_d_a_nouveau` sur la balance 2025."""
         from app.contextes.cloture.domaine.a_nouveau import lignes_d_a_nouveau
-        from app.contextes.comptabilite.adaptateurs.entrant.routes_http import _plan
+        from app.contextes.comptabilite.adaptateurs.entrant.routes_http import depot_du_plan
         from app.contextes.comptabilite.api import balance, ecritures_demo
 
         ecritures = ecritures_demo(NGUEMA)
         attendu = lignes_d_a_nouveau(
-            balance([e for e in ecritures if e.exercice == "2025"]), plan=_plan.charger()
+            balance([e for e in ecritures if e.exercice == "2025"]), plan=depot_du_plan.charger()
         )
         (pose,) = [e for e in ecritures if e.exercice == "2026" and e.journal == "AN"]
 

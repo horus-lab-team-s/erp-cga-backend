@@ -15,7 +15,7 @@ from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from app.contextes.cloture.adaptateurs.entrant.routes_http import _depot_dossiers
+from app.contextes.cloture.adaptateurs.entrant.routes_http import depot_dossiers
 from app.contextes.cloture.application.liasse import determiner_le_systeme
 from app.contextes.cloture.domaine.entites import SystemeDsf
 from app.contextes.cloture.domaine.pieces_dsf import (
@@ -72,7 +72,7 @@ def _objet(entreprise: str, exercice: str) -> str:
 
 def _systeme(entreprise: str, exercice: str) -> SystemeDsf:
     try:
-        dossier = _depot_dossiers().lire(entreprise)
+        dossier = depot_dossiers().lire(entreprise)
     except EntrepriseIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
     periode = next((e for e in dossier.exercices if e.libelle == exercice), None)

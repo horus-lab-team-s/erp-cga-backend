@@ -132,8 +132,8 @@ class FiltreDeLettrage(StrEnum):
 
 routeur = APIRouter(prefix="/comptabilite", tags=["Comptabilité"])
 
-_plan = DepotPlanMemoire()
-_journaux = DepotJournauxMemoire()
+depot_du_plan = DepotPlanMemoire()
+depot_des_journaux = DepotJournauxMemoire()
 _imputation_memoire = DepotPlanImputationMemoire()
 
 
@@ -169,7 +169,7 @@ def lire_plan(
     classe: int | None = Query(None, ge=1, le=9, description="Filtrer sur une classe"),
 ) -> list[Compte]:
     exiger(acces, Permission.LIRE_COMPTABILITE)
-    comptes = _plan.charger()
+    comptes = depot_du_plan.charger()
     if classe is not None:
         comptes = [c for c in comptes if c.classe == classe]
     return sorted(comptes, key=lambda c: c.numero)
@@ -178,7 +178,7 @@ def lire_plan(
 @routeur.get("/journaux", summary="Les journaux du dossier")
 def lire_journaux(acces: AccesRequis) -> list[Journal]:
     exiger(acces, Permission.LIRE_COMPTABILITE)
-    return _journaux.charger()
+    return depot_des_journaux.charger()
 
 
 @routeur.get(
@@ -394,7 +394,7 @@ def lire_plan_imputation(acces: AccesRequis, entreprise: str) -> PlanImputation:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _dossier_du_portefeuille(entreprise: str) -> Entreprise | None:
+def dossier_du_portefeuille(entreprise: str) -> Entreprise | None:
     """Le dossier tel que le portefeuille le connaît, ou `None`.
 
     Extrait au pas 73 : l'exercice et le régime se lisent au même endroit, et deux
@@ -424,7 +424,7 @@ def periodes_verrouillees_du_dossier(entreprise: str) -> list[PeriodeVerrouillee
     )
 
 
-def _exercice_du_dossier(entreprise: str, libelle: str) -> Exercice | None:
+def exercice_du_portefeuille(entreprise: str, libelle: str) -> Exercice | None:
     """L'exercice tel que le portefeuille le connaît, ou `None`.
 
     ⚠️ La comptabilité ne stocke **pas** ses propres exercices, et c'est
@@ -432,7 +432,7 @@ def _exercice_du_dossier(entreprise: str, libelle: str) -> Exercice | None:
     un exercice ouvert d'un côté, clos de l'autre. L'arête
     `comptabilite → portefeuille` est déclarée pour cette raison.
     """
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     if dossier is None:
         return None
     return next((e for e in dossier.exercices if e.libelle == libelle), None)
@@ -496,9 +496,9 @@ def saisir_ecriture(
         brouillon = BrouillonEcriture(**demande.model_dump())
         return enregistrer_une_ecriture(
             brouillon,
-            journaux=_journaux.charger(),
-            plan=_plan.charger(),
-            exercice=_exercice_du_dossier(entreprise, demande.exercice),
+            journaux=depot_des_journaux.charger(),
+            plan=depot_du_plan.charger(),
+            exercice=exercice_du_portefeuille(entreprise, demande.exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -537,9 +537,9 @@ def corriger_ecriture(
         return corriger_un_brouillon(
             f"{exercice}/{journal}/{numero:06d}",
             demande,
-            journaux=_journaux.charger(),
-            plan=_plan.charger(),
-            exercice=_exercice_du_dossier(entreprise, exercice),
+            journaux=depot_des_journaux.charger(),
+            plan=depot_du_plan.charger(),
+            exercice=exercice_du_portefeuille(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -569,7 +569,7 @@ def valider_ecriture(
     try:
         validee = valider_une_ecriture(
             cle,
-            exercice=_exercice_du_dossier(entreprise, exercice),
+            exercice=exercice_du_portefeuille(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -651,7 +651,7 @@ def contrepasser_ecriture(
             cle,
             motif=demande.motif,
             jour=demande.date_operation or aujourd_hui(),
-            exercice=_exercice_du_dossier(entreprise, exercice),
+            exercice=exercice_du_portefeuille(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -788,7 +788,7 @@ def proposer_depuis_une_facture(
     # ⚠️ Pas 73 : le régime vient du portefeuille, à la date de l'opération, et plus
     # de la requête. Voir `rattacher_au_dossier`. Le contrôle de conformité se fait
     # ensuite sur la facture rattachée : ses règles lisent aussi ce régime.
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     if dossier is None:
         raise HTTPException(
             status_code=404, detail=f"dossier {entreprise} inconnu du portefeuille."
@@ -1205,7 +1205,7 @@ def _reprendre_le_lot(
     par: str,
 ) -> RapportDeReprise:
     """La reprise elle-même. **Bloquante, donc jamais sur la boucle.**"""
-    plan = _plan.charger()
+    plan = depot_du_plan.charger()
     try:
         lot = lire(
             octets,
@@ -1223,9 +1223,9 @@ def _reprendre_le_lot(
 
     return reprendre_un_lot(
         lot,
-        journaux=_journaux.charger(),
+        journaux=depot_des_journaux.charger(),
         plan=plan,
-        exercice=_exercice_du_dossier(entreprise, exercice),
+        exercice=exercice_du_portefeuille(entreprise, exercice),
         periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
         depot=depot(entreprise),
         par=par,
@@ -1263,7 +1263,7 @@ def _balance_auxiliaire_du_dossier(entreprise: str, exercice: str, nature):
     )
 
     lignes = balance_auxiliaire(depot(entreprise).lister(exercice), nature)
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     fiches: dict[str, FicheDuTiers] = {}
     for t in dossier.tiers if dossier else []:
         fiche = FicheDuTiers(denomination=t.denomination, niu=t.niu)
@@ -1514,7 +1514,7 @@ def lire_la_declaration_par_tiers(
     from app.contextes.comptabilite.adaptateurs.sortant.declaration_par_tiers_dgi import MODELES
 
     lignes, fiches, avertissements = _declaration_par_tiers(entreprise, exercice, nature)
-    registre = _registre_des_tiers(_dossier_du_portefeuille(entreprise))
+    registre = _registre_des_tiers(dossier_du_portefeuille(entreprise))
 
     def montant(m) -> MontantDeclare:
         return MontantDeclare(ht=m.ht, tva=m.tva)
@@ -1606,8 +1606,8 @@ def editer_un_livre(
             status_code=422,
             detail=f"période à l'envers : du {du:%d/%m/%Y} au {au:%d/%m/%Y}.",
         )
-    dossier = _dossier_du_portefeuille(entreprise)
-    plan = {c.numero: c.intitule for c in _plan.charger()}
+    dossier = dossier_du_portefeuille(entreprise)
+    plan = {c.numero: c.intitule for c in depot_du_plan.charger()}
 
     def intitule(numero: str) -> str:
         # Un sous-compte de l'adhérent (401100) prend l'intitulé de sa racine au plan.

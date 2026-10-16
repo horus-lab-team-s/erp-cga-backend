@@ -318,8 +318,8 @@ def encaisser_au_guichet(acces: AccesRequis, niu: str, corps: ConstatAuGuichet) 
     à la main est la première source d'écart de caisse."""
     exiger(acces, Permission.ENCAISSER)
     _, echeance = _echeance_non_reglee(niu, corps.periode)
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _boite_du_parcours,
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        boite_du_parcours,
     )
     from app.contextes.souscription.application.reglement_des_honoraires import (
         constater_le_reglement,
@@ -329,7 +329,7 @@ def encaisser_au_guichet(acces: AccesRequis, niu: str, corps: ConstatAuGuichet) 
         # 15 octobre 2026 : écrit ET publié, pour que l'écriture se propose chez l'adhérent.
         constater_le_reglement(
             _comptoir().reglements_honoraires,
-            _boite_du_parcours(),
+            boite_du_parcours(),
             ReglementDHonoraires(
                 identifiant=f"RH-{uuid.uuid4().hex[:16]}",
                 niu=niu,

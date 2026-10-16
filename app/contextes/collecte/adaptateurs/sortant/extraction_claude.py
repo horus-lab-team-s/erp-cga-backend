@@ -33,24 +33,22 @@ CHOIX D'APPEL
 
 from __future__ import annotations
 
-import base64
-import json
-import logging
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.contextes.collecte.domaine.extraction import ExtractionOCR, ValeurExtraite
 from app.contextes.collecte.domaine.pieces import TypePiece
+from app.partage.agent_claude import (
+    Incident,
+    bloc_du_document,
+    client_anthropic,
+    demander_en_json,
+)
 from app.partage.horloge import maintenant
-from app.partage.magasin_de_fichiers import detecter_le_type
 
 __all__ = ["ExtractionClaude", "SCHEMA_DE_LECTURE"]
 
-_journal = logging.getLogger(__name__)
-
-#: Ce que le navigateur de l'API sait lire. Le TIFF n'y est pas : il se saisit à la main.
-_IMAGES = {"image/jpeg", "image/png"}
 
 _CONSIGNE = """\
 Tu lis des factures fournisseurs reçues par un cabinet d'expertise comptable au Cameroun, \
@@ -164,94 +162,34 @@ class ExtractionClaude:
 
     def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
         self._modele = modele
-        if client is None:
-            import anthropic
-
-            client = anthropic.Anthropic(
-                api_key=cle_api,
-                # Une page se lit en quelques secondes ; au-delà de deux minutes, le
-                # collaborateur est mieux servi par la saisie que par une attente.
-                timeout=anthropic.Timeout(120.0, connect=10.0),
-                max_retries=2,
-            )
-        self._client = client
+        # Une page se lit en quelques secondes ; au-delà de deux minutes, le collaborateur
+        # est mieux servi par la saisie que par une attente.
+        self._client = client if client is not None else client_anthropic(cle_api, delai_s=120.0)
 
     def extraire(self, contenu: bytes, *, piece: str, type_attendu: TypePiece) -> ExtractionOCR:
         instant = maintenant()
         vide = ExtractionOCR(piece=piece, moteur=self.MOTEUR, extraite_le=instant)
-        type_mime = detecter_le_type(contenu)
-        if type_mime == "application/pdf":
-            bloc = {
-                "type": "document",
-                "source": {
-                    "type": "base64",
-                    "media_type": type_mime,
-                    "data": base64.standard_b64encode(contenu).decode(),
-                },
-            }
-        elif type_mime in _IMAGES:
-            bloc = {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": type_mime,
-                    "data": base64.standard_b64encode(contenu).decode(),
-                },
-            }
-        else:
+        bloc = bloc_du_document(contenu)
+        if bloc is None:
             return vide.model_copy(update={"incident": _INCIDENTS["FORMAT"]})
-
-        import anthropic
-
-        try:
-            reponse = self._client.beta.messages.create(
-                model=self._modele,
-                max_tokens=16000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                system=_CONSIGNE,
-                output_config={
-                    "effort": "medium",
-                    "format": {"type": "json_schema", "schema": SCHEMA_DE_LECTURE},
-                },
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            bloc,
-                            {"type": "text", "text": "Relève les valeurs de cette facture."},
-                        ],
-                    }
-                ],
+        lu = demander_en_json(
+            self._client,
+            modele=self._modele,
+            consigne=_CONSIGNE,
+            contenu=[bloc, {"type": "text", "text": "Relève les valeurs de cette facture."}],
+            schema=SCHEMA_DE_LECTURE,
+            effort="medium",
+            max_tokens=16000,
+            en_flux=False,
+            objet=f"Lecture de {piece}",
+        )
+        if isinstance(lu, Incident):
+            incident = (
+                f"Lecture automatique indisponible ({lu.statut}) : saisissez la facture."
+                if lu.code == "INDISPONIBLE"
+                else _INCIDENTS[lu.code]
             )
-        except anthropic.RateLimitError:
-            return vide.model_copy(update={"incident": _INCIDENTS["SATURE"]})
-        except anthropic.APITimeoutError:
-            return vide.model_copy(update={"incident": _INCIDENTS["DELAI"]})
-        except anthropic.APIConnectionError:
-            return vide.model_copy(update={"incident": _INCIDENTS["RESEAU"]})
-        except anthropic.APIStatusError as echec:
-            _journal.warning(
-                "Lecture de %s refusée par l'API : %s %s", piece, echec.status_code, echec.message
-            )
-            return vide.model_copy(
-                update={
-                    "incident": (
-                        f"Lecture automatique indisponible ({echec.status_code}) : "
-                        "saisissez la facture."
-                    )
-                }
-            )
-
-        if reponse.stop_reason == "refusal":
-            return vide.model_copy(update={"incident": _INCIDENTS["REFUS"]})
-        if reponse.stop_reason == "max_tokens":
-            return vide.model_copy(update={"incident": _INCIDENTS["LONGUE"]})
-        texte = next((b.text for b in reponse.content if getattr(b, "type", None) == "text"), None)
-        try:
-            lu = json.loads(texte or "")
-        except json.JSONDecodeError:
-            return vide.model_copy(update={"incident": _INCIDENTS["ILLISIBLE"]})
+            return vide.model_copy(update={"incident": incident})
         return vide.model_copy(update={"champs": _champs(lu, instant)})
 
 

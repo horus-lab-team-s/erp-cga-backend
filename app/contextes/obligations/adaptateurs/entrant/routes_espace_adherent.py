@@ -39,8 +39,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.obligations.adaptateurs.entrant.routes_http import (
-    _entreprise,
     dispense_de_dsf,
+    entreprise_du_portefeuille,
     estimateur_de_l_igs,
 )
 from app.contextes.obligations.adaptateurs.sortant.accuses import accuses_du_portail
@@ -81,11 +81,11 @@ _catalogue = DepotTypesObligationMemoire()
 OBJET_PREUVE = "preuve_de_paiement"
 
 
-def _reglages() -> ReglagesDesEcheancesDeLAdherent:
+def reglages_des_echeances() -> ReglagesDesEcheancesDeLAdherent:
     return charger_les_echeances_de_l_adherent(configuration().dossier_referentiel)
 
 
-def _instances(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
+def instances_de_l_echeancier(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
     """L'échéancier des exercices qui touchent l'année écoulée et l'horizon.
 
     ⚠️ Plusieurs exercices : la période précédente d'une obligation de janvier est en décembre de
@@ -136,7 +136,7 @@ def _fonds_recus(niu: str) -> list[FondsRecusParLeCabinet]:
     ]
 
 
-def _preuves(niu: str | None) -> list[PreuveEnvoyee]:
+def preuves_du_dossier(niu: str | None) -> list[PreuveEnvoyee]:
     """Les preuves d'un dossier (ou de tous, `None`), chacune avec son verdict s'il existe.
 
     ⚠️ Le verdict se rattache par (dossier, obligation, période, pièce) : la même pièce ne
@@ -185,19 +185,19 @@ class VueDesEcheances(BaseModel):
 )
 def lire_mes_echeances(acces: AccesRequis, entreprise: str) -> VueDesEcheances:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
-    reglages = _reglages()
-    dossier = _entreprise(entreprise)
+    reglages = reglages_des_echeances()
+    dossier = entreprise_du_portefeuille(entreprise)
     jour = aujourd_hui()
     montants = {a.numero: a.montant_constate for a in atelier().portail.tous()}
     return VueDesEcheances(
         dossier=entreprise,
         denomination=dossier.denomination,
         echeances=echeances_de_l_adherent(
-            instances=_instances(dossier, jour, reglages.horizon_jours),
+            instances=instances_de_l_echeancier(dossier, jour, reglages.horizon_jours),
             jour=jour,
             reglages=reglages,
             montants_constates=montants,
-            preuves=_preuves(entreprise),
+            preuves=preuves_du_dossier(entreprise),
             fonds_recus=_fonds_recus(entreprise),
         ),
         explications_validees=reglages.statut == "VALIDE",
@@ -235,10 +235,12 @@ def envoyer_une_preuve(
     exiger_dossier(acces, Permission.DEPOSER_PIECE, entreprise)
     from app.contextes.collecte.api import DepotPiecesSql, pieces_en_memoire
 
-    reglages = _reglages()
-    dossier = _entreprise(entreprise)
+    reglages = reglages_des_echeances()
+    dossier = entreprise_du_portefeuille(entreprise)
     horodatage = maintenant()
-    instances = _instances(dossier, jour_a_douala(horodatage), reglages.horizon_jours)
+    instances = instances_de_l_echeancier(
+        dossier, jour_a_douala(horodatage), reglages.horizon_jours
+    )
     obligation = next(
         (
             o
@@ -274,7 +276,7 @@ def envoyer_une_preuve(
         raise HTTPException(status_code=404, detail=f"pièce {demande.piece} introuvable.")
     deja = [
         p
-        for p in _preuves(entreprise)
+        for p in preuves_du_dossier(entreprise)
         if p.code_obligation == obligation.code_obligation
         and p.periode_debut == obligation.periode_debut
         and p.piece == demande.piece
@@ -389,12 +391,12 @@ def _prevenir_du_verdict(entreprise: str, demande, motif: str, jour: date) -> No
     """
     from app.contextes.transverse.api import prevenir_les_adherents
 
-    dossier = _entreprise(entreprise)
-    reglages = _reglages()
+    dossier = entreprise_du_portefeuille(entreprise)
+    reglages = reglages_des_echeances()
     instance = next(
         (
             o
-            for o in _instances(dossier, jour, reglages.horizon_jours)
+            for o in instances_de_l_echeancier(dossier, jour, reglages.horizon_jours)
             if o.code_obligation == demande.code_obligation
             and o.periode_debut == demande.periode_debut
         ),
@@ -448,7 +450,7 @@ def juger_une_quittance(
     preuve = next(
         (
             p
-            for p in _preuves(entreprise)
+            for p in preuves_du_dossier(entreprise)
             if p.code_obligation == demande.code_obligation
             and p.periode_debut == demande.periode_debut
             and p.piece == demande.piece
@@ -539,8 +541,8 @@ class MesDocuments(BaseModel):
 )
 def lire_mes_documents(acces: AccesRequis, entreprise: str) -> MesDocuments:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
-    reglages = _reglages()
-    dossier = _entreprise(entreprise)
+    reglages = reglages_des_echeances()
+    dossier = entreprise_du_portefeuille(entreprise)
     documents = []
     for accuse in atelier().portail.tous():
         morceaux = accuse.reference_document.split("/")

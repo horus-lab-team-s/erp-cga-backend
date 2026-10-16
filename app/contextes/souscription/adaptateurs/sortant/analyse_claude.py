@@ -31,18 +31,16 @@ CHOIX D'APPEL
 
 from __future__ import annotations
 
-import base64
-import json
-import logging
 from typing import Any
 
-from app.partage.magasin_de_fichiers import detecter_le_type
+from app.partage.agent_claude import (
+    Incident,
+    bloc_du_document,
+    client_anthropic,
+    demander_en_json,
+)
 
-__all__ = ["AnalyseClaude", "LectureDeContrat", "SCHEMA_D_ANALYSE"]
-
-_journal = logging.getLogger(__name__)
-
-_IMAGES = {"image/jpeg", "image/png"}
+__all__ = ["AnalyseClaude", "LectureDeContrat", "SCHEMA_D_ANALYSE", "incident_de_lecture"]
 
 _CONSIGNE = """\
 Tu assistes le juriste d'un cabinet d'expertise comptable et juridique au Cameroun \
@@ -130,84 +128,40 @@ class AnalyseClaude:
 
     def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
         self._modele = modele
-        if client is None:
-            import anthropic
-
-            client = anthropic.Anthropic(
-                api_key=cle_api,
-                # Un contrat de quelques pages se lit en une à deux minutes ; au-delà de
-                # cinq, le juriste est mieux servi par l'instruction à la main.
-                timeout=anthropic.Timeout(300.0, connect=10.0),
-                max_retries=2,
-            )
-        self._client = client
+        # Un contrat de quelques pages se lit en une à deux minutes ; au-delà de cinq, le
+        # juriste est mieux servi par l'instruction à la main.
+        self._client = client if client is not None else client_anthropic(cle_api, delai_s=300.0)
 
     def lire(self, contenu: bytes) -> LectureDeContrat:
-        type_mime = detecter_le_type(contenu)
-        donnees = base64.standard_b64encode(contenu).decode()
-        if type_mime == "application/pdf":
-            bloc = {
-                "type": "document",
-                "source": {"type": "base64", "media_type": type_mime, "data": donnees},
-            }
-        elif type_mime in _IMAGES:
-            bloc = {
-                "type": "image",
-                "source": {"type": "base64", "media_type": type_mime, "data": donnees},
-            }
-        else:
+        bloc = bloc_du_document(contenu)
+        if bloc is None:
             return LectureDeContrat(incident=_INCIDENTS["FORMAT"])
-
-        import anthropic
-
+        lu = demander_en_json(
+            self._client,
+            modele=self._modele,
+            consigne=_CONSIGNE,
+            contenu=[bloc, {"type": "text", "text": "Prépare l'analyse de ce contrat."}],
+            schema=SCHEMA_D_ANALYSE,
+            effort="high",
+            max_tokens=64000,
+            en_flux=True,
+            objet="Analyse",
+        )
         try:
-            with self._client.beta.messages.stream(
-                model=self._modele,
-                max_tokens=64000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                system=_CONSIGNE,
-                thinking={"type": "adaptive"},
-                output_config={
-                    "effort": "high",
-                    "format": {"type": "json_schema", "schema": SCHEMA_D_ANALYSE},
-                },
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            bloc,
-                            {"type": "text", "text": "Prépare l'analyse de ce contrat."},
-                        ],
-                    }
-                ],
-            ) as flux:
-                reponse = flux.get_final_message()
-        except anthropic.RateLimitError:
-            return LectureDeContrat(incident=_INCIDENTS["SATURE"])
-        except anthropic.APITimeoutError:
-            return LectureDeContrat(incident=_INCIDENTS["DELAI"])
-        except anthropic.APIConnectionError:
-            return LectureDeContrat(incident=_INCIDENTS["RESEAU"])
-        except anthropic.APIStatusError as echec:
-            _journal.warning("Analyse refusée par l'API : %s %s", echec.status_code, echec.message)
-            return LectureDeContrat(
-                incident=(
-                    f"Lecture automatique indisponible ({echec.status_code}) : "
-                    "instruisez à la main."
-                )
-            )
-
-        if reponse.stop_reason == "refusal":
-            return LectureDeContrat(incident=_INCIDENTS["REFUS"])
-        if reponse.stop_reason == "max_tokens":
-            return LectureDeContrat(incident=_INCIDENTS["LONGUE"])
-        texte = next((b.text for b in reponse.content if getattr(b, "type", None) == "text"), None)
-        try:
-            points = json.loads(texte or "")["points"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return LectureDeContrat(incident=_INCIDENTS["ILLISIBLE"])
+            points = lu["points"]
+        except (KeyError, TypeError):
+            return LectureDeContrat(incident=incident_de_lecture(lu))
         return LectureDeContrat(propositions=[_proposition(p) for p in points if _valable(p)])
+
+
+def incident_de_lecture(lu: Any) -> str:
+    """Les mots du juriste pour une panne de l'agent. Une réponse sans la clé attendue est
+    illisible, comme une réponse qui n'est pas du JSON."""
+    if not isinstance(lu, Incident):
+        return _INCIDENTS["ILLISIBLE"]
+    if lu.code == "INDISPONIBLE":
+        return f"Lecture automatique indisponible ({lu.statut}) : instruisez à la main."
+    return _INCIDENTS[lu.code]
 
 
 def _valable(point: Any) -> bool:

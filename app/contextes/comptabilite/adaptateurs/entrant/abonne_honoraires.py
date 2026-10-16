@@ -46,10 +46,10 @@ def proposer_l_ecriture_des_honoraires(
 ) -> str | None:
     """Rend la clé de l'écriture proposée, ou `None` si elle existait ou ne se propose pas."""
     from app.contextes.comptabilite.adaptateurs.entrant.routes_http import (
-        _dossier_du_portefeuille,
-        _journaux,
-        _plan,
         depot,
+        depot_des_journaux,
+        depot_du_plan,
+        dossier_du_portefeuille,
         periodes_verrouillees_du_dossier,
     )
     from app.contextes.comptabilite.application.tenue_du_journal import (
@@ -72,7 +72,7 @@ def proposer_l_ecriture_des_honoraires(
     locataire = configuration().locataire_par_defaut
 
     with etabli(locataire), (unite or unite_de_la_plateforme)(locataire) as boutique:
-        dossier = _dossier_du_portefeuille(niu)
+        dossier = dossier_du_portefeuille(niu)
         exercice = next(
             (
                 e
@@ -125,8 +125,8 @@ def proposer_l_ecriture_des_honoraires(
         try:
             ecriture = enregistrer_une_ecriture(
                 brouillon,
-                journaux=_journaux.charger(),
-                plan=_plan.charger(),
+                journaux=depot_des_journaux.charger(),
+                plan=depot_du_plan.charger(),
                 exercice=exercice,
                 periodes_verrouillees=periodes_verrouillees_du_dossier(niu),
                 depot=depot_du_dossier,

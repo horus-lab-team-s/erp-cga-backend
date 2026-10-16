@@ -23,7 +23,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire, depot
+from app.contextes.portefeuille.adaptateurs.entrant.routes_http import depot, lire_le_dossier
 from app.contextes.portefeuille.domaine.entites import Tiers, TypeTiers
 from app.contextes.transverse.api import AccesRequis, Permission, atelier, exiger_dossier
 from app.partage.horloge import maintenant
@@ -61,7 +61,7 @@ def _net(valeur: str | None) -> str | None:
 )
 def lire_le_registre(acces: AccesRequis, niu: str) -> list[Tiers]:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    return sorted(_lire(niu).tiers, key=lambda t: t.denomination.casefold())
+    return sorted(lire_le_dossier(niu).tiers, key=lambda t: t.denomination.casefold())
 
 
 @routeur.put(
@@ -70,7 +70,7 @@ def lire_le_registre(acces: AccesRequis, niu: str) -> list[Tiers]:
 )
 def renseigner_un_tiers(acces: AccesRequis, niu: str, code: str, saisie: SaisieDuTiers) -> Tiers:
     exiger_dossier(acces, Permission.SAISIR_ECRITURE, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     tiers = Tiers(
         code=code,
         denomination=saisie.denomination.strip(),

@@ -34,9 +34,9 @@ from app.contextes.collecte.api import (
     pieces_en_memoire,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_http import (
-    _dossier_du_portefeuille,
-    _journaux,
     depot,
+    depot_des_journaux,
+    dossier_du_portefeuille,
 )
 from app.contextes.comptabilite.adaptateurs.sortant.cloture_mensuelle_yaml import (
     charger_les_reglages_de_la_cloture_mensuelle,
@@ -141,7 +141,7 @@ def points_de_cloture_du_mois(
     ecritures = depot(entreprise).lister(exercice)
     banques = {
         j.code: j.compte_contrepartie
-        for j in _journaux.charger()
+        for j in depot_des_journaux.charger()
         if j.nature is NatureJournal.BANQUE and j.compte_contrepartie
     }
     pieces = _pieces(entreprise)
@@ -224,7 +224,7 @@ def lire_la_cloture_du_mois(
     mois: str = Path(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="AAAA-MM"),
 ) -> VueDeCloture:
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     if dossier is None:
         raise HTTPException(status_code=404, detail=f"dossier {entreprise} inconnu.")
     du, au = bornes_du_mois(mois)

@@ -34,13 +34,12 @@ from types import SimpleNamespace
 import anthropic
 import httpx2
 import pytest
+from sqlalchemy import text
 
 from app.contextes.collecte.adaptateurs.sortant.extraction_claude import ExtractionClaude
 from app.contextes.collecte.domaine.facture_lue import FactureLue, LigneLue
 from app.contextes.collecte.domaine.pieces import TypePiece
 from app.contextes.transverse.api import NIU_DEMO
-from sqlalchemy import text
-
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
 BATIMENT = NIU_DEMO["BATIMENT"]

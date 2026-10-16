@@ -51,7 +51,7 @@ from app.contextes.portefeuille.domaine.entites import (
 )
 from app.contextes.portefeuille.domaine.temporel import MotifChangement
 
-__all__ = ["PORTEFEUILLE_DEMO", "entreprise_demo"]
+__all__ = ["PORTEFEUILLE_DEMO"]
 
 
 def _exercices(premier: int, dernier: int) -> list[Exercice]:
@@ -383,11 +383,3 @@ PORTEFEUILLE_DEMO: dict[str, Entreprise] = {
 }
 
 
-def entreprise_demo(niu: str) -> Entreprise:
-    """Rend un dossier de démonstration, ou lève avec la liste des NIU connus."""
-    if niu not in PORTEFEUILLE_DEMO:
-        raise KeyError(
-            f"NIU « {niu} » absent du portefeuille de démonstration. "
-            f"Connus : {', '.join(sorted(PORTEFEUILLE_DEMO))}"
-        )
-    return PORTEFEUILLE_DEMO[niu]

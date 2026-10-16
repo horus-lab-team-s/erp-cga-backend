@@ -42,7 +42,6 @@ from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "PointDeControle",
-    "RevueIntrouvable",
     "du_mois",
     "exiger_une_cloture_sans_point_bloquant",
     "points_de_controle",
@@ -50,10 +49,6 @@ __all__ = [
     "remarquer",
     "transmettre_un_mois",
 ]
-
-
-class RevueIntrouvable(LookupError):
-    """Aucune revue de ce nom sur ce dossier. Rendue en 404."""
 
 
 def du_mois(ecritures: list[EcritureComptable], du: date, au: date) -> list[EcritureComptable]:

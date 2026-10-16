@@ -45,13 +45,13 @@ from app.contextes.comptabilite.api import (
     StatutRapprochement,
     depot_des_rapprochements,
 )
-from app.contextes.pilotage.adaptateurs.entrant.routes_http import (
-    _depot_demandes,
-    _depot_dossiers,
-    _depot_pieces,
-    _echeancier,
-    _ecritures,
-    _sans_echouer,
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_demandes,
+    depot_dossiers,
+    depot_ecritures,
+    depot_pieces,
+    echeancier_du_dossier,
+    sans_echouer,
 )
 from app.contextes.pilotage.adaptateurs.sortant.pieces_manquantes_yaml import (
     charger_les_reglages_des_pieces_manquantes,
@@ -96,25 +96,25 @@ _CANAL_TRACE = {
 }
 
 
-def _reglages() -> ReglagesDesPiecesManquantes:
+def reglages_des_pieces_manquantes() -> ReglagesDesPiecesManquantes:
     return charger_les_reglages_des_pieces_manquantes(configuration().dossier_referentiel)
 
 
-def _bornes(mois: str) -> tuple[date, date]:
+def bornes_du_mois(mois: str) -> tuple[date, date]:
     debut = date(int(mois[:4]), int(mois[5:7]), 1)
     return debut, (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
 
-def _dossier(niu: str):
-    dossier = next((d for d in _depot_dossiers().lister() if d.niu == niu), None)
+def dossier_a_relancer(niu: str):
+    dossier = next((d for d in depot_dossiers().lister() if d.niu == niu), None)
     if dossier is None:
         raise HTTPException(status_code=404, detail=f"dossier {niu} inconnu.")
     return dossier
 
 
-def _relever_les_attentes(dossier, du: date, au: date, reglages) -> list[AttenteDePiece]:
+def relever_les_attentes(dossier, du: date, au: date, reglages) -> list[AttenteDePiece]:
     niu = dossier.niu
-    pieces_brutes = _sans_echouer(lambda: _depot_pieces().du_dossier(niu), [])
+    pieces_brutes = sans_echouer(lambda: depot_pieces().du_dossier(niu), [])
     pieces = [
         PieceObservee(
             identifiant=p.identifiant,
@@ -138,15 +138,15 @@ def _relever_les_attentes(dossier, du: date, au: date, reglages) -> list[Attente
             ),
             reponse_le=d.derniere_reponse.le if d.derniere_reponse else None,
         )
-        for d in _sans_echouer(lambda: _depot_demandes().ouvertes(niu), [])
+        for d in sans_echouer(lambda: depot_demandes().ouvertes(niu), [])
     ]
 
     rapprochements = [
         r
-        for r in _sans_echouer(lambda: depot_des_rapprochements().du_dossier(niu), [])
+        for r in sans_echouer(lambda: depot_des_rapprochements().du_dossier(niu), [])
         if r.statut is not StatutRapprochement.ABANDONNE
     ]
-    ecritures = _sans_echouer(lambda: _ecritures(niu).toutes(str(du.year)), [])
+    ecritures = sans_echouer(lambda: depot_ecritures(niu).toutes(str(du.year)), [])
     du_mois = [e for e in ecritures if du <= e.date_operation <= au]
     # Même règle que le plan de travail (pas 104), mais un relevé **importé** suffit : c'est la
     # pièce de l'adhérent qu'on attend, pas le rapprochement du comptable.
@@ -177,7 +177,7 @@ def _relever_les_attentes(dossier, du: date, au: date, reglages) -> list[Attente
 
     obligations = [
         i.code_obligation
-        for i in _sans_echouer(lambda: _echeancier(dossier, str(du.year), au), [])
+        for i in sans_echouer(lambda: echeancier_du_dossier(dossier, str(du.year), au), [])
         if i.periode_debut <= au and du <= i.periode_fin
     ]
 
@@ -240,7 +240,7 @@ def _date_limite(dossier, du: date, au: date, jour: date, reglages) -> tuple[dat
     Rend (date limite, estimée, échéance dépassée).
     """
     limite, estimee = au + timedelta(days=15 - reglages.jours_avant_echeance), True
-    for obligation in _sans_echouer(lambda: _echeancier(dossier, str(du.year), au), []):
+    for obligation in sans_echouer(lambda: echeancier_du_dossier(dossier, str(du.year), au), []):
         if (
             obligation.code_obligation == reglages.obligation_de_reference
             and obligation.periode_debut <= du
@@ -335,7 +335,7 @@ def _historique(niu: str) -> list[EvenementDeRelance]:
         for c in e.apres.get("canaux", [])
     }
     inverse = {v: k for k, v in _CANAL_TRACE.items()}
-    for demande in _sans_echouer(lambda: _depot_demandes().ouvertes(niu), []):
+    for demande in sans_echouer(lambda: depot_demandes().ouvertes(niu), []):
         for jour, canal in demande.relances:
             nom = inverse.get(canal, canal).value if canal in inverse else canal.value
             if (jour, nom) in envoyees:
@@ -373,10 +373,10 @@ class VueDeRelance(BaseModel):
 
 
 def _vue(acces: Acces, niu: str, mois: str, codes: list[str] | None, modele: str | None):
-    reglages = _reglages()
-    dossier = _dossier(niu)
-    du, au = _bornes(mois)
-    attentes = _relever_les_attentes(dossier, du, au, reglages)
+    reglages = reglages_des_pieces_manquantes()
+    dossier = dossier_a_relancer(niu)
+    du, au = bornes_du_mois(mois)
+    attentes = relever_les_attentes(dossier, du, au, reglages)
     connus = {a.code for a in attentes}
     selection = [
         c for c in (codes if codes is not None else [a.code for a in attentes]) if c in connus
@@ -498,7 +498,7 @@ def envoyer_la_relance(
             "personne. Relancer par téléphone, puis tracer la relance depuis les pièces attendues.",
         )
 
-    depot = _depot_demandes()
+    depot = depot_demandes()
     # ⚠️ Tout se vérifie avant d'écrire : une relance ne part pas à moitié.
     deja = []
     for attente in retenues:

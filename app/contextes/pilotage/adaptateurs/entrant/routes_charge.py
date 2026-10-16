@@ -14,13 +14,12 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.contextes.comptabilite.api import depot_des_revues
-from app.contextes.pilotage.adaptateurs.entrant.routes_http import (
-    _aujourd_hui,
-    _depot_dossiers,
-    _depot_pieces,
-    _echeancier,
-    _ecritures,
-    _sans_echouer,
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_dossiers,
+    depot_ecritures,
+    depot_pieces,
+    echeancier_du_dossier,
+    sans_echouer,
 )
 from app.contextes.pilotage.adaptateurs.sortant.charge_yaml import (
     charger_les_reglages_de_la_charge,
@@ -45,7 +44,7 @@ from app.contextes.transverse.api import (
     habilitations_actives,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import jour_a_douala
+from app.partage.horloge import aujourd_hui, jour_a_douala
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · charge et production"])
 
@@ -69,10 +68,10 @@ class ChargeEtProduction(BaseModel):
 
 def _dossier(entreprise, jour: date, debut: date, fin: date) -> DossierPourLaCharge:
     niu = entreprise.niu
-    pieces = _sans_echouer(lambda: _depot_pieces().du_dossier(niu), [])
-    echeancier = _sans_echouer(lambda: _echeancier(entreprise, str(jour.year), jour), [])
-    ecritures = _sans_echouer(lambda: _ecritures(niu).toutes(str(jour.year)), [])
-    revues = _sans_echouer(lambda: depot_des_revues().du_dossier(niu), [])
+    pieces = sans_echouer(lambda: depot_pieces().du_dossier(niu), [])
+    echeancier = sans_echouer(lambda: echeancier_du_dossier(entreprise, str(jour.year), jour), [])
+    ecritures = sans_echouer(lambda: depot_ecritures(niu).toutes(str(jour.year)), [])
+    revues = sans_echouer(lambda: depot_des_revues().du_dossier(niu), [])
     return DossierPourLaCharge(
         niu=niu,
         denomination=entreprise.denomination,
@@ -165,10 +164,10 @@ def lire_les_dossiers_sans_comptable(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.AFFECTER_DOSSIER)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
     debut = jour.replace(day=1)
     fin = (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-    entreprises = _depot_dossiers().lister()
+    entreprises = depot_dossiers().lister()
     dossiers = {e.niu: _dossier(e, jour, debut, fin) for e in entreprises}
     return dossiers_sans_comptable(_porteurs(list(dossiers), jour), dossiers)
 
@@ -182,11 +181,11 @@ def lire_la_charge_et_la_production(
     a_la_date: date | None = Query(None, description="Défaut : aujourd'hui"),
 ) -> ChargeEtProduction:
     exiger(acces, Permission.LIRE_PILOTAGE)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
     debut = jour.replace(day=1)
     fin = (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     reglages = charger_les_reglages_de_la_charge(configuration().dossier_referentiel)
-    entreprises = _depot_dossiers().lister()
+    entreprises = depot_dossiers().lister()
     dossiers = {e.niu: _dossier(e, jour, debut, fin) for e in entreprises}
     porteurs = _porteurs(list(dossiers), jour)
     return ChargeEtProduction(

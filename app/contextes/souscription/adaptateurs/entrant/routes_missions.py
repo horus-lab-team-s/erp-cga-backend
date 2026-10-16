@@ -195,13 +195,15 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
     exiger(acces, Permission.TRAITER_MISSION)
     client, courriel = demande.client, demande.client_courriel
     if demande.reference_commerciale:
-        from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import _dossiers
+        from app.contextes.souscription.adaptateurs.entrant.sources import (
+            depot_dossiers,
+        )
         from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
             DossierIntrouvable,
         )
 
         try:
-            dossier = _dossiers().lire(demande.reference_commerciale)
+            dossier = depot_dossiers().lire(demande.reference_commerciale)
         except DossierIntrouvable:
             dossier = None
         if dossier is None:
@@ -242,11 +244,6 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
         exercice=demande.exercice if demande.type is TypeMission.DSF_CIBLEE else None,
     )
     return _enregistrer(mission, action="ouverte", par=acces.compte, apres={"type": mission.type})
-
-
-class DocumentVerse(BaseModel):
-    empreinte: str
-    nom: str
 
 
 @routeur.post("/{identifiant}/document", summary="Verser le document à analyser")

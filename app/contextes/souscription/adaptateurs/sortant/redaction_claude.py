@@ -11,18 +11,15 @@ demande.
 
 from __future__ import annotations
 
-import json
-import logging
 from typing import Any
 
 from app.contextes.souscription.adaptateurs.sortant.analyse_claude import (
-    _INCIDENTS,
     LectureDeContrat,
+    incident_de_lecture,
 )
+from app.partage.agent_claude import Incident, client_anthropic, demander_en_json
 
 __all__ = ["RedactionClaude", "SCHEMA_DE_REDACTION"]
-
-_journal = logging.getLogger(__name__)
 
 _CONSIGNE = """\
 Tu assistes le juriste d'un cabinet d'expertise comptable et juridique au Cameroun \
@@ -65,64 +62,33 @@ class RedactionClaude:
 
     def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
         self._modele = modele
-        if client is None:
-            import anthropic
-
-            client = anthropic.Anthropic(
-                api_key=cle_api, timeout=anthropic.Timeout(300.0, connect=10.0), max_retries=2
-            )
-        self._client = client
+        self._client = client if client is not None else client_anthropic(cle_api, delai_s=300.0)
 
     def rediger(self, *, type_de_contrat: str, cahier: str) -> LectureDeContrat:
-        import anthropic
-
+        lu = demander_en_json(
+            self._client,
+            modele=self._modele,
+            consigne=_CONSIGNE,
+            contenu=(
+                f"Type de contrat : {type_de_contrat}\n\n"
+                f"Cahier de rédaction :\n{cahier}\n\nPropose le projet d'articles."
+            ),
+            schema=SCHEMA_DE_REDACTION,
+            effort="high",
+            max_tokens=64000,
+            en_flux=True,
+            objet="Rédaction",
+        )
         try:
-            with self._client.beta.messages.stream(
-                model=self._modele,
-                max_tokens=64000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                system=_CONSIGNE,
-                thinking={"type": "adaptive"},
-                output_config={
-                    "effort": "high",
-                    "format": {"type": "json_schema", "schema": SCHEMA_DE_REDACTION},
-                },
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Type de contrat : {type_de_contrat}\n\n"
-                            f"Cahier de rédaction :\n{cahier}\n\nPropose le projet d'articles."
-                        ),
-                    }
-                ],
-            ) as flux:
-                reponse = flux.get_final_message()
-        except anthropic.RateLimitError:
-            return LectureDeContrat(incident=_INCIDENTS["SATURE"])
-        except anthropic.APITimeoutError:
-            return LectureDeContrat(incident=_INCIDENTS["DELAI"])
-        except anthropic.APIConnectionError:
-            return LectureDeContrat(incident=_INCIDENTS["RESEAU"])
-        except anthropic.APIStatusError as echec:
-            _journal.warning(
-                "Rédaction refusée par l'API : %s %s", echec.status_code, echec.message
-            )
-            return LectureDeContrat(
-                incident=(
-                    f"Rédaction automatique indisponible ({echec.status_code}) : rédigez à la main."
+            articles = lu["articles"]
+        except (KeyError, TypeError):
+            if isinstance(lu, Incident) and lu.code == "INDISPONIBLE":
+                return LectureDeContrat(
+                    incident=(
+                        f"Rédaction automatique indisponible ({lu.statut}) : rédigez à la main."
+                    )
                 )
-            )
-        if reponse.stop_reason == "refusal":
-            return LectureDeContrat(incident=_INCIDENTS["REFUS"])
-        if reponse.stop_reason == "max_tokens":
-            return LectureDeContrat(incident=_INCIDENTS["LONGUE"])
-        texte = next((b.text for b in reponse.content if getattr(b, "type", None) == "text"), None)
-        try:
-            articles = json.loads(texte or "")["articles"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return LectureDeContrat(incident=_INCIDENTS["ILLISIBLE"])
+            return LectureDeContrat(incident=incident_de_lecture(lu))
         return LectureDeContrat(
             propositions=[
                 {

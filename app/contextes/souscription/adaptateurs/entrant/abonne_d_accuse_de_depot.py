@@ -59,8 +59,8 @@ def accuser_le_depot(evenement: EvenementSortant, *, notifier: Any = None) -> No
     """
     # Importé à l'appel : les dépôts vivent avec les routes, et ce module est
     # chargé à la composition de l'application.
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _dossiers,
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_dossiers,
     )
 
     # ⚠️ Par `transverse.api`, et non par le module de dépendances. L'abonné
@@ -69,7 +69,7 @@ def accuser_le_depot(evenement: EvenementSortant, *, notifier: Any = None) -> No
     # `tests/test_architecture.py` le vérifie.
     from app.contextes.transverse.api import service_de_notification
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     dossier = depot.lire(evenement.charge.get("dossier", ""))
 
     if dossier.accuse_de_depot_le is not None:

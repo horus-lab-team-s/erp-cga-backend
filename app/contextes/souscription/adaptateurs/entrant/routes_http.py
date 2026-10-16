@@ -175,10 +175,10 @@ class Comptoir:
         démarrage conserverait une session de requête déjà fermée.
         ─────────────────────────────────────────────────────────────────────────
         """
-        from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-            _boite_du_parcours,
-            _dossiers,
-            _proformas,
+        from app.contextes.souscription.adaptateurs.entrant.sources import (
+            boite_du_parcours,
+            depot_dossiers,
+            depot_proformas,
         )
         from app.contextes.souscription.application.encaissement_du_parcours import (
             SuiteDeProforma,
@@ -195,9 +195,9 @@ class Comptoir:
                 journal=self.journal,
             ),
             NaturePaiement.PROFORMA: SuiteDeProforma(
-                dossiers=_dossiers(),
-                proformas=_proformas(),
-                boite=_boite_du_parcours(),
+                dossiers=depot_dossiers(),
+                proformas=depot_proformas(),
+                boite=boite_du_parcours(),
                 journal=self.journal,
             ),
             # ⚠️ 14 octobre 2026 : les honoraires des adhérents, réglés depuis leur
@@ -205,12 +205,12 @@ class Comptoir:
             NaturePaiement.HONORAIRES: SuiteDHonoraires(
                 reglements=self.reglements_honoraires,
                 journal=self.journal,
-                boite=_boite_du_parcours(),
+                boite=boite_du_parcours(),
             ),
             # ⚠️ 14 octobre 2026 : les fonds de tiers (TVA, CNPS sous mandat de paiement).
             NaturePaiement.FONDS_DE_TIERS: SuiteDeFondsDeTiers(
                 appels=self.appels_de_fonds,
-                boite=_boite_du_parcours(),
+                boite=boite_du_parcours(),
                 journal=self.journal,
             ),
         }

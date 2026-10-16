@@ -57,7 +57,9 @@ class MesDocumentsDeCreation(BaseModel):
 
 
 def _proforma_payee(dossier_commercial: str):
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import _proformas
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_proformas,
+    )
 
     """La proforma que le règlement a soldée : l'acceptée, sinon la dernière transmise.
 
@@ -65,7 +67,7 @@ def _proforma_payee(dossier_commercial: str):
     réglée sans passer par le lien d'acceptation reste TRANSMISE : le dossier payé suffit.
     Une proforma remplacée ou annulée n'est jamais celle-là.
     """
-    proformas = list(reversed(_proformas().par_dossier(dossier_commercial)))
+    proformas = list(reversed(depot_proformas().par_dossier(dossier_commercial)))
     return next((p for p in proformas if p.etat is EtatProforma.ACCEPTEE), None) or next(
         (p for p in proformas if p.etat is EtatProforma.TRANSMISE), None
     )
@@ -74,23 +76,23 @@ def _proforma_payee(dossier_commercial: str):
 @routeur.get("/creation", summary="Les proformas et le reçu de la cliente connectée")
 def mes_documents(acces: AccesRequis) -> list[MesDocumentsDeCreation]:
     exiger(acces, Permission.SUIVRE_MA_CREATION)
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _dossiers,
-        _proformas,
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_dossiers,
+        depot_proformas,
     )
     from app.contextes.souscription.adaptateurs.sortant.depots_memoire import DossierIntrouvable
 
     vues = []
     for reference in _dossiers_commerciaux(acces):
         try:
-            dossier = _dossiers().lire(reference)
+            dossier = depot_dossiers().lire(reference)
         except DossierIntrouvable:
             continue
         proformas = [
             ProformaDeLaCliente(
                 numero=p.numero, version=p.version, etat=p.etat, total=p.total, emise_le=p.emise_le
             )
-            for p in _proformas().par_dossier(reference)
+            for p in depot_proformas().par_dossier(reference)
             # Ce qu'on lui a transmis : une proforma émise mais jamais envoyée reste au cabinet.
             if p.etat in _TRANSMISES
         ]
@@ -116,20 +118,22 @@ def mes_documents(acces: AccesRequis) -> list[MesDocumentsDeCreation]:
 def ma_proforma(acces: AccesRequis, numero: str) -> Response:
     exiger(acces, Permission.SUIVRE_MA_CREATION)
     from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _le_document,
-        _proformas,
+        servir_le_pdf_de_la_proforma,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_proformas,
     )
     from app.contextes.souscription.adaptateurs.sortant.depots_memoire import ProformaIntrouvable
 
     try:
-        proforma = _proformas().lire(numero)
+        proforma = depot_proformas().lire(numero)
     except ProformaIntrouvable as absente:
         raise HTTPException(status_code=404, detail=f"proforma {numero} introuvable.") from absente
     # ⚠️ La même règle que la liste : ce qu'on lui a transmis, rien d'autre. Une proforma
     # émise mais jamais envoyée, ou annulée, reste au cabinet.
     if proforma.dossier not in _dossiers_commerciaux(acces) or proforma.etat not in _TRANSMISES:
         raise HTTPException(status_code=404, detail=f"proforma {numero} introuvable.")
-    return _le_document(proforma)
+    return servir_le_pdf_de_la_proforma(proforma)
 
 
 @routeur.get(
@@ -140,8 +144,10 @@ def ma_proforma(acces: AccesRequis, numero: str) -> Response:
 )
 def mon_recu(acces: AccesRequis, dossier: str) -> Response:
     exiger(acces, Permission.SUIVRE_MA_CREATION)
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import _dossiers
     from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_dossiers,
+    )
     from app.contextes.souscription.adaptateurs.sortant.depots_memoire import DossierIntrouvable
     from app.contextes.souscription.adaptateurs.sortant.document_recu_honoraires import (
         rendre_un_recu,
@@ -154,7 +160,7 @@ def mon_recu(acces: AccesRequis, dossier: str) -> Response:
     if dossier not in _dossiers_commerciaux(acces):
         raise HTTPException(status_code=404, detail=f"dossier {dossier} introuvable.")
     try:
-        commercial = _dossiers().lire(dossier)
+        commercial = depot_dossiers().lire(dossier)
     except DossierIntrouvable as absent:
         raise HTTPException(status_code=404, detail=f"dossier {dossier} introuvable.") from absent
     proforma = _proforma_payee(dossier)

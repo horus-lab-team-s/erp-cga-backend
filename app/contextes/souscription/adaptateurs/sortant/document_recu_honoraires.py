@@ -18,12 +18,12 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
 from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
-    _GRIS,
-    _INDIGO,
-    _MARGE,
-    _entete,
-    _pied,
-    _sous,
+    GRIS,
+    INDIGO,
+    MARGE,
+    entete_de_document,
+    montant_imprime,
+    pied_de_document,
 )
 from app.contextes.souscription.domaine.honoraires import CanalDeReglement, ReglementDHonoraires
 from app.partage.formats import MOIS, en_toutes_lettres
@@ -79,36 +79,36 @@ def rendre_un_recu(
     page = canvas.Canvas(tampon, pagesize=A4, invariant=1)
     page.setTitle(f"{titre.split(' · ')[0].capitalize()} {numero}")
     page.setAuthor("CGA Broad Range Consulting Group")
-    y = _entete(page)
-    page.setFillColor(_INDIGO)
+    y = entete_de_document(page)
+    page.setFillColor(INDIGO)
     page.setFont("Helvetica-Bold", 15)
-    page.drawString(_MARGE, y, titre)
+    page.drawString(MARGE, y, titre)
     local = a_douala(le)
     page.setFont("Helvetica", 9)
-    page.setFillColor(_GRIS)
+    page.setFillColor(GRIS)
     page.drawString(
-        _MARGE,
+        MARGE,
         y - 6 * mm,
         f"N° {numero} · le {local.day} {MOIS[local.month - 1]} {local.year}",
     )
-    lignes = [*avant, ("Montant réglé", f"{_sous(montant)} FCFA"), *apres]
+    lignes = [*avant, ("Montant réglé", f"{montant_imprime(montant)} FCFA"), *apres]
     y -= 20 * mm
     for libelle, valeur in lignes:
-        page.setFillColor(_GRIS)
+        page.setFillColor(GRIS)
         page.setFont("Helvetica", 9.5)
-        page.drawString(_MARGE, y, libelle)
+        page.drawString(MARGE, y, libelle)
         page.setFillColor(black)
         page.setFont("Helvetica-Bold" if libelle == "Montant réglé" else "Helvetica", 10.5)
-        page.drawString(_MARGE + 40 * mm, y, valeur[:95])
+        page.drawString(MARGE + 40 * mm, y, valeur[:95])
         y -= 8 * mm
     y -= 4 * mm
     page.setFont("Helvetica-Oblique", 9.5)
     page.drawString(
-        _MARGE,
+        MARGE,
         y,
         f"Arrêté le présent reçu à la somme de {en_toutes_lettres(montant)} francs CFA.",
     )
-    _pied(page)
+    pied_de_document(page)
     page.showPage()
     page.save()
     return tampon.getvalue()

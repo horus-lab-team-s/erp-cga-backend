@@ -21,7 +21,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire
+from app.contextes.portefeuille.adaptateurs.entrant.routes_http import lire_le_dossier
 from app.contextes.portefeuille.adaptateurs.sortant.espace_adherent_yaml import (
     charger_la_fiche_adherent,
 )
@@ -147,7 +147,7 @@ class MonEntreprise(BaseModel):
 def lire_mon_entreprise(acces: AccesRequis, niu: str) -> MonEntreprise:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
     reglages = _reglages()
-    dossier = _lire(niu)
+    dossier = lire_le_dossier(niu)
     jour = aujourd_hui()
     regime = resoudre(dossier.regimes, jour)
     if regime is None:
@@ -216,7 +216,7 @@ class Signalement(BaseModel):
 def signaler_un_changement(acces: AccesRequis, niu: str, corps: Signalement) -> SignalementLu:
     exiger_dossier(acces, Permission.SIGNALER_UN_CHANGEMENT, niu)
     reglages = _reglages()
-    dossier = _lire(niu)
+    dossier = lire_le_dossier(niu)
     message = corps.message.strip()
     if len(message) < 5:
         raise HTTPException(status_code=422, detail="décrivez le changement en quelques mots.")
@@ -335,7 +335,7 @@ def _enregistrer(entreprise, fiche: FicheSignaletique, *, acteur: str, action: s
 )
 def lire_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    return _vue(_lire(niu))
+    return _vue(lire_le_dossier(niu))
 
 
 @routeur.put(
@@ -345,7 +345,7 @@ def lire_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
 )
 def renseigner_la_fiche(acces: AccesRequis, niu: str, saisie: SaisieDeLaFiche) -> VueDeLaFiche:
     exiger_dossier(acces, Permission.RENSEIGNER_FICHE_DSF, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         fiche = (entreprise.fiche_dsf or FicheSignaletique()).modifier(
             saisie.model_dump(), par=acces.compte, a_l_instant=maintenant()
@@ -353,7 +353,7 @@ def renseigner_la_fiche(acces: AccesRequis, niu: str, saisie: SaisieDeLaFiche) -
     except FicheRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     _enregistrer(entreprise, fiche, acteur=acces.compte, action="portefeuille.fiche_dsf_renseignee")
-    return _vue(_lire(niu))
+    return _vue(lire_le_dossier(niu))
 
 
 @routeur.post(
@@ -363,13 +363,13 @@ def renseigner_la_fiche(acces: AccesRequis, niu: str, saisie: SaisieDeLaFiche) -
 )
 def soumettre_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
     exiger_dossier(acces, Permission.RENSEIGNER_FICHE_DSF, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         fiche = (entreprise.fiche_dsf or FicheSignaletique()).soumettre(a_l_instant=maintenant())
     except FicheRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     _enregistrer(entreprise, fiche, acteur=acces.compte, action="portefeuille.fiche_dsf_soumise")
-    return _vue(_lire(niu))
+    return _vue(lire_le_dossier(niu))
 
 
 @routeur.post(
@@ -379,7 +379,7 @@ def soumettre_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
 )
 def valider_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
     exiger_dossier(acces, Permission.VALIDER_FICHE_DSF, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         fiche = (entreprise.fiche_dsf or FicheSignaletique()).valider(
             par=acces.compte, a_l_instant=maintenant()
@@ -387,7 +387,7 @@ def valider_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
     except FicheRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     _enregistrer(entreprise, fiche, acteur=acces.compte, action="portefeuille.fiche_dsf_validee")
-    return _vue(_lire(niu))
+    return _vue(lire_le_dossier(niu))
 
 
 @routeur.post(
@@ -397,7 +397,7 @@ def valider_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
 )
 def renvoyer_la_fiche(acces: AccesRequis, niu: str, renvoi: RenvoiDeLaFiche) -> VueDeLaFiche:
     exiger_dossier(acces, Permission.VALIDER_FICHE_DSF, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         fiche = (entreprise.fiche_dsf or FicheSignaletique()).renvoyer(motif=renvoi.motif)
     except FicheRefusee as refus:
@@ -409,4 +409,4 @@ def renvoyer_la_fiche(acces: AccesRequis, niu: str, renvoi: RenvoiDeLaFiche) -> 
         action="portefeuille.fiche_dsf_renvoyee",
         motif=fiche.motif_du_renvoi,
     )
-    return _vue(_lire(niu))
+    return _vue(lire_le_dossier(niu))
