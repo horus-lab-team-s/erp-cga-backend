@@ -184,6 +184,8 @@ ROUTES_ASYNCHRONES = {
     "verser": "await fichier.read()",
     "verser_une_piece": "await fichier.read()",
     "notification_tara": "await requete.json()",
+    # 16 octobre 2026 : le CV d'une candidature. Lecture bornée, le reste dans un fil.
+    "postuler": "await cv.read()",
 }
 
 #: Ce qui n'est pas une route mais traverse la boucle à chaque requête.

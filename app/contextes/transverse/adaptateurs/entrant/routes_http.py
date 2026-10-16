@@ -192,6 +192,7 @@ def connexion(demande: DemandeConnexion, requete: Request, reponse: Response) ->
         session,
         boutique.habilitations.pour_compte(compte.identifiant),
         jour_a_douala(instant),
+        instant,
     )
 
 

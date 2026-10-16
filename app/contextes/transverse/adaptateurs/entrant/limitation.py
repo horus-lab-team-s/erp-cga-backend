@@ -148,6 +148,16 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
     # martèle le formulaire ne remplissait donc plus seulement une table, il
     # occupait des gens.
     Regle(
+        chemin="/vitrine/offres/*",
+        methode="POST",
+        # 16 octobre 2026 (revue de sécurité) : postuler est public et dépose un PDF de
+        # 5 Mo. Sans borne, un automate remplit le disque du magasin en changeant de
+        # téléphone. Dix par heure et par adresse : un cybercafé entier y tient.
+        maximum=10,
+        fenetre=3600,
+        motif="candidature",
+    ),
+    Regle(
         chemin="/acquisition/demandes",
         methode="POST",
         # Trente par heure et par adresse : un cabinet entier derrière une seule

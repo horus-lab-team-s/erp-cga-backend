@@ -438,6 +438,11 @@ def confirmer_enrolement(
     )
 
 
+#: Les codes de second facteur refusés tolérés avant la suspension, et leur fenêtre.
+CODES_REFUSES_TOLERES = 5
+FENETRE_DES_CODES_REFUSES = timedelta(minutes=15)
+
+
 def renforcer_session(
     session: Session,
     compte: Compte,
@@ -459,6 +464,30 @@ def renforcer_session(
         raise SecondFacteurAbsent(
             f"le compte {compte.identifiant} n'a pas de second facteur. L'enrôler "
             "depuis son profil avant de tenter une action sensible."
+        )
+    # 16 octobre 2026 (revue de sécurité) : la limite par adresse ne suffit pas, une
+    # adresse se change. Cinq codes refusés en quinze minutes suspendent les essais du
+    # compte, d'où qu'ils viennent : six chiffres ne résistent pas à un essai continu.
+    refus_recents = [
+        e
+        for e in journal.lister(
+            acteur=compte.identifiant,
+            objet_type="session",
+            depuis=a_l_instant - FENETRE_DES_CODES_REFUSES,
+        )
+        if e.action == "session.renforcement_refuse"
+    ]
+    if len(refus_recents) >= CODES_REFUSES_TOLERES:
+        journal.ajouter(
+            horodatage=a_l_instant,
+            acteur=compte.identifiant,
+            action="session.renforcement_suspendu",
+            objet_type="compte",
+            objet_id=compte.identifiant,
+        )
+        raise CodeInvalide(
+            "Trop de codes refusés : les essais sont suspendus quinze minutes. Si ce "
+            "n'est pas vous, prévenez l'administrateur du cabinet."
         )
     if not verifier_code(compte.secret_totp, code, a_l_instant):
         journal.ajouter(

@@ -5,7 +5,13 @@ from __future__ import annotations
 import unicodedata
 from urllib.parse import quote
 
-__all__ = ["disposition_en_ligne"]
+__all__ = ["disposition_en_ligne", "disposition_en_piece_jointe"]
+
+
+def disposition_en_piece_jointe(nom: str) -> str:
+    """La même chose en `attachment` (16 octobre 2026) : un CV au nom accentué faisait
+    tomber son téléchargement en erreur 500."""
+    return "attachment" + disposition_en_ligne(nom).removeprefix("inline")
 
 
 def disposition_en_ligne(nom: str) -> str:

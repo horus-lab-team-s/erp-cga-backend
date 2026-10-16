@@ -43,6 +43,14 @@ PUBLIQUES: dict[tuple[str, str], str] = {
     ("GET", "/vitrine/articles"): "Contenu du site public, écrit pour être lu.",
     ("GET", "/vitrine/articles/{slug}"): "Contenu du site public, écrit pour être lu.",
     ("GET", "/vitrine/institutions"): "Contenu du site public, écrit pour être lu.",
+    # 16 octobre 2026 : les offres de poste du cabinet. Le candidat les lit et postule
+    # sans compte ; seules les offres publiées et non échues répondent, le CV est un PDF
+    # vérifié sur son contenu, et une personne ne postule qu'une fois à une offre.
+    ("GET", "/vitrine/offres"): "Les postes ouverts, publiés pour être lus.",
+    ("GET", "/vitrine/offres/{identifiant}"): "Un poste ouvert et ses qualifications.",
+    ("POST", "/vitrine/offres/{identifiant}/candidatures"): (
+        "Postuler ne demande pas de compte : le candidat n'en a pas, et n'a pas à en créer un."
+    ),
     ("GET", "/acquisition/canaux"): (
         "La vitrine doit savoir quels canaux proposer au visiteur. Exiger une "
         "session pour afficher un formulaire reviendrait à demander à quelqu'un de "

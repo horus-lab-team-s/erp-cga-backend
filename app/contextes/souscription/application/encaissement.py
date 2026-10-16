@@ -247,8 +247,17 @@ def traiter_notification(
     suites: Mapping[NaturePaiement, SuiteDuPaiement],
     journal: JournalAudit,
     a_l_instant: datetime,
+    confirmer: bool,
 ) -> ResultatEncaissement:
     """Point d'entrée de la notification du prestataire. Atomique et rejouable.
+
+    ⚠️ `confirmer` (16 octobre 2026, revue de sécurité). Tara ne signe pas ses
+    notifications : la route est publique, et une notification forgée suffisait à
+    encaisser un paiement jamais débité. Avec `confirmer`, la notification ne fait que
+    désigner le paiement ; c'est l'appel **sortant** `interroger_statut` qui dit s'il
+    est réglé, et sans réponse de Tara rien ne change (la réconciliation reprendra).
+    `False` seulement quand il n'y a pas de prestataire réel à interroger : simulation
+    de développement ou mode démonstration, que la production refuse tous deux.
 
     ⚠️ `suites` est une **table**, et non deux paramètres nommés. Un troisième
     objet payable n'ajoutera donc pas un argument à cette signature ni une
@@ -273,6 +282,8 @@ def traiter_notification(
         )
 
     attendu = fournisseur.identifiant_marchand()
+    # ⚠️ Ce contrôle ne protège plus seul : c'est la confirmation sortante (`confirmer`)
+    # qui empêche une notification forgée d'encaisser, marchand omis ou non.
     if (
         attendu
         and evenement.identifiant_marchand
@@ -319,6 +330,30 @@ def traiter_notification(
         )
 
     paiement, strategie = trouve
+    if confirmer:
+        confirme = fournisseur.interroger_statut(
+            cle_idempotence=paiement.cle_idempotence,
+            reference_externe=evenement.reference_externe,
+        )
+        if confirme is None:
+            journal.ajouter(
+                horodatage=a_l_instant,
+                acteur="systeme",
+                action="paiement.notification_non_confirmee",
+                objet_type="paiement",
+                objet_id=paiement.identifiant,
+                apres={"reussi_annonce": evenement.reussi},
+            )
+            return ResultatEncaissement(
+                rapproche=False,
+                paiement=paiement.identifiant,
+                reference_reglee=paiement.reference_reglee,
+                message=(
+                    "notification reçue, non confirmée par le prestataire : rien n'est "
+                    "encaissé. La réconciliation reprendra le paiement."
+                ),
+            )
+        evenement = confirme
     suite = suites.get(paiement.nature)
     if suite is None:
         # ⚠️ Une nature sans suite est une erreur de câblage, pas un fait métier :

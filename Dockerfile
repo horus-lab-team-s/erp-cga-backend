@@ -114,9 +114,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # l'orchestrateur, qui sait ce que porte la machine. Un `--workers 4` en dur
 # quadruplerait la mémoire consommée sur un hôte à un cœur.
 #
-# ⚠️ `--forwarded-allow-ips *` fait confiance à l'en-tête `X-Forwarded-For`.
-# Correct **derrière un mandataire inverse** qui la réécrit, et seulement là :
-# exposer ce conteneur directement laisserait n'importe qui déclarer son adresse
-# — celle que journalise l'audit et que lira la limitation de débit.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# ⚠️ 16 octobre 2026 (revue de sécurité) : `--forwarded-allow-ips *` faisait confiance
+# à `X-Forwarded-For` venant de n'importe qui. Uvicorn retenait alors l'adresse la plus
+# à gauche, que le client choisit : la limitation de débit se contournait en la
+# changeant à chaque requête. La confiance va désormais aux seuls mandataires déclarés
+# par `FORWARDED_ALLOW_IPS` (lue par uvicorn ; 127.0.0.1 par défaut). Le déploiement
+# y met le réseau de l'ingress, et rien d'autre.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

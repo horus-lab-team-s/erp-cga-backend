@@ -34,7 +34,7 @@ M071122334455J » lui apprend qu'un tel dossier existe.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, time
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
@@ -180,11 +180,9 @@ def resoudre_acces(
     """Assemble les rôles, permissions et dossiers valides à cette date.
 
     `a_l_instant` sert au seul renforcement de session, qui se périme à la
-    minute quand tout le reste se résout à la journée. À défaut, on prend minuit
-    au début de la date — donc **non renforcée**, ce qui est le refus, et le
-    refus est le bon défaut.
+    minute quand tout le reste se résout à la journée. À défaut, la session n'est
+    **pas renforcée** : le refus est le bon défaut.
     """
-    instant = a_l_instant or datetime.combine(a_la_date, time.min)
     actives = habilitations_actives(habilitations, a_la_date)
     roles = frozenset(h.role for h in actives)
     dossiers = dossiers_accessibles(actives, a_la_date)
@@ -196,7 +194,10 @@ def resoudre_acces(
         roles=sorted(roles, key=lambda r: r.value),
         permissions=sorted(permissions_de(roles), key=lambda p: p.value),
         dossiers=None if dossiers is None else sorted(dossiers),
-        facteur_fort=session.renforcee(instant),
+        # ⚠️ 16 octobre 2026 (revue de sécurité) : le défaut était minuit, et « minuit <
+        # renforcée jusqu'à 14 h 15 » est vrai : la session restait renforcée toute la
+        # journée. Sans instant, pas de second facteur.
+        facteur_fort=a_l_instant is not None and session.renforcee(a_l_instant),
         second_facteur_enrole=compte.second_facteur_actif,
         a_la_date=a_la_date,
     )

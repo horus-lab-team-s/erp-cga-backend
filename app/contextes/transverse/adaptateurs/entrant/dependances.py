@@ -687,7 +687,7 @@ async def acces_optionnel(
     except (SessionInvalide, CompteIntrouvable):
         return None
     request.state.session = session
-    return resoudre_acces(compte, session, habilitations, jour_a_douala(instant))
+    return resoudre_acces(compte, session, habilitations, jour_a_douala(instant), instant)
 
 
 def acces_courant(

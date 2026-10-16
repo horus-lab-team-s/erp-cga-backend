@@ -108,6 +108,7 @@ def inscrire_une_entreprise_existante(
             fiche_dsf=fiche,
             groupe_risque_cnps=groupe_risque_cnps,
             groupe_risque_notifie_le=groupe_risque_notifie_le,
+            suivi_depuis=a_la_date,
             regimes=[statut_initial(regime, date_creation, precision=precision)],
             rattachements=[
                 StatutRattachement(

@@ -591,6 +591,7 @@ def engager_devis(reference: str, demande: DemandeEngagement) -> Engagement:
             suites=boutique.suites,
             journal=boutique.journal,
             a_l_instant=maintenant(),
+            confirmer=False,  # mode démonstration : aucun prestataire à interroger
         )
         # Relus : l'ouverture d'accès a fait évoluer les deux agrégats, et rendre
         # les objets d'avant afficherait « en attente » sur un paiement encaissé.
@@ -646,6 +647,13 @@ def lire_souscription(reference: str) -> Souscription:
 # ── La notification du prestataire ───────────────────────────────────────────
 
 
+def confirmation_requise(fournisseur) -> bool:
+    """Une notification ne vaut qu'après confirmation sortante dès qu'un prestataire réel
+    existe (revue de sécurité du 16 octobre 2026). Le mode simulé n'a personne à
+    interroger, et la production le refuse en amont."""
+    return not fournisseur.simule
+
+
 @routeur.post(
     "/notification/tara",
     summary="Notification d'encaissement du prestataire",
@@ -666,6 +674,20 @@ async def notification_tara(requete: Request) -> ResultatEncaissement:
     except Exception:  # noqa: BLE001 — une charge illisible ne doit pas faire 500
         charge_utile = {}
     boutique = comptoir()
+    # 16 octobre 2026 (revue de sécurité) : sans prestataire réel, une notification ne
+    # peut être que fabriquée. Hors production, c'est la simulation de développement ;
+    # en production, elle est refusée, journalisée, et rien ne s'encaisse.
+    if boutique.fournisseur.simule and configuration().en_production:
+        boutique.journal.ajouter(
+            horodatage=maintenant(),
+            acteur="systeme",
+            action="paiement.notification_refusee",
+            objet_type="notification",
+            apres={"motif": "aucun prestataire réel configuré en production"},
+        )
+        return ResultatEncaissement(
+            rapproche=False, message="notification refusée : aucun prestataire réel."
+        )
 
     # ⚠️ L'encaissement écrit en base, et cette route est asynchrone : tenu sur la
     # boucle d'événements, il figeait le serveur le temps de l'écriture. La route
@@ -679,6 +701,7 @@ async def notification_tara(requete: Request) -> ResultatEncaissement:
             suites=boutique.suites,
             journal=boutique.journal,
             a_l_instant=maintenant(),
+            confirmer=confirmation_requise(boutique.fournisseur),
         )
     )
 
@@ -790,6 +813,10 @@ class Simulation(BaseModel):
 )
 def simuler(identifiant: str, simulation: Simulation) -> ResultatEncaissement:
     boutique = comptoir()
+    if configuration().en_production:
+        # 16 octobre 2026 (revue de sécurité) : sans clé Tara, la production gardait
+        # cette route ouverte, et sans authentification. Un encaissement ne se fabrique pas.
+        raise HTTPException(status_code=404, detail="Not Found")
     if not boutique.fournisseur.simule:
         raise HTTPException(
             status_code=409,
@@ -813,6 +840,7 @@ def simuler(identifiant: str, simulation: Simulation) -> ResultatEncaissement:
         suites=boutique.suites,
         journal=boutique.journal,
         a_l_instant=maintenant(),
+        confirmer=False,  # simulation de développement : aucun prestataire réel
     )
 
 

@@ -328,6 +328,11 @@ def generer_echeancier(
                     ),
                     effectif_a_confirmer=emploi is None,
                 )
+            # 16 octobre 2026 : une entreprise prise en charge en cours de route ne
+            # porte pas les échéances passées avant son arrivée ; les compter en
+            # retard faisait accuser le cabinet d'un retard qui n'est pas le sien.
+            if entreprise.suivi_depuis is not None and instance.echeance < entreprise.suivi_depuis:
+                continue
             # 15 octobre 2026 : un montant estimé quand l'appelant sait le faire (l'IGS,
             # voir `igs.py`), avec son explication ; sinon `None`, jamais zéro.
             estimation = estimer(type_obligation, debut, fin) if estimer else None

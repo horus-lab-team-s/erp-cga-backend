@@ -270,6 +270,7 @@ class TestQuandUneNatureNAPasDeSuite:
             suites={},
             journal=journal,
             a_l_instant=T0,
+            confirmer=False,
         )
 
         assert resultat.rapproche is False
@@ -291,6 +292,7 @@ class TestQuandUneNatureNAPasDeSuite:
             suites={},
             journal=_JournalFactice(),
             a_l_instant=T0,
+            confirmer=False,
         )
 
         assert paiements.lire("pay-essai").statut.value == "EN_ATTENTE"

@@ -394,7 +394,8 @@ def lire_declaration(
         total_a_verser=declaration.total_a_verser,
         cotisations_cnps=declaration.cotisations_cnps,
         a_deposer_avant=declaration.a_deposer_avant,
-        en_retard=declaration.en_retard_au(a_la_date),
+        en_retard=declaration.en_retard_au(a_la_date)
+        and not _avant_le_suivi(entreprise, declaration.a_deposer_avant),
         repose_sur_des_valeurs_non_validees=(
             declaration.repose_sur_des_valeurs_non_validees
         ),
@@ -468,6 +469,18 @@ def enregistrer_le_groupe_de_risque(
         apres={"groupe": notification.groupe.value, "notifie_le": str(notification.notifie_le)},
     )
     return GroupeDeRisqueDuDossier(groupe=notification.groupe, notifie_le=notification.notifie_le)
+
+
+def _avant_le_suivi(entreprise: str, echeance: date) -> bool:
+    """La déclaration était due avant que le cabinet ne prenne le dossier : pas son retard.
+    Voir `Entreprise.suivi_depuis`."""
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+
+    try:
+        depuis = _dossiers_du_portefeuille().lire(entreprise).suivi_depuis
+    except EntrepriseIntrouvable:
+        return False
+    return depuis is not None and echeance < depuis
 
 
 def _lire_le_dossier(entreprise: str):

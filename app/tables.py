@@ -46,6 +46,7 @@ from app.contextes.social.adaptateurs.sortant import tables as social
 from app.contextes.souscription.adaptateurs.sortant import tables as souscription
 from app.contextes.tenants.adaptateurs.sortant import tables as tenants
 from app.contextes.transverse.adaptateurs.sortant import tables as transverse
+from app.contextes.vitrine.adaptateurs.sortant import tables as vitrine
 from app.infrastructure import tables_orchestration as orchestration
 from app.infrastructure.base_de_donnees import METADONNEES
 
@@ -68,6 +69,7 @@ MODULES = (
     souscription,
     tenants,
     transverse,
+    vitrine,
     orchestration,
 )
 

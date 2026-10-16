@@ -582,6 +582,27 @@ class TestAutorisation:
         ]
         assert resoudre_acces(compte, session, habilitations, date(2026, 6, 1)).roles == []
 
+    def test_le_second_facteur_se_perime_a_la_minute_et_non_a_minuit(self):
+        """16 octobre 2026, revue de sécurité : sans instant, la session renforcée à
+        14 h restait renforcée jusqu'à minuit (minuit < 14 h 15)."""
+        renforcee = Session(
+            identifiant="S-1",
+            compte="C-1",
+            locataire="CGA-BRCG",
+            ouverte_le=datetime(2026, 3, 12, 13, 0),
+            expire_le=datetime(2026, 3, 12, 23, 0),
+            renforcee_jusqu_a=datetime(2026, 3, 12, 14, 15),
+        )
+        compte, habilitations, jour = _compte(), [_hab()], date(2026, 3, 12)
+        assert resoudre_acces(compte, renforcee, habilitations, jour).facteur_fort is False
+        quatorze_heures, quatorze_heures_trente = (
+            datetime(2026, 3, 12, 14, 0),
+            datetime(2026, 3, 12, 14, 30),
+        )
+        avant = resoudre_acces(compte, renforcee, habilitations, jour, quatorze_heures)
+        apres = resoudre_acces(compte, renforcee, habilitations, jour, quatorze_heures_trente)
+        assert (avant.facteur_fort, apres.facteur_fort) == (True, False)
+
 
 # ── L'authentification ───────────────────────────────────────────────────────
 

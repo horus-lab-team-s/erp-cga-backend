@@ -83,6 +83,26 @@ def test_le_dossier_paye_preremplit_puis_s_inscrit_et_la_paie_reprend_le_groupe(
     corps = dossier.json()
     assert corps["denomination"] == "BRIQUETERIE DU WOURI SARL"
 
+    # Les échéances passées avant la prise en charge ne sont pas celles du cabinet : ni
+    # dans l'échéancier, ni en retard à la DIPE du mois écoulé.
+    from app.partage.horloge import aujourd_hui
+
+    jour = aujourd_hui()
+    echeancier = client.get(
+        f"/obligations/dossiers/{NIU}/echeancier",
+        params={"exercice": "2026", "a_la_date": jour.isoformat()},
+    )
+    assert echeancier.status_code == 200, echeancier.text
+    echeances = [o["obligation"]["echeance"] for o in echeancier.json()]
+    passees = [e for e in echeances if e < jour.isoformat()]
+    assert echeances and passees == []
+    mois = (jour.replace(day=1) - __import__("datetime").timedelta(days=1))
+    dipe = client.get(
+        f"/social/dossiers/{NIU}/declaration/{mois.year}/{mois.month}",
+        params={"a_la_date": jour.isoformat()},
+    ).json()
+    assert dipe["en_retard"] is False
+
     # Sortie de la liste d'attente, où elle figurait avant l'inscription.
     attente = client.get("/acquisition/inscriptions/en-attente").json()
     assert reference not in {e["reference"] for e in attente}

@@ -421,6 +421,11 @@ class Entreprise(BaseModel):
     #: déduit pas de l'activité. Inconnu : la paie suppose le groupe A et le dit.
     groupe_risque_cnps: str | None = Field(default=None, pattern="^[ABC]$")
     groupe_risque_notifie_le: date | None = None
+    #: Le jour où le cabinet a pris en charge une entreprise qui existait déjà (16 octobre
+    #: 2026). Les obligations échues avant ne sont pas les siennes : l'échéancier ne les
+    #: compte pas en retard. `None` : suivie depuis sa création (le cabinet l'a créée, ou
+    #: le dossier précède cette distinction).
+    suivi_depuis: date | None = None
     siege: str | None = None
     etablissements: list[str] = Field(default_factory=list)
 

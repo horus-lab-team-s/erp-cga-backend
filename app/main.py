@@ -153,6 +153,9 @@ from app.contextes.transverse.api import IntergicielUniteDeTravail, garnir_le_re
 from app.contextes.vitrine.adaptateurs.entrant.routes_http import (
     routeur as routeur_vitrine,
 )
+from app.contextes.vitrine.adaptateurs.entrant.routes_recrutement import (
+    routeur as routeur_recrutement,
+)
 from app.infrastructure.base_de_donnees import moteur
 from app.infrastructure.charge import IntergicielMesureDeCharge
 from app.infrastructure.config import configuration
@@ -739,6 +742,7 @@ def creer_application() -> FastAPI:
     # La vitrine publique : contenu éditorial du site, en lecture seule et sans
     # authentification — tout ce qu'elle rend est déjà destiné à être affiché.
     application.include_router(routeur_vitrine)
+    application.include_router(routeur_recrutement)
     # La souscription : elle part du site public et aboutit dans l'ERP. Montée en
     # dernier parce qu'elle est le seul contexte à traverser la frontière entre
     # les deux — un visiteur y entre sans compte et en ressort avec.
