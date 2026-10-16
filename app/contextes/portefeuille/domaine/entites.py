@@ -416,6 +416,11 @@ class Entreprise(BaseModel):
     #: La fiche signalétique de la DSF (fiches R1 à R3), renseignée par le client et
     #: validée par le cabinet. Voir `fiche_signaletique.py`.
     fiche_dsf: FicheSignaletique | None = None
+    #: Le groupe de tarification du risque professionnel que la CNPS a notifié à
+    #: l'employeur (A, B ou C), et la date de la notification (16 octobre 2026). Il ne se
+    #: déduit pas de l'activité. Inconnu : la paie suppose le groupe A et le dit.
+    groupe_risque_cnps: str | None = Field(default=None, pattern="^[ABC]$")
+    groupe_risque_notifie_le: date | None = None
     siege: str | None = None
     etablissements: list[str] = Field(default_factory=list)
 

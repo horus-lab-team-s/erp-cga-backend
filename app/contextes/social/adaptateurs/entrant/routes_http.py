@@ -52,10 +52,12 @@ from app.contextes.social.api import (
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
+    atelier,
     exiger_dossier_pour_l_un_de,
 )
 from app.infrastructure.config import configuration
 from app.partage.erreurs import message_lisible
+from app.partage.horloge import aujourd_hui, maintenant
 
 routeur = APIRouter(prefix="/social", tags=["Social et paie"])
 
@@ -109,6 +111,9 @@ class SyntheseDeclaration(BaseModel):
     en_retard: bool
     repose_sur_des_valeurs_non_validees: bool
     mouvements: list[dict]
+    #: Le groupe de risque appliqué, et s'il est supposé faute d'être au dossier.
+    groupe_risque: GroupeRisque = GroupeRisque.A
+    groupe_risque_suppose: bool = False
     bulletins: list[Bulletin]
 
 
@@ -213,12 +218,11 @@ def lire_bulletin(
     annee: int,
     mois: int,
     matricule: str,
-    groupe_risque: GroupeRisque = Query(
-        GroupeRisque.A,
+    groupe_risque: GroupeRisque | None = Query(
+        None,
         description=(
-            "Groupe de tarification du risque professionnel **notifié par la CNPS**. "
-            "Il ne se déduit pas de l'activité : le saisir de travers coûte le triple "
-            "ou le tiers de la cotisation accidents du travail."
+            "Pour simuler un autre groupe. Absent : le groupe **notifié par la CNPS** et "
+            "enregistré au dossier ; à défaut, A, et le bulletin le signale."
         ),
     ),
 ) -> Bulletin:
@@ -239,28 +243,18 @@ def imprimer_le_bulletin(
     annee: int,
     mois: int,
     matricule: str,
-    groupe_risque: GroupeRisque = Query(GroupeRisque.A),
+    groupe_risque: GroupeRisque | None = Query(None),
 ) -> Response:
     """15 octobre 2026 : le bulletin se remet au salarié. Même garde, même calcul."""
     exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     bulletin, contrat = _bulletin_du_mois(entreprise, annee, mois, matricule, groupe_risque)
     depot_salaries, _ = depots()
     salarie = depot_salaries.lire(matricule)
-    from app.contextes.portefeuille.api import (
-        DepotEntreprisesSql,
-        EntrepriseIntrouvable,
-        entreprises_en_memoire,
-    )
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
     from app.contextes.social.adaptateurs.sortant.document_bulletin import rendre_le_bulletin
-    from app.contextes.transverse.api import session_de_travail
-    from app.partage.locataire import courant
 
-    session = session_de_travail()
-    depot_dossiers = (
-        entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
-    )
     try:
-        employeur = depot_dossiers.lire(entreprise).denomination
+        employeur = _dossiers_du_portefeuille().lire(entreprise).denomination
     except EntrepriseIntrouvable:
         employeur = entreprise
     octets = rendre_le_bulletin(
@@ -283,7 +277,7 @@ def imprimer_le_bulletin(
 
 
 def _bulletin_du_mois(
-    entreprise: str, annee: int, mois: int, matricule: str, groupe_risque: GroupeRisque
+    entreprise: str, annee: int, mois: int, matricule: str, groupe_risque: GroupeRisque | None
 ):
     """Le bulletin du mois et le contrat qui le fonde. Extrait le 15 octobre 2026 pour que
     l'écran et le PDF portent le même calcul ; l'accès reste à l'appelant."""
@@ -314,7 +308,49 @@ def _bulletin_du_mois(
                 "prorata que le cabinet n'a pas arrêtée : à traiter à la main."
             ),
         )
-    return _calculer(contrats[0], entreprise, periode, groupe_risque), contrats[0]
+    groupe, suppose = _groupe_de_risque(entreprise, groupe_risque)
+    bulletin = _calculer(contrats[0], entreprise, periode, groupe)
+    if suppose:
+        bulletin = bulletin.model_copy(update={"alertes": (*bulletin.alertes, _GROUPE_SUPPOSE)})
+    return bulletin, contrats[0]
+
+
+_GROUPE_SUPPOSE = (
+    "Groupe de risque professionnel non renseigné au dossier : le groupe A (risque faible) "
+    "est supposé. Enregistrez le groupe notifié par la CNPS : un groupe B ou C coûte "
+    "davantage de cotisation accidents du travail."
+)
+
+
+def _dossiers_du_portefeuille():
+    from app.contextes.portefeuille.api import DepotEntreprisesSql, entreprises_en_memoire
+    from app.contextes.transverse.api import session_de_travail
+    from app.partage.locataire import courant
+
+    session = session_de_travail()
+    return entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
+
+
+def _groupe_de_risque(
+    entreprise: str, demande: GroupeRisque | None
+) -> tuple[GroupeRisque, bool]:
+    """Le groupe à appliquer, et s'il est supposé (16 octobre 2026).
+
+    Celui demandé pour une simulation ; sinon celui que la CNPS a notifié, enregistré au
+    dossier ; à défaut A, le plus bas, et l'appelant le signale. Supposer sans le dire
+    sous-cotiserait un employeur à risque élevé sans que personne ne le voie.
+    """
+    if demande is not None:
+        return demande, False
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+
+    try:
+        notifie = _dossiers_du_portefeuille().lire(entreprise).groupe_risque_cnps
+    except EntrepriseIntrouvable:
+        notifie = None
+    if notifie is None:
+        return GroupeRisque.A, True
+    return GroupeRisque(notifie), False
 
 
 @routeur.get(
@@ -327,7 +363,7 @@ def lire_declaration(
     annee: int,
     mois: int,
     a_la_date: date = Query(..., description="Date à laquelle juger le retard de dépôt"),
-    groupe_risque: GroupeRisque = Query(GroupeRisque.A),
+    groupe_risque: GroupeRisque | None = Query(None),
 ) -> SyntheseDeclaration:
     """Le DIPE du mois, calculé depuis les contrats en vigueur.
 
@@ -338,6 +374,7 @@ def lire_declaration(
     exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     periode = _periode(annee, mois)
     _, depot_contrats = depots()
+    groupe, suppose = _groupe_de_risque(entreprise, groupe_risque)
     try:
         declaration = etablir_la_declaration(
             entreprise,
@@ -345,7 +382,7 @@ def lire_declaration(
             depot_contrats.du_dossier(entreprise),
             parametres(),
             baremes(),
-            groupe_risque=groupe_risque,
+            groupe_risque=groupe,
         )
     except ParametrePaieAbsent as absence:
         raise HTTPException(status_code=503, detail=str(absence)) from absence
@@ -369,8 +406,80 @@ def lire_declaration(
             for m in declaration.mouvements
         ],
         bulletins=list(declaration.bulletins),
+        groupe_risque=groupe,
+        groupe_risque_suppose=suppose,
     )
 
+
+
+# ── Le groupe de risque professionnel notifié par la CNPS (16 octobre 2026) ──────
+
+
+class GroupeDeRisqueDuDossier(BaseModel):
+    groupe: GroupeRisque | None
+    notifie_le: date | None
+
+
+class NotificationDuGroupe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groupe: GroupeRisque
+    notifie_le: date
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/groupe-risque",
+    summary="Le groupe de risque professionnel notifié par la CNPS, s'il est enregistré",
+)
+def lire_le_groupe_de_risque(acces: AccesRequis, entreprise: str) -> GroupeDeRisqueDuDossier:
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    dossier = _lire_le_dossier(entreprise)
+    return GroupeDeRisqueDuDossier(
+        groupe=dossier.groupe_risque_cnps, notifie_le=dossier.groupe_risque_notifie_le
+    )
+
+
+@routeur.put(
+    "/dossiers/{entreprise}/groupe-risque",
+    summary="Enregistrer le groupe notifié par la CNPS : chaque bulletin et le DIPE le lisent",
+)
+def enregistrer_le_groupe_de_risque(
+    acces: AccesRequis, entreprise: str, notification: NotificationDuGroupe
+) -> GroupeDeRisqueDuDossier:
+    """Le cabinet, ou l'employeur dans son espace : c'est lui qui reçoit la notification."""
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
+    if notification.notifie_le > aujourd_hui():
+        raise HTTPException(
+            status_code=422, detail="la date de notification ne peut pas être à venir."
+        )
+    dossier = _lire_le_dossier(entreprise)
+    _dossiers_du_portefeuille().enregistrer(
+        dossier.model_copy(
+            update={
+                "groupe_risque_cnps": notification.groupe.value,
+                "groupe_risque_notifie_le": notification.notifie_le,
+            }
+        )
+    )
+    atelier().journal.ajouter(
+        horodatage=maintenant(),
+        acteur=acces.compte,
+        action="social.groupe_risque_notifie",
+        objet_type="dossier",
+        objet_id=entreprise,
+        avant={"groupe": dossier.groupe_risque_cnps},
+        apres={"groupe": notification.groupe.value, "notifie_le": str(notification.notifie_le)},
+    )
+    return GroupeDeRisqueDuDossier(groupe=notification.groupe, notifie_le=notification.notifie_le)
+
+
+def _lire_le_dossier(entreprise: str):
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+
+    try:
+        return _dossiers_du_portefeuille().lire(entreprise)
+    except EntrepriseIntrouvable as absence:
+        raise HTTPException(status_code=404, detail=str(absence)) from absence
 
 # ── Écritures ────────────────────────────────────────────────────────────────
 @routeur.post("/dossiers/{entreprise}/salaries", summary="Inscrire un salarié", status_code=201)
