@@ -406,6 +406,21 @@ class TestPassageFiscal:
         )
         assert passage.total_deductions == Decimal(0)
 
+    def test_a_l_igs_l_abattement_ne_porte_pas_sur_le_benefice(self, parametres):
+        """CGI 2026, art. 119 (1) : « pour les contribuables relevant du régime de l'impôt
+        général synthétique, cet abattement s'applique sur le montant de l'impôt général
+        synthétique annuel ». Il figure à l'échéancier de l'IGS, pas au passage fiscal."""
+        passage = etablir_le_passage(
+            Decimal(5000000),
+            [],
+            parametres,
+            CLOTURE,
+            droit_a_l_abattement_cga=True,
+            au_regime_igs=True,
+        )
+        assert passage.total_deductions == Decimal(0)
+        assert "art. 119" in passage.abattement_cga_ecarte
+
     def test_pas_d_abattement_sur_un_deficit(self, parametres):
         """L'aggraver augmenterait le report déficitaire, donc réduirait l'impôt
         des exercices suivants d'un montant auquel l'adhérent n'a pas droit.

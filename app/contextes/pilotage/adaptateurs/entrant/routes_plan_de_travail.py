@@ -53,6 +53,7 @@ from app.contextes.pilotage.domaine.plan_de_travail import (
 )
 from app.contextes.transverse.api import AccesRequis, Permission, exiger, restreindre
 from app.infrastructure.config import configuration
+from app.partage.horloge import jour_a_douala
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · plan de travail"])
 
@@ -85,7 +86,7 @@ def _etat_du_dossier(dossier, jour: date) -> tuple[EtatDuDossierPourLePlan, str]
     debut_precedent = fin_precedent.replace(day=1)
 
     pieces = tuple(
-        (p.identifiant, p.recue_le.date())
+        (p.identifiant, jour_a_douala(p.recue_le))
         for p in _sans_echouer(lambda: _depot_pieces().du_dossier(niu), [])
         if p.en_attente_de_traitement
     )

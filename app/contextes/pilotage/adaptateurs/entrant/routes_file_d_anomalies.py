@@ -52,7 +52,7 @@ from app.contextes.transverse.api import (
     restreindre,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · file d'anomalies"])
 
@@ -87,7 +87,7 @@ def lire_la_file(
 ) -> VueDeLaFile:
     exiger(acces, Permission.CONTROLER_CONFORMITE)
     reglages = _reglages()
-    jour = maintenant().date()
+    jour = aujourd_hui()
     moteur = moteur_par_defaut()
 
     # La pièce de la collecte, par référence de document : le déposant et la date réelle.

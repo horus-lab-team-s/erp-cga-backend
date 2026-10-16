@@ -45,6 +45,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from app.contextes.collecte.domaine.pieces import EtatPiece, PieceJustificative
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "NiveauSuspicion",
@@ -139,7 +140,7 @@ def detecter_doublons(
                     niveau=NiveauSuspicion.CERTAIN,
                     indices=(
                         f"empreinte identique ({arrivante.empreinte[:12]}…)",
-                        f"pièce déjà reçue le {existante.recue_le.date()} "
+                        f"pièce déjà reçue le {jour_a_douala(existante.recue_le)} "
                         f"par {existante.canal}",
                     ),
                     montant_en_jeu=existante.montant_ttc or arrivante.montant_ttc,
@@ -152,7 +153,7 @@ def detecter_doublons(
                 f"même émetteur ({existante.emetteur})",
                 f"même numéro ({existante.reference_document})",
                 f"même montant ({existante.montant_ttc})",
-                f"reçue le {existante.recue_le.date()} par {existante.canal}",
+                f"reçue le {jour_a_douala(existante.recue_le)} par {existante.canal}",
             ]
             if existante.etat is EtatPiece.COMPTABILISEE:
                 indices.append(f"déjà comptabilisée sous {existante.reference_ecriture}")

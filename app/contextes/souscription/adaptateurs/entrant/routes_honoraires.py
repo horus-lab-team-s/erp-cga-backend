@@ -56,7 +56,8 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage import horloge
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
 
@@ -113,7 +114,7 @@ def _mes_honoraires(niu: str) -> MesHonoraires:
             contrat=None, echeances=[], du=Decimal(0), en_retard=0, reglable_en_ligne=False
         )
     echeances = echeancier_d_honoraires(
-        contrat, boutique.reglements_honoraires.pour(niu), maintenant().date()
+        contrat, boutique.reglements_honoraires.pour(niu), aujourd_hui()
     )
     dues = [
         e
@@ -165,7 +166,7 @@ def caisse_des_honoraires(acces: AccesRequis) -> list[LigneDeCaisseHonoraires]:
     depuis un mois, quel que soit le canal. Le mobile money y arrive seul."""
     exiger(acces, Permission.ENCAISSER)
     boutique = _comptoir()
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     dues: list[LigneDeCaisseHonoraires] = []
     reglees: list[LigneDeCaisseHonoraires] = []
     for contrat in boutique.contrats_honoraires.lister():
@@ -182,7 +183,7 @@ def caisse_des_honoraires(acces: AccesRequis) -> list[LigneDeCaisseHonoraires]:
             )
             if e.reglement is None:
                 dues.append(ligne)
-            elif aujourd_hui - e.reglement.constate_le.date() <= _RECENTS:
+            elif aujourd_hui - jour_a_douala(e.reglement.constate_le) <= _RECENTS:
                 reglees.append(
                     ligne.model_copy(
                         update={

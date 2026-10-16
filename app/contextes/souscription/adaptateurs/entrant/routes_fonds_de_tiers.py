@@ -52,7 +52,8 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage import horloge
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
 
@@ -106,7 +107,7 @@ class MesFondsConfies(BaseModel):
 @routeur.get("/caisse", summary="Les fonds de tiers à recevoir, et reçus récemment")
 def caisse_des_fonds(acces: AccesRequis) -> list[AppelDeFonds]:
     exiger(acces, Permission.ENCAISSER)
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     appels = _comptoir().appels_de_fonds.lister()
     dus = [a for a in appels if a.etat is EtatAppelDeFonds.A_REGLER]
     recus = [
@@ -114,7 +115,7 @@ def caisse_des_fonds(acces: AccesRequis) -> list[AppelDeFonds]:
         for a in appels
         if a.etat is not EtatAppelDeFonds.A_REGLER
         and a.fonds_recus_le is not None
-        and aujourd_hui - a.fonds_recus_le.date() <= _RECENTS
+        and aujourd_hui - jour_a_douala(a.fonds_recus_le) <= _RECENTS
     ]
     return sorted(dus, key=lambda a: a.periode_debut) + sorted(
         recus, key=lambda a: a.fonds_recus_le, reverse=True
@@ -128,7 +129,7 @@ def caisse_des_fonds(acces: AccesRequis) -> list[AppelDeFonds]:
 def fonds_du_dossier(acces: AccesRequis, niu: str) -> MesFondsConfies:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
     entreprise = _entreprise(niu)
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     mandatees = sorted(
         {
             code

@@ -62,7 +62,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 from app.partage.locataire import courant
 from app.partage.recherche import (
     ReponseDeRecherche,
@@ -357,7 +357,7 @@ def fixer_la_nature_d_activite(
             update={"nature_activite": demande.nature, "reel_d_office": demande.reel_d_office}
         )
     )
-    return _resoudre(_lire(niu), maintenant().date())
+    return _resoudre(_lire(niu), aujourd_hui())
 
 
 @routeur.post(
@@ -484,7 +484,7 @@ def admettre(acces: AccesRequis, niu: str, demande: DemandeDAdhesion) -> Statuts
             entreprise,
             demande.a_compter_du,
             numero=prochain_numero_d_adhesion(portefeuille, demande.a_compter_du.year),
-            inscrite_le=maintenant().date(),
+            inscrite_le=aujourd_hui(),
             chiffre_affaires_declare=demande.chiffre_affaires_declare,
             source_du_chiffre=demande.source_du_chiffre,
             seuil_adhesion=seuil.valeur_decimale if seuil else None,

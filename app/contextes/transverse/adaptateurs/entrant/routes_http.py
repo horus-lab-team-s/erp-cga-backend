@@ -100,9 +100,10 @@ from app.contextes.transverse.domaine.mandats import Mandat, MotifMandat
 from app.contextes.transverse.domaine.notifications import Notification, notifications_pour
 from app.contextes.transverse.domaine.roles import libelle_role
 from app.infrastructure.config import configuration
+from app.partage import horloge
 from app.partage.erreurs import message_lisible
 from app.partage.formats import moment_long
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.recherche import (
     ReponseDeRecherche,
@@ -220,7 +221,7 @@ def connexion(demande: DemandeConnexion, requete: Request, reponse: Response) ->
         compte,
         session,
         boutique.habilitations.pour_compte(compte.identifiant),
-        instant.date(),
+        jour_a_douala(instant),
     )
 
 
@@ -1068,7 +1069,7 @@ def renforcer(acces: AccesRequis, demande: DemandeRenforcement) -> Acces:
         compte,
         renforcee,
         boutique.habilitations.pour_compte(compte.identifiant),
-        instant.date(),
+        jour_a_douala(instant),
         instant,
     )
 
@@ -1312,7 +1313,7 @@ def _fiche(mandat: Mandat, aujourd_hui: date) -> FicheMandat:
 )
 def lister_les_mandats(acces: AccesRequis) -> list[FicheMandat]:
     exiger(acces, Permission.GERER_COMPTES)
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     return [_fiche(m, aujourd_hui) for m in atelier().mandats.tous()]
 
 
@@ -1377,7 +1378,7 @@ def accorder_un_mandat(demande: DemandeDeMandat, acces: AccesRequis) -> FicheMan
             "motif": mandat.motif.value,
         },
     )
-    return _fiche(mandat, instant.date())
+    return _fiche(mandat, jour_a_douala(instant))
 
 
 class DemandeDeRevocation(BaseModel):
@@ -1410,7 +1411,7 @@ def revoquer_un_mandat(
 
     instant = maintenant()
     retire = mandat.model_copy(
-        update={"revoque_le": instant.date(), "revoque_par": acces.nom_complet}
+        update={"revoque_le": jour_a_douala(instant), "revoque_par": acces.nom_complet}
     )
     boutique.mandats.enregistrer(retire)
     boutique.journal.ajouter(
@@ -1423,4 +1424,4 @@ def revoquer_un_mandat(
         apres={"revoque_le": retire.revoque_le.isoformat()},
         motif=demande.motif,
     )
-    return _fiche(retire, instant.date())
+    return _fiche(retire, jour_a_douala(instant))

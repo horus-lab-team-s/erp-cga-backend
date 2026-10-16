@@ -105,7 +105,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/souscription", tags=["Souscription"])
@@ -402,7 +402,7 @@ def lire_tarifs(
 def fixer_un_tarif(acces: AccesRequis, demande: DemandeDeFixation) -> EtatDesTarifs:
     exiger(acces, Permission.FIXER_LES_TARIFS)
     instant = maintenant()
-    if demande.a_partir_du < instant.date():
+    if demande.a_partir_du < jour_a_douala(instant):
         raise HTTPException(
             status_code=422,
             detail=(
@@ -450,7 +450,7 @@ def fixer_un_tarif(acces: AccesRequis, demande: DemandeDeFixation) -> EtatDesTar
             "motif": demande.motif,
         },
     )
-    return _etat_des_tarifs(instant.date())
+    return _etat_des_tarifs(jour_a_douala(instant))
 
 
 # ── Le devis ─────────────────────────────────────────────────────────────────
@@ -480,8 +480,8 @@ def creer_devis(demande: DemandeDevis) -> Devis:
             reference=_reference("DV"),
             prospect=demande.prospect,
             demandes=demande.lignes,
-            services=boutique.services.charger(instant.date()),
-            a_la_date=instant.date(),
+            services=boutique.services.charger(jour_a_douala(instant)),
+            a_la_date=jour_a_douala(instant),
         )
     except (DevisImpossible, ServiceIntrouvable) as refus:
         raise HTTPException(status_code=422, detail=str(refus)) from refus

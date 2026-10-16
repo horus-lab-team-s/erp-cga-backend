@@ -57,6 +57,7 @@ from app.contextes.cloture.application.exercice_clos import (
     RapportDeCloture,
     clore_un_exercice,
 )
+from app.contextes.cloture.application.impot_estime import ImpotEstime, estimer_l_impot
 from app.contextes.cloture.domaine.droit_cga import (
     DroitAuxAvantagesCGA,
     apprecier_le_droit,
@@ -88,7 +89,7 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import a_douala, aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/cloture", tags=["Clôture et DSF"])
@@ -163,6 +164,8 @@ class Liasse(BaseModel):
     #: Le droit est ouvert, et l'abattement ne figure pourtant pas : pourquoi.
     #: `None` si l'abattement figure, ou si le droit est fermé (voir `droit_cga`).
     abattement_cga_ecarte: str | None = None
+    #: 15 octobre 2026 : l'IS estimé, minimum de perception compris (CGI art. 17, 22, 23).
+    impot: ImpotEstime | None = None
 
 
 @routeur.get(
@@ -229,6 +232,7 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
         chiffre_affaires=ca,
         seuil_adhesion=seuil.valeur_decimale if seuil else None,
         borne_adhesion=seuil.borne if seuil else None,
+        **_depot_de_la_dsf(dossier, periode),
     )
     etats = assembler_les_etats(soldes, systeme, systeme_non_valide=systeme_non_valide)
 
@@ -239,6 +243,7 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
         parametres(),
         periode.cloture,
         droit_a_l_abattement_cga=droit.ouvert,
+        au_regime_igs=dossier.regime_au(periode.cloture) == "IGS",
     )
 
     return Liasse(
@@ -269,7 +274,45 @@ def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
         pieces_a_verifier=list(moisson.pieces_a_verifier),
         droit_cga=droit,
         abattement_cga_ecarte=passage.abattement_cga_ecarte,
+        impot=estimer_l_impot(
+            forme_juridique=str(dossier.forme_juridique),
+            regime=dossier.regime_au(periode.cloture),
+            resultat_fiscal=passage.resultat_fiscal,
+            chiffre_affaires=ca,
+            parametres=parametres(),
+            cloture=periode.cloture,
+        ),
     )
+
+
+def _depot_de_la_dsf(dossier, periode) -> dict:
+    """L'échéance de la DSF de l'exercice et la date de son accusé, s'il y en a un
+    (CGI art. 119 (2), voir `droit_cga.py`). Un centre ou un type inconnu : rien n'est
+    rendu, et le droit s'apprécie sans cette condition plutôt que de se fermer à tort."""
+    from app.contextes.obligations.api import DepotTypesObligationMemoire, calculer_echeance
+    from app.contextes.portefeuille.api import StatutIntrouvable
+    from app.contextes.transverse.api import atelier, reference_de_depot
+
+    dsf = next(
+        (t for t in DepotTypesObligationMemoire().charger(periode.cloture) if t.code == "DSF"),
+        None,
+    )
+    try:
+        centre = dossier.rattachement_au(periode.cloture)
+    except StatutIntrouvable:
+        return {}
+    if dsf is None:
+        return {}
+    accuse = atelier().portail.retrouver(
+        reference_de_depot(dossier.niu, "DSF", periode.ouverture, periode.cloture)
+    )
+    return {
+        "echeance_declaration": calculer_echeance(
+            dsf, fin_de_periode=periode.cloture, centre=centre, cloture_exercice=periode.cloture
+        ),
+        "deposee_le": a_douala(accuse.depose_le).date() if accuse else None,
+        "au": aujourd_hui(),
+    }
 
 
 def _seuil_d_adhesion(cloture: date) -> ParametreResolu | None:

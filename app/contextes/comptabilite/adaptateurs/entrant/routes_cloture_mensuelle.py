@@ -71,7 +71,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/comptabilite", tags=["Comptabilité · clôture mensuelle"])
@@ -95,8 +95,8 @@ def _pieces(entreprise: str) -> list[PieceDuMois]:
             identifiant=p.identifiant,
             reference=p.reference_document,
             etat=p.etat.value,
-            date=p.date_document or p.recue_le.date(),
-            recue_le=p.recue_le.date(),
+            date=p.date_document or jour_a_douala(p.recue_le),
+            recue_le=jour_a_douala(p.recue_le),
         )
         for p in magasin.du_dossier(entreprise)
     ]
@@ -230,7 +230,7 @@ def lire_la_cloture_du_mois(
     du, au = bornes_du_mois(mois)
     # L'exercice est celui de l'année du mois, comme à la transmission (pas 102).
     exercice = str(du.year)
-    jour = maintenant().date()
+    jour = aujourd_hui()
     points, chiffres, reglages = points_de_cloture_du_mois(entreprise, du, au, exercice)
     revue = next(
         (r for r in depot_des_revues().du_dossier(entreprise) if r.du <= au and du <= r.au),

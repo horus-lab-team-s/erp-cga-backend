@@ -20,6 +20,9 @@ from app.contextes.cloture.adaptateurs.entrant.routes_dsf import (
 from app.contextes.cloture.adaptateurs.entrant.routes_http import (
     routeur as routeur_cloture,
 )
+from app.contextes.cloture.adaptateurs.entrant.routes_pieces_dsf import (
+    routeur as routeur_pieces_dsf,
+)
 from app.contextes.collecte.adaptateurs.entrant.routes_http import (
     routeur as routeur_collecte,
 )
@@ -684,6 +687,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_social)
     application.include_router(routeur_cloture)
     application.include_router(routeur_dsf)
+    application.include_router(routeur_pieces_dsf)
     application.include_router(routeur_missions)
     # J · Pilotage vient en dernier des contextes métier : il les agrège tous.
     application.include_router(routeur_pilotage)

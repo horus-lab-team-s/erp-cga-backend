@@ -39,6 +39,7 @@ from app.contextes.obligations.domaine.echeances import (
 from app.contextes.portefeuille.contrats import Entreprise, Exercice
 from app.contextes.transverse.contrats import AccuseReception, reference_de_depot
 from app.partage.copie import transiter
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "JALONS_RELANCE",
@@ -345,7 +346,7 @@ def generer_echeancier(
                 # celle du jour, parce que c'est elle qui dit si le dépôt était à temps.
                 instance = instance.avancer(
                     StatutObligation.DECLAREE,
-                    declaree_le=accuse.depose_le.date(),
+                    declaree_le=jour_a_douala(accuse.depose_le),
                     reference_depot=accuse.numero,
                 )
             instances.append(instance)

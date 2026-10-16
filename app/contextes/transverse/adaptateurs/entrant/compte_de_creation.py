@@ -42,7 +42,7 @@ import logging
 import uuid
 from typing import Any
 
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 
 __all__ = ["PARCOURS_CREATION", "ouvrir_le_compte_de_la_creation"]
 
@@ -124,7 +124,7 @@ def _ouvrir(
                 prenom="",
                 reference_creation=reference,
                 locataire=locataire,
-                depuis=instant.date(),
+                depuis=jour_a_douala(instant),
                 comptes=boutique.comptes,
                 habilitations=boutique.habilitations,
                 jetons=boutique.jetons,

@@ -53,7 +53,7 @@ from app.contextes.pilotage.domaine.decisions import DecisionDeDirection
 from app.contextes.pilotage.domaine.rapport_mensuel import RapportMensuel, SectionDuRapport
 from app.contextes.transverse.api import Acces, AccesRequis, Permission, atelier, exiger
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · rapport mensuel"])
 
@@ -96,7 +96,7 @@ def _lectures(acces: Acces):
             d
             for dossier in _depot_dossiers().lister()
             for d in depot.du_dossier(dossier.niu)
-            if du <= d.prise_le.date() <= au
+            if du <= jour_a_douala(d.prise_le) <= au
         ]
         return DecisionsDuMois(decisions=sorted(prises, key=lambda d: (d.prise_le, d.identifiant)))
 

@@ -94,7 +94,7 @@ from app.contextes.conformite.domaine.qualite_des_regles import (
     StatistiqueDeRegle,
     mesurer_les_regles,
 )
-from app.partage.horloge import maintenant as _maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala
 
 __all__ = [
     "DerogationARegulariser",
@@ -350,8 +350,8 @@ def derogations_du_perimetre(
         and (auteur is None or e.propose_par == auteur)
         and (dossier is None or e.dossier == dossier)
         and (statut is None or e.statut.value == statut)
-        and (du is None or e.propose_le.date() >= du)
-        and (au is None or e.propose_le.date() <= au)
+        and (du is None or jour_a_douala(e.propose_le) >= du)
+        and (au is None or jour_a_douala(e.propose_le) <= au)
     ]
 
 
@@ -360,7 +360,7 @@ def lire_le_journal_des_derogations(acces, **filtres) -> JournalDesDerogations:
     effectives = [e for e in derogations if e.statut is StatutEcart.EFFECTIF]
     noms = noms_des_comptes()
     politique = politique_d_ecart()
-    jour = _maintenant().date()
+    jour = aujourd_hui()
     retards = [
         DerogationARegulariser(
             identifiant=e.identifiant,
@@ -368,9 +368,9 @@ def lire_le_journal_des_derogations(acces, **filtres) -> JournalDesDerogations:
             reference_document=e.reference_document,
             code_regle=e.code_regle,
             severite=e.severite.value,
-            propose_le=e.propose_le.date(),
+            propose_le=jour_a_douala(e.propose_le),
             propose_par=noms.get(e.propose_par, e.propose_par),
-            jours=(jour - e.propose_le.date()).days,
+            jours=(jour - jour_a_douala(e.propose_le)).days,
         )
         for e in derogations
         if a_regulariser(e, politique, jour)

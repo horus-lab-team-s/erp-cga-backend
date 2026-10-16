@@ -44,7 +44,7 @@ from app.contextes.obligations.domaine.echeances_adherent import echeances_a_rap
 from app.contextes.obligations.domaine.rappels_adherent import jalon_du
 from app.contextes.transverse.api import EtatCompte, Role, atelier, habilitations_actives
 from app.orchestration.ordonnanceur import Travail
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 
 __all__ = ["NOM_TRAVAIL", "OBJET_RAPPEL", "envoyer_les_rappels", "travail_des_rappels"]
 
@@ -75,7 +75,7 @@ def cle_du_rappel(dossier: str, code: str, periode_debut, jalon: int) -> str:
 def envoyer_les_rappels() -> str:
     boutique = atelier()
     instant = maintenant()
-    jour = instant.date()
+    jour = jour_a_douala(instant)
     rappels = reglages_des_rappels()
     reglages = _reglages_des_echeances()
     envoyes = 0

@@ -65,7 +65,7 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 
@@ -77,7 +77,7 @@ def _aujourd_hui() -> date:
     une route de souscription, et le test échouait alors sans qu'aucune ligne de
     code n'ait changé.
     """
-    return maintenant().date()
+    return aujourd_hui()
 
 
 _journal_de_creation = logging.getLogger(__name__)

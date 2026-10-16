@@ -118,7 +118,7 @@ from app.contextes.transverse.api import (
 )
 from app.infrastructure.config import configuration
 from app.partage.erreurs import message_lisible
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 
@@ -650,7 +650,7 @@ def contrepasser_ecriture(
         return contrepasser_une_ecriture(
             cle,
             motif=demande.motif,
-            jour=demande.date_operation or maintenant().date(),
+            jour=demande.date_operation or aujourd_hui(),
             exercice=_exercice_du_dossier(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
@@ -1271,7 +1271,7 @@ def _balance_auxiliaire_du_dossier(entreprise: str, exercice: str, nature):
         if t.niu:
             fiches.setdefault(t.niu, fiche)
     try:
-        motif = service_parametres().valeur_texte("FORMAT_NIU", maintenant().date())
+        motif = service_parametres().valeur_texte("FORMAT_NIU", aujourd_hui())
     except (ParametreInconnu, AucuneVersionApplicable):  # sans format, on ne devine pas
         motif = None
     noms = _noms_des_emetteurs(entreprise)

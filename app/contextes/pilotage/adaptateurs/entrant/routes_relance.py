@@ -84,7 +84,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · relance des pièces"])
 
@@ -121,7 +121,7 @@ def _relever_les_attentes(dossier, du: date, au: date, reglages) -> list[Attente
             reference=p.reference_document,
             emetteur=p.emetteur,
             montant=p.montant_ttc,
-            date=p.date_document or p.recue_le.date(),
+            date=p.date_document or jour_a_douala(p.recue_le),
         )
         for p in pieces_brutes
     ]
@@ -194,7 +194,7 @@ def _relever_les_attentes(dossier, du: date, au: date, reglages) -> list[Attente
             facture = FACTURES_DEMO.get(p.reference_document or "")
             if facture is None or not p.en_attente_de_traitement:
                 continue
-            date_piece = p.date_document or p.recue_le.date()
+            date_piece = p.date_document or jour_a_douala(p.recue_le)
             if not du <= date_piece <= au:
                 continue
             rapport = rapport_arbitre(moteur.controler(facture), niu)
@@ -329,7 +329,7 @@ def _historique(niu: str) -> list[EvenementDeRelance]:
             )
     # Les relances tracées à la main (pas 74), qui ne sont pas passées par cet écran.
     envoyees = {
-        (e.horodatage.date(), c)
+        (jour_a_douala(e.horodatage), c)
         for e in envois
         if e.action == "pilotage.relance_envoyee"
         for c in e.apres.get("canaux", [])
@@ -382,7 +382,7 @@ def _vue(acces: Acces, niu: str, mois: str, codes: list[str] | None, modele: str
         c for c in (codes if codes is not None else [a.code for a in attentes]) if c in connus
     ]
     choisi = next((m for m in reglages.modeles if m.code == modele), reglages.modeles[0])
-    limite, estimee, depassee = _date_limite(dossier, du, au, maintenant().date(), reglages)
+    limite, estimee, depassee = _date_limite(dossier, du, au, aujourd_hui(), reglages)
     retenues = [a for a in attentes if a.code in selection]
     apercu = rendre_la_relance(
         choisi,
@@ -409,7 +409,7 @@ def _vue(acces: Acces, niu: str, mois: str, codes: list[str] | None, modele: str
             modele=choisi.code,
             apercu=apercu,
             canaux=list(reglages.canaux),
-            destinataires=[d.nom for d in _destinataires(niu, maintenant().date())],
+            destinataires=[d.nom for d in _destinataires(niu, aujourd_hui())],
             historique=historique,
             derniere_relance=historique[0].quand if historique else None,
         ),
@@ -489,7 +489,7 @@ def envoyer_la_relance(
         if reglage is None or not reglage.actif:
             motif = reglage.motif if reglage else "canal non réglé au référentiel"
             raise HTTPException(status_code=422, detail=f"canal {canal.value} inactif : {motif}")
-    jour = maintenant().date()
+    jour = aujourd_hui()
     destinataires = _destinataires(niu, jour)
     if not destinataires:
         raise HTTPException(

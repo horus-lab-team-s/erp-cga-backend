@@ -70,6 +70,7 @@ from app.contextes.transverse.api import (
     Portail,
     PortailDeclaratif,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "CompletudeDeLaPeriode",
@@ -574,7 +575,7 @@ def verifier_la_date_du_depot(
             f"dépôt daté du {depose_le:%d/%m/%Y %H:%M}, postérieur à maintenant. On ne "
             "consigne pas un dépôt qui n'a pas encore eu lieu."
         )
-    if not obligation.payable_d_avance and depose_le.date() <= obligation.periode_fin:
+    if not obligation.payable_d_avance and jour_a_douala(depose_le) <= obligation.periode_fin:
         raise DepotImpossible(
             f"dépôt daté du {depose_le:%d/%m/%Y}, alors que la période se termine le "
             f"{obligation.periode_fin:%d/%m/%Y}. Une déclaration porte sur une période "
@@ -610,7 +611,7 @@ def constater_depot(
     declaree = obligation.avancer(
         StatutObligation.DECLAREE,
         # La date de l'accusé, jamais celle du jour — voir l'en-tête.
-        declaree_le=consigne.depose_le.date(),
+        declaree_le=jour_a_douala(consigne.depose_le),
         reference_depot=consigne.numero,
     )
     journal.ajouter(
@@ -752,7 +753,7 @@ def constater_un_depot_hors_tva(
     consigne = portail.enregistrer_accuse(accuse, document=document)
     declaree = obligation.avancer(
         StatutObligation.DECLAREE,
-        declaree_le=consigne.depose_le.date(),
+        declaree_le=jour_a_douala(consigne.depose_le),
         reference_depot=consigne.numero,
     )
     journal.ajouter(

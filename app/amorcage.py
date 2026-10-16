@@ -72,7 +72,7 @@ from app.contextes.transverse.api import (
     unite_de_travail,
 )
 from app.demonstration_a_jour import consigner
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 
 __all__ = ["AmorcageRefuse", "amorcer"]
 
@@ -179,7 +179,7 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
         # L'AMORÇAGE : les six accusés ci-dessus datent de 2024, et le dossier
         # affichait sinon quatre-vingts périodes en retard. Voir
         # `demonstration_a_jour.py`.
-        accuses_du_jour = consigner(session, locataire, maintenant().date())
+        accuses_du_jour = consigner(session, locataire, aujourd_hui())
 
         # ── Les honoraires des adhérents (14 octobre 2026) ────────────────
         #
@@ -193,7 +193,7 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             honoraires_demo,
         )
 
-        contrats_honoraires, reglements_honoraires = honoraires_demo(maintenant().date())
+        contrats_honoraires, reglements_honoraires = honoraires_demo(aujourd_hui())
         for contrat_h in contrats_honoraires:
             DepotContratsDHonorairesSql(session, locataire).enregistrer(contrat_h)
         for reglement_h in reglements_honoraires:

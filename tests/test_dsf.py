@@ -402,8 +402,9 @@ class TestLeParcoursParLesRoutes:
         # Le nom se lit ; l'identifiant du compte reste la trace.
         assert preparee["preparee_par_nom"] == "Christelle NDONGO"
         assert preparee["preparee_par"] == "C-005"
-        # L'abattement CGA s'applique : le résultat fiscal est sous le résultat comptable.
-        assert 0 < float(preparee["resultat_fiscal"]) < 27520000
+        # 15 octobre 2026 : NGUEMA est à l'IGS. L'abattement CGA y porte sur l'IGS annuel,
+        # pas sur le bénéfice (CGI art. 119 (1)) : le résultat fiscal n'est pas abattu.
+        assert preparee["resultat_fiscal"] == "27520000"
         texte = _texte(client.get(f"{DSF}/1/document").content)
         assert "CABINET NGUEMA CONSEIL" in texte and "32 520 000" in texte
         assert "Christelle NDONGO (C-005)" in texte

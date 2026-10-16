@@ -33,6 +33,7 @@ from app.contextes.transverse.api import (
     PortailDeclaratif,
     empreinte_document,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "DSFNonPreparable",
@@ -186,7 +187,7 @@ def constater_le_depot_de_la_dsf(
             f"dépôt daté du {depose_le:%d/%m/%Y %H:%M}, postérieur à maintenant : on ne "
             "consigne pas un dépôt qui n'a pas eu lieu."
         )
-    if depose_le.date() <= dsf.periode_fin:
+    if jour_a_douala(depose_le) <= dsf.periode_fin:
         raise DSFNonPreparable(
             f"dépôt daté du {depose_le:%d/%m/%Y}, avant la fin de l'exercice "
             f"({dsf.periode_fin:%d/%m/%Y}) : vérifier la date de l'accusé."

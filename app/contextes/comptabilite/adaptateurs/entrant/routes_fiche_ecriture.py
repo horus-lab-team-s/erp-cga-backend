@@ -57,7 +57,7 @@ from app.contextes.transverse.api import (
     atelier,
     exiger_dossier,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 routeur = APIRouter(prefix="/comptabilite", tags=["Comptabilité · fiche d'écriture"])
 
@@ -250,7 +250,7 @@ def apercevoir_la_contre_passation(
     _lire(entreprise, exercice, journal, numero)
     return apercevoir_la_contrepassation(
         f"{exercice}/{journal}/{numero:06d}",
-        jour=date_operation or maintenant().date(),
+        jour=date_operation or aujourd_hui(),
         exercice=_exercice_du_dossier(entreprise, exercice),
         periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
         depot=depot(entreprise),

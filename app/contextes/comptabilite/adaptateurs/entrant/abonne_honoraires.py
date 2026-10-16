@@ -31,6 +31,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.orchestration.boite_d_envoi import EvenementSortant
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["abonne_honoraires_regles", "proposer_l_ecriture_des_honoraires"]
 
@@ -64,7 +65,7 @@ def proposer_l_ecriture_des_honoraires(
     charge = evenement.charge
     niu = charge["niu"]
     reference = f"HON-{charge['identifiant']}"
-    paye_le = datetime.fromisoformat(charge["constate_le"]).date()
+    paye_le = jour_a_douala(datetime.fromisoformat(charge["constate_le"]))
     periode = charge["periode"]
     montant = Decimal(charge["montant"])
     journal, tresorerie = TRESORERIE.get(charge["canal"], ("OD", "571"))

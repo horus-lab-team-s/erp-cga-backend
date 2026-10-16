@@ -87,6 +87,7 @@ from app.contextes.souscription.domaine.souscriptions import (
     TransitionRefusee,
 )
 from app.contextes.transverse.api import JournalAudit
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "Aboutissement",
@@ -605,7 +606,7 @@ def _activer(
     activee = souscription.activer(
         a_l_instant,
         compte=compte,
-        prend_effet_le=(a_l_instant + DELAI_PRISE_EFFET).date(),
+        prend_effet_le=jour_a_douala(a_l_instant + DELAI_PRISE_EFFET),
     )
     souscriptions.enregistrer(activee)
     journal.ajouter(

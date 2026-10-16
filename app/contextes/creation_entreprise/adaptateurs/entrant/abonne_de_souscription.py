@@ -53,7 +53,7 @@ from app.contextes.creation_entreprise.api import (
 )
 from app.contextes.portefeuille.contrats import FormeJuridique
 from app.orchestration.boite_d_envoi import EvenementSortant
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 
 __all__ = ["abonne_de_souscription", "ouvrir_le_dossier_de_creation"]
 
@@ -143,7 +143,7 @@ def ouvrir_le_dossier_de_creation(evenement: EvenementSortant) -> None:
         activite=faits["activite"],
         siege=faits["siege"],
         capital=_capital(faits.get("capital_social")),
-        a_la_date=maintenant().date(),
+        a_la_date=aujourd_hui(),
         # ⚠️ Le système, et non un collaborateur : personne n'a cliqué.
         par="système:encaissement",
     )

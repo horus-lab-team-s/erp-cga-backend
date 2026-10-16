@@ -83,7 +83,7 @@ from app.contextes.transverse.api import (
     restreindre,
 )
 from app.partage.erreurs import message_lisible
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/conformite", tags=["Conformité"])
 
@@ -1052,7 +1052,8 @@ def exporter_les_derogations(
     ):
         ecrivain.writerow(
             [
-                e.propose_le.date().isoformat(), e.dossier, e.reference_document, e.code_regle,
+                jour_a_douala(e.propose_le).isoformat(),
+                e.dossier, e.reference_document, e.code_regle,
                 e.severite.value, "" if e.enjeu is None else str(e.enjeu), e.statut.value, e.motif,
                 noms.get(e.propose_par, e.propose_par),
                 noms.get(e.tranche_par or "", e.tranche_par or ""),
@@ -1080,7 +1081,7 @@ def qualite_des_regles(
     un rapport ne se conserve pas, il se recalcule (voir `RapportConformite`).
     """
     exiger(acces, Permission.CONTROLER_CONFORMITE)
-    fin = au or maintenant().date()
+    fin = au or aujourd_hui()
     debut = du or fin - timedelta(days=90)
     if debut > fin:
         raise HTTPException(status_code=422, detail="la période commence après sa fin.")
@@ -1143,7 +1144,7 @@ class VueDEcartEnMasse(BaseModel):
 
 
 def _periode(du: date | None, au: date | None) -> tuple[date, date]:
-    fin = au or maintenant().date()
+    fin = au or aujourd_hui()
     debut = du or fin - timedelta(days=90)
     if debut > fin:
         raise HTTPException(status_code=422, detail="la période commence après sa fin.")

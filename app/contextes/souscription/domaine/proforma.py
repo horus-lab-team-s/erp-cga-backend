@@ -59,6 +59,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.contextes.souscription.domaine.composition_proforma import Rubrique
 from app.contextes.souscription.domaine.tarification import Debours, LigneTarifaire
 from app.partage.copie import transiter
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "Acceptation",
@@ -578,7 +579,7 @@ class Acceptation(BaseModel):
 
     @property
     def jour(self) -> date:
-        return self.acceptee_le.date()
+        return jour_a_douala(self.acceptee_le)
 
 
 def accepter(

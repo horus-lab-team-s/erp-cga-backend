@@ -67,6 +67,7 @@ from app.contextes.comptabilite.api import (
 )
 from app.contextes.portefeuille.api import DepotEntreprises, Entreprise, Exercice
 from app.partage.copie import transiter
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["ClotureRefusee", "RapportDeCloture", "clore_un_exercice"]
 
@@ -184,14 +185,14 @@ def clore_un_exercice(
     #
     # L'instant est reçu, jamais lu ici : la route le lit sur l'horloge, et les cas
     # le choisissent.
-    if a_l_instant.date() <= exercice.cloture:
+    if jour_a_douala(a_l_instant) <= exercice.cloture:
         obstacles.append(
             Empechement(
                 motif=MotifEmpechement.EXERCICE_NON_TERMINE,
                 explication=(
                     f"l'exercice {exercice.libelle} se termine le "
                     f"{exercice.cloture:%d/%m/%Y}. Le clore le "
-                    f"{a_l_instant.date():%d/%m/%Y} fermerait des opérations qui ne "
+                    f"{jour_a_douala(a_l_instant):%d/%m/%Y} fermerait des opérations qui ne "
                     "sont pas encore passées, et elles n'auraient plus d'exercice où "
                     "s'inscrire : un exercice clos ne se rouvre pas. Première date "
                     f"possible : le {exercice.cloture + timedelta(days=1):%d/%m/%Y}."

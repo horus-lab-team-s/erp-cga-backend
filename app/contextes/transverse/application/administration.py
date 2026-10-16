@@ -50,6 +50,7 @@ from app.contextes.transverse.domaine.ports import (
 )
 from app.contextes.transverse.domaine.roles import Permission, Role
 from app.contextes.transverse.domaine.sessions import MotifRevocation
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "CourrielDejaPris",
@@ -647,7 +648,7 @@ def affecter_dossier(
     avant = habilitations.lire(identifiant_habilitation)
     enregistrees = avant.affecter(
         niu,
-        le=a_l_instant.date(),
+        le=jour_a_douala(a_l_instant),
         identifiant_successeur=identifiant_successeur,
         par=par.compte,
     )
@@ -730,7 +731,7 @@ def reaffecter_dossier(
             f"{source.role.value} vers {cible.role.value} : une réaffectation se fait entre "
             "collaborateurs du même rôle, sinon personne ne tient plus le dossier."
         )
-    le = a_l_instant.date()
+    le = jour_a_douala(a_l_instant)
     try:
         retirees = source.retirer(niu, le=le, identifiant_successeur=successeur_de, par=par.compte)
         confiees = cible.affecter(

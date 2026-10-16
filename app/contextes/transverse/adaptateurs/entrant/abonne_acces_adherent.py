@@ -43,7 +43,7 @@ import uuid
 from typing import Any
 
 from app.orchestration.boite_d_envoi import EvenementSortant
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 
 __all__ = ["abonne_d_acces_adherent", "ouvrir_l_acces_de_la_fondatrice"]
 
@@ -164,7 +164,7 @@ def _etendre(boutique, poste, compte, charge, reference: str, niu: str, instant)
             identifiant_habilitation=f"H-{uuid.uuid4().hex[:12]}",
             niu=niu,
             reference_creation=reference,
-            depuis=instant.date(),
+            depuis=jour_a_douala(instant),
             habilitations=boutique.habilitations,
             journal=boutique.journal,
             a_l_instant=instant,
@@ -225,7 +225,7 @@ def _ouvrir(boutique, poste, charge, courriel: str, niu: str, locataire: str, in
         prenom=str(charge.get("prenom_fondateur") or ""),
         niu=niu,
         locataire=locataire,
-        depuis=instant.date(),
+        depuis=jour_a_douala(instant),
         comptes=boutique.comptes,
         habilitations=boutique.habilitations,
         jetons=boutique.jetons,

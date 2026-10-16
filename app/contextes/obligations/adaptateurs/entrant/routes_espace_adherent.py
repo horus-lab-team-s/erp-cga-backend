@@ -70,7 +70,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/obligations", tags=["Obligations · espace de l'adhérent"])
@@ -187,7 +187,7 @@ def lire_mes_echeances(acces: AccesRequis, entreprise: str) -> VueDesEcheances:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
     reglages = _reglages()
     dossier = _entreprise(entreprise)
-    jour = maintenant().date()
+    jour = aujourd_hui()
     montants = {a.numero: a.montant_constate for a in atelier().portail.tous()}
     return VueDesEcheances(
         dossier=entreprise,
@@ -238,7 +238,7 @@ def envoyer_une_preuve(
     reglages = _reglages()
     dossier = _entreprise(entreprise)
     horodatage = maintenant()
-    instances = _instances(dossier, horodatage.date(), reglages.horizon_jours)
+    instances = _instances(dossier, jour_a_douala(horodatage), reglages.horizon_jours)
     obligation = next(
         (
             o
@@ -481,7 +481,7 @@ def juger_une_quittance(
         },
     )
     try:
-        _prevenir_du_verdict(entreprise, demande, motif, horodatage.date())
+        _prevenir_du_verdict(entreprise, demande, motif, jour_a_douala(horodatage))
     except Exception:  # noqa: BLE001 — le verdict est écrit ; l'avis ne doit pas l'annuler
         logging.getLogger(__name__).exception("Avis du verdict sur %s non envoyé.", entreprise)
     return preuve.model_copy(

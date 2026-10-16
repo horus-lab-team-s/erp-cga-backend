@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.orchestration.boite_d_envoi import EvenementSortant
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["abonne_avis_honoraires", "prevenir_du_reglement"]
 
@@ -46,7 +47,7 @@ def prevenir_du_reglement(evenement: EvenementSortant, *, unite: Any = None) -> 
                 "denomination": _denomination(c["niu"]),
                 "lien": f"{base}/fr/mon-espace/honoraires",
             },
-            jour=datetime.fromisoformat(c["constate_le"]).date(),
+            jour=jour_a_douala(datetime.fromisoformat(c["constate_le"])),
         )
         boutique.journal.ajouter(
             horodatage=datetime.fromisoformat(c["constate_le"]),

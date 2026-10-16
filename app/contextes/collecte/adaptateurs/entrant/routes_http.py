@@ -98,9 +98,10 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
+from app.partage import horloge
 from app.partage.erreurs import message_lisible
 from app.partage.formats import montant_fcfa
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.recherche import (
     ReponseDeRecherche,
@@ -167,7 +168,7 @@ def _ligne(piece: PieceJustificative, a_la_date: date) -> LignePiece:
         etat=piece.etat,
         type=piece.type,
         depose_le=piece.depose_le,
-        recue_le=piece.recue_le.date(),
+        recue_le=jour_a_douala(piece.recue_le),
         jours_de_transmission=piece.jours_de_transmission(),
         anciennete=piece.anciennete(a_la_date),
         retard_de_remise=piece.retard_de_remise(),
@@ -428,7 +429,7 @@ def deposer_piece(
             ),
         )
 
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     declaree = depot.depose_le or aujourd_hui
     if declaree > aujourd_hui:
         # Pas 88 : le refus d'une date future parlait de « pièce plus ancienne ».
@@ -972,7 +973,7 @@ def _prevenir_les_adherents(demande: DemandePiece, reference: str | None) -> int
     fournisseur. Rien d'autre du dossier n'y figure.
     """
     boutique = atelier()
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     prevenus = 0
     for habilitation in habilitations_actives(
         boutique.habilitations.pour_dossier(demande.entreprise), aujourd_hui
@@ -1310,7 +1311,7 @@ def demander_rectificative(
         piece.entreprise,
         introuvable=f"pièce {identifiant} introuvable.",
     )
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     try:
         emise = demander_une_rectificative(
             identifiant=f"DP-{aujourd_hui.year}-{uuid.uuid4().hex[:8].upper()}",
@@ -1360,7 +1361,7 @@ def satisfaire(acces: AccesRequis, identifiant: str, corps: Satisfaction) -> Dem
     _demande_du_perimetre(acces, identifiant, Permission.IDENTIFIER_PIECE)
     try:
         return satisfaire_une_demande(
-            identifiant, piece=corps.piece, le=maintenant().date(),
+            identifiant, piece=corps.piece, le=aujourd_hui(),
             pieces=depot_pieces(), demandes=depot_demandes(),
         )
     except DemandeIntrouvable as absence:
@@ -1381,7 +1382,7 @@ def classer(acces: AccesRequis, identifiant: str, corps: Classement) -> DemandeP
     _demande_du_perimetre(acces, identifiant, Permission.RELANCER_ADHERENT)
     try:
         return classer_une_demande(
-            identifiant, motif=corps.motif, le=maintenant().date(), demandes=depot_demandes()
+            identifiant, motif=corps.motif, le=aujourd_hui(), demandes=depot_demandes()
         )
     except DemandeRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
@@ -1407,7 +1408,7 @@ def tracer_relance(acces: AccesRequis, identifiant: str, corps: RelanceTracee) -
     _demande_du_perimetre(acces, identifiant, Permission.RELANCER_ADHERENT)
     try:
         return tracer_une_relance(
-            identifiant, canal=corps.canal, le=maintenant().date(), demandes=depot_demandes()
+            identifiant, canal=corps.canal, le=aujourd_hui(), demandes=depot_demandes()
         )
     except DemandeRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus

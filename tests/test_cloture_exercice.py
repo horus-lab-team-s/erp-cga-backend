@@ -762,7 +762,8 @@ class TestUnExerciceNeSeClotQueTermine(TestLOrdreDesExercices):
 
     @pytest.mark.parametrize(
         "instant",
-        [datetime(2026, 9, 14, 10, 0), datetime(2026, 12, 31, 23, 59)],
+        # Instants UTC : 22 h 59 UTC, c'est 23 h 59 à Douala, le dernier jour même.
+        [datetime(2026, 9, 14, 10, 0), datetime(2026, 12, 31, 22, 59)],
         ids=["en_septembre", "le_dernier_jour_meme"],
     )
     def test_avant_le_lendemain_de_la_cloture_c_est_refuse(self, instant):
@@ -774,7 +775,8 @@ class TestUnExerciceNeSeClotQueTermine(TestLOrdreDesExercices):
     def test_le_lendemain_c_est_possible(self):
         """⚠️ La contre-épreuve, à la borne : sans elle, un contrôle qui refuserait
         toujours passerait aussi."""
-        rapport, motifs = self._motifs(datetime(2027, 1, 1, 0, 0))
+        # 23 h UTC le 31 : minuit à Douala, le 1er janvier.
+        rapport, motifs = self._motifs(datetime(2026, 12, 31, 23, 0))
         assert MotifEmpechement.EXERCICE_NON_TERMINE not in motifs
         assert rapport.possible is True, motifs
 

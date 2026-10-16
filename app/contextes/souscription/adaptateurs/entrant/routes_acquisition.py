@@ -176,7 +176,7 @@ from app.infrastructure.config import configuration
 from app.infrastructure.depots_orchestration import DepotExecutionsSql
 from app.orchestration.saga import EtatSaga
 from app.partage.erreurs import message_lisible
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.magasin_de_fichiers import (
     CleInvalide,
@@ -1480,7 +1480,7 @@ def _proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEnt
     ─────────────────────────────────────────────────────────────────────────────
     """
     referentiel = _referentiel_d_acquisition()
-    jour = maintenant().date()
+    jour = aujourd_hui()
 
     # ─────────────────────────────────────────────────────────────────────────
     # ⚠️ UN PRIX ARRÊTÉ PAR LE GÉRANT NE SE QUALIFIE PAS : IL SE FACTURE.
@@ -1991,7 +1991,7 @@ def _candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:
         habilitations=boutique.habilitations,
         charge=dossiers.charge_par_responsable(),
         service=service,
-        a_la_date=maintenant().date(),
+        a_la_date=aujourd_hui(),
     )
 
 
@@ -2278,7 +2278,7 @@ def _document_a_emettre(
         )
 
     try:
-        composition = _compositions().prendre(code_composition, instant.date())
+        composition = _compositions().prendre(code_composition, jour_a_douala(instant))
     except CompositionIntrouvable as absente:
         raise HTTPException(status_code=422, detail=str(absente)) from absente
 
@@ -2387,7 +2387,7 @@ def lister_les_compositions(
     Un menu déroulant de codes nus l'obligerait à ouvrir le référentiel à côté.
     """
     exiger(acces, Permission.LIRE_PROSPECT)
-    aujourdhui = maintenant().date()
+    aujourdhui = aujourd_hui()
     return [
         CompositionOfferte(
             code=composition.code,

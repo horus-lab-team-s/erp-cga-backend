@@ -6,7 +6,7 @@ de leur sujet (`test_honoraires.py`, `test_fonds_de_tiers.py`, `test_documents_d
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 
@@ -81,3 +81,46 @@ class TestLExcelDesBalances:
         texte = " ".join(str(r[0]) for r in lire.iter_rows(values_only=True))
 
         assert "15/10/2026 à 12:00 (heure de Douala)" in texte
+
+
+def test_la_date_du_jour_est_celle_de_douala():
+    """16 octobre 2026 : à 00 h 30 à Douala (23 h 30 UTC), c'est déjà le lendemain. La
+    suite, qui avait franchi minuit, a vu un RCCM « obtenu aujourd'hui » refusé comme
+    futur : l'application prenait la date UTC."""
+    from app.partage.horloge import aujourd_hui, horloge_figee
+
+    with horloge_figee(datetime(2026, 10, 15, 23, 30)):
+        assert aujourd_hui() == date(2026, 10, 16)
+
+
+def test_le_jour_d_un_fait_horodate_est_celui_de_douala():
+    """16 octobre 2026 : une déclaration déposée le 15 mai à 0 h 30 à Douala (le 14 à
+    23 h 30 UTC) était datée du 14. Pour le retard, c'est le jour de Douala qui compte."""
+    from app.partage.formats import moment_long
+    from app.partage.horloge import jour_a_douala
+
+    assert jour_a_douala(datetime(2026, 5, 14, 23, 30)) == date(2026, 5, 15)
+    assert jour_a_douala(datetime(2026, 5, 14, 22, 59)) == date(2026, 5, 14)
+    # Un lien qui expire à 23 h 30 UTC expire à 0 h 30 le lendemain, pour le lecteur.
+    assert moment_long(datetime(2026, 8, 30, 23, 30)) == "31 août 2026 à 00h30"
+
+
+def test_aucun_jour_n_est_tire_d_un_horodatage_utc():
+    """Le garde-fou : `instant.date()` rend le jour UTC. Toute date d'un fait passe par
+    `jour_a_douala` ou `aujourd_hui`. Seules les dates lues dans un texte (`strptime`)
+    sont déjà locales."""
+    import re
+    from pathlib import Path
+
+    motif = re.compile(r"(?<![\w.)\]])[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.date\(\)")
+    fautes = []
+    for fichier in Path("app").rglob("*.py"):
+        if fichier.as_posix() == "app/partage/horloge.py":
+            continue
+        for numero, ligne in enumerate(fichier.read_text().splitlines(), 1):
+            if "strptime" in ligne or ligne.lstrip().startswith(("#", ")")):
+                continue
+            if motif.search(ligne) and "a_douala(" not in ligne:
+                fautes.append(f"{fichier}:{numero}: {ligne.strip()}")
+    trouve = bool(fautes)
+    assert not trouve, "\n".join(fautes)

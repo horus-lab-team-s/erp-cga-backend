@@ -31,7 +31,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.orchestration.boite_d_envoi import EvenementSortant
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 __all__ = ["abonne_fonds_recus", "abonne_fonds_reverses"]
 
@@ -133,7 +133,7 @@ def _prevenir_des_fonds(boutique: Any, c: dict) -> None:
             "denomination": denomination,
             "lien": f"{configuration().adresse_publique_site.rstrip('/')}/fr/mon-espace/echeances",
         },
-        jour=maintenant().date(),
+        jour=aujourd_hui(),
     )
 
 

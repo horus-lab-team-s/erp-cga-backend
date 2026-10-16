@@ -48,9 +48,16 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-__all__ = ["horloge_figee", "maintenant"]
+__all__ = [
+    "DECALAGE_DE_DOUALA",
+    "a_douala",
+    "aujourd_hui",
+    "horloge_figee",
+    "jour_a_douala",
+    "maintenant",
+]
 
 #: L'instant imposé, s'il y en a un.
 #:
@@ -76,6 +83,27 @@ def a_douala(instant: datetime) -> datetime:
     affichait l'heure UTC sans le dire. Un seul calcul désormais.
     """
     return instant + DECALAGE_DE_DOUALA
+
+
+def aujourd_hui() -> date:
+    """La date du jour À DOUALA.
+
+    ⚠️ 16 octobre 2026 : `maintenant().date()` rendait la date UTC. Entre minuit et une
+    heure à Douala, l'application se croyait encore la veille : un RCCM obtenu le jour
+    même était refusé comme « pas encore passé ». Constaté par la suite de tests, qui a
+    franchi minuit. La date d'un fait se lit là où il a lieu.
+    """
+    return a_douala(maintenant()).date()
+
+
+def jour_a_douala(instant: datetime) -> date:
+    """Le jour où un fait horodaté en UTC a eu lieu, À DOUALA.
+
+    ⚠️ 16 octobre 2026 : `recue_le.date()`, `depose_le.date()` et leurs semblables, 71 en
+    tout, rendaient le jour UTC. Une déclaration déposée le 15 mai à 0 h 30 à Douala
+    était datée du 14 ; une pièce reçue à la même heure tombait dans le mauvais mois.
+    """
+    return a_douala(instant).date()
 
 
 def maintenant() -> datetime:

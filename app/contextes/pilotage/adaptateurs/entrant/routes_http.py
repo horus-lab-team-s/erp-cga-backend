@@ -78,7 +78,7 @@ from app.contextes.transverse.api import (
     habilitations_actives,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage"])
@@ -86,7 +86,7 @@ routeur = APIRouter(prefix="/pilotage", tags=["Pilotage"])
 
 def _aujourd_hui() -> date:
     """La date du jour, prise à l'horloge du projet et jamais à `date.today()`."""
-    return maintenant().date()
+    return aujourd_hui()
 
 
 def parametres() -> ServiceParametres:
@@ -388,7 +388,7 @@ def decider_une_mesure(
     """
     exiger_dossier(acces, Permission.DECIDER_SUR_DOSSIER, niu, motif=demande.motif)
     instant = maintenant()
-    jour = instant.date()
+    jour = jour_a_douala(instant)
     score = _score_du_dossier(niu, jour, demande.exercice or str(jour.year))
     try:
         decision = prendre_une_mesure(

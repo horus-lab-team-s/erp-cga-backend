@@ -42,7 +42,7 @@ from app.contextes.transverse.api import (
     renvois_du_jour,
     type_de_lien,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/portefeuille", tags=["Portefeuille · accès des adhérents"])
 
@@ -94,7 +94,7 @@ def _renvois(compte: str) -> list[LienRenvoye]:
 
 def _adherents(niu: str):
     boutique = atelier()
-    jour = maintenant().date()
+    jour = aujourd_hui()
     comptes = []
     for h in habilitations_actives(boutique.habilitations.pour_dossier(niu), jour):
         # `pour_dossier` ne rend que les habilitations qui couvrent ce dossier, et un adhérent a
@@ -167,7 +167,7 @@ def renvoyer_un_lien(
     try:
         type_jeton = type_de_lien(titulaire.etat)
         if (
-            renvois_du_jour([r.le.date() for r in _renvois(compte)], instant.date())
+            renvois_du_jour([jour_a_douala(r.le) for r in _renvois(compte)], jour_a_douala(instant))
             >= reglages.renvois_par_jour
         ):
             raise RenvoiRefuse(

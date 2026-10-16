@@ -38,6 +38,7 @@ from app.contextes.comptabilite.domaine.revue import (
     StatutRevue,
     echantillonner,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "PointDeControle",
@@ -82,7 +83,7 @@ def transmettre_un_mois(
     """
     if du > au:
         raise RevueRefusee("la période commence après sa fin.")
-    if au >= le.date():
+    if au >= jour_a_douala(le):
         # ⚠️ Pas 107 : transmettre verrouille. Verrouiller un mois qui n'est pas fini
         # interdirait d'y saisir les opérations des jours qui restent.
         raise RevueRefusee(

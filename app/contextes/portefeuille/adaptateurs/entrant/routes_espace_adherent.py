@@ -51,7 +51,7 @@ from app.contextes.transverse.api import (
     habilitations_actives,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 routeur = APIRouter(prefix="/portefeuille", tags=["Portefeuille · espace de l'adhérent"])
 
@@ -148,7 +148,7 @@ def lire_mon_entreprise(acces: AccesRequis, niu: str) -> MonEntreprise:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
     reglages = _reglages()
     dossier = _lire(niu)
-    jour = maintenant().date()
+    jour = aujourd_hui()
     regime = resoudre(dossier.regimes, jour)
     if regime is None:
         raise HTTPException(status_code=409, detail=f"{niu} : aucun régime connu à ce jour.")

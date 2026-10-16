@@ -101,7 +101,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/obligations", tags=["Obligations"])
@@ -356,7 +356,7 @@ def _completude(niu: str, debut: date, fin: date) -> CompletudeDeLaPeriode:
     de_la_periode = [
         p
         for p in pieces.du_dossier(niu)
-        if debut <= (p.date_document or p.recue_le.date()) <= fin
+        if debut <= (p.date_document or jour_a_douala(p.recue_le)) <= fin
     ]
     return CompletudeDeLaPeriode(
         pieces_recues=len(de_la_periode),
@@ -905,7 +905,7 @@ def constater_hors_tva(
             status_code=404,
             detail=f"aucun exercice de {dossier.denomination} ne couvre le {demande.periode_fin}.",
         )
-    jour = maintenant().date()
+    jour = aujourd_hui()
     types = _catalogue.charger(jour)
     echeancier = generer_echeancier(
         dossier,

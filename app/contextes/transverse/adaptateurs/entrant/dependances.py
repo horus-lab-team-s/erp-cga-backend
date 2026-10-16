@@ -109,7 +109,7 @@ from app.infrastructure.base_de_donnees import (
     session_du_locataire,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant, etabli, poser_le_mandat
 
 __all__ = [
@@ -687,7 +687,7 @@ async def acces_optionnel(
     except (SessionInvalide, CompteIntrouvable):
         return None
     request.state.session = session
-    return resoudre_acces(compte, session, habilitations, instant.date())
+    return resoudre_acces(compte, session, habilitations, jour_a_douala(instant))
 
 
 def acces_courant(
@@ -937,7 +937,7 @@ def _acces_sous_mandat(
                 habilitations=chez_le_mandataire.habilitations,
                 a_l_instant=instant,
             )
-            acces = resoudre_acces(compte, session, habilitations, instant.date(), instant)
+            acces = resoudre_acces(compte, session, habilitations, jour_a_douala(instant), instant)
     except (SessionInvalide, CompteIntrouvable):
         return None
 
@@ -951,7 +951,7 @@ def _acces_sous_mandat(
             mandant=mandant,
             compte=acces.compte,
             role=role,
-            a_la_date=instant.date(),
+            a_la_date=jour_a_douala(instant),
         )
         if mandat is not None:
             couverts.append(role)

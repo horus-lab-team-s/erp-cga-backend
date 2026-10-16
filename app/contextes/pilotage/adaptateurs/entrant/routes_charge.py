@@ -45,6 +45,7 @@ from app.contextes.transverse.api import (
     habilitations_actives,
 )
 from app.infrastructure.config import configuration
+from app.partage.horloge import jour_a_douala
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · charge et production"])
 
@@ -82,12 +83,16 @@ def _dossier(entreprise, jour: date, debut: date, fin: date) -> DossierPourLaCha
         retards=sum(1 for i in echeancier if i.en_retard(jour)),
         # ⚠️ Reçues **et** traitées ce mois : la pièce ne retient pas la date de son traitement.
         pieces_traitees_du_mois=sum(
-            1 for p in pieces if p.traitee and debut <= p.recue_le.date() <= fin
+            1 for p in pieces if p.traitee and debut <= jour_a_douala(p.recue_le) <= fin
         ),
         ecritures_du_mois=sum(
-            1 for e in ecritures if e.validee_le is not None and debut <= e.validee_le.date() <= fin
+            1
+            for e in ecritures
+            if e.validee_le is not None and debut <= jour_a_douala(e.validee_le) <= fin
         ),
-        reprises_du_mois=sum(1 for r in revues for m in r.remarques if debut <= m.le.date() <= fin),
+        reprises_du_mois=sum(
+            1 for r in revues for m in r.remarques if debut <= jour_a_douala(m.le) <= fin
+        ),
     )
 
 

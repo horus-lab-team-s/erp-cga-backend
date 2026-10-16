@@ -65,7 +65,7 @@ from app.contextes.pilotage.domaine.mois_de_l_adherent import (
 from app.contextes.pilotage.domaine.pieces_manquantes import nom_du_mois
 from app.contextes.transverse.api import AccesRequis, Permission, exiger_dossier
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · accueil de l'adhérent"])
 
@@ -117,7 +117,7 @@ def lire_mon_mois(
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
     reglages = _reglages()
     dossier = _dossier(niu)
-    jour = maintenant().date()
+    jour = aujourd_hui()
     observe = f"{(jour.replace(day=1) - timedelta(days=1)):%Y-%m}"
     mois = mois or observe
     du, au = _bornes(mois)

@@ -125,6 +125,7 @@ def etablir_le_passage(
     cloture: date,
     *,
     droit_a_l_abattement_cga: bool,
+    au_regime_igs: bool = False,
 ) -> PassageFiscal:
     """Établit le tableau de passage de l'exercice.
 
@@ -136,6 +137,12 @@ def etablir_le_passage(
     omission.** Il laissait croire que l'adhésion suffisait, alors que le seuil
     d'adhésion ferme le droit à une entreprise adhérente devenue trop grande. Et
     la liasse le recevait de la requête, avec `True` par défaut.
+
+    ⚠️ 15 OCTOBRE 2026, `au_regime_igs` : à l'IGS, l'abattement CGA ne porte PAS sur le
+    bénéfice mais sur l'IGS annuel (CGI 2026, art. 119 (1) : « pour les contribuables
+    relevant du régime de l'impôt général synthétique, cet abattement s'applique sur le
+    montant de l'impôt général synthétique annuel »). La liasse d'un dossier à l'IGS
+    montrait un résultat fiscal abattu de moitié, qui ne correspond à aucun impôt.
     """
     lignes: list[LignePassage] = [
         _reintegrer(consequence) for consequence in consequences
@@ -146,6 +153,7 @@ def etablir_le_passage(
         parametres,
         cloture,
         droit_a_l_abattement_cga=droit_a_l_abattement_cga,
+        au_regime_igs=au_regime_igs,
     )
     if abattement is not None:
         lignes.append(abattement)
@@ -183,6 +191,7 @@ def _abattement_cga(
     cloture: date,
     *,
     droit_a_l_abattement_cga: bool,
+    au_regime_igs: bool = False,
 ) -> tuple[LignePassage | None, str | None]:
     """L'abattement consenti aux adhérents d'un centre de gestion agréé, ou pourquoi il est écarté.
 
@@ -214,6 +223,11 @@ def _abattement_cga(
     """
     if not droit_a_l_abattement_cga:
         return None, None
+    if au_regime_igs:
+        return None, (
+            "à l'IGS, l'abattement CGA de 50 % porte sur l'IGS annuel et non sur le bénéfice "
+            "(CGI art. 119 (1)) : il est appliqué aux versements de l'IGS, à l'échéancier."
+        )
     if resultat_avant_abattement <= 0:
         return None, (
             "résultat nul ou déficitaire après réintégrations : un abattement "
@@ -246,7 +260,7 @@ def _abattement_cga(
         montant = plafond
         plafonne = True
 
-    libelle = f"Abattement CGA — {taux.valeur_decimale:g} % du bénéfice après réintégrations"
+    libelle = f"Abattement CGA : {taux.valeur_decimale:g} % du bénéfice après réintégrations"
     if plafonne:
         libelle += f", plafonné à {plafond:,.0f} FCFA".replace(",", " ")
 
