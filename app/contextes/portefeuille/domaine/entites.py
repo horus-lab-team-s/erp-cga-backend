@@ -379,6 +379,13 @@ class Tiers(BaseModel):
     rccm: str | None = None
     regime: RegimeFiscal | None = None
     etranger: bool = False
+    #: Les colonnes « SIGLE », « TELEPHONE », « PAYS DE RESIDENCE » et « VILLE » des
+    #: modèles Fournisseurs et Tiers de la DGI (16 octobre 2026). `pays` ne se lit que pour
+    #: un tiers étranger : les autres résident au Cameroun.
+    sigle: str | None = None
+    telephone: str | None = None
+    ville: str | None = None
+    pays: str | None = None
 
 
 # ── L'entreprise ─────────────────────────────────────────────────────────────────

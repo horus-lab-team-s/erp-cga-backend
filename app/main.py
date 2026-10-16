@@ -89,6 +89,9 @@ from app.contextes.portefeuille.adaptateurs.entrant.routes_espace_adherent impor
 from app.contextes.portefeuille.adaptateurs.entrant.routes_http import (
     routeur as routeur_portefeuille,
 )
+from app.contextes.portefeuille.adaptateurs.entrant.routes_registre_des_tiers import (
+    routeur as routeur_registre_des_tiers,
+)
 from app.contextes.referentiel.adaptateurs.entrant.routes_http import (
     routeur as routeur_referentiel,
 )
@@ -688,6 +691,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_cloture)
     application.include_router(routeur_dsf)
     application.include_router(routeur_pieces_dsf)
+    application.include_router(routeur_registre_des_tiers)
     application.include_router(routeur_missions)
     # J · Pilotage vient en dernier des contextes métier : il les agrège tous.
     application.include_router(routeur_pilotage)

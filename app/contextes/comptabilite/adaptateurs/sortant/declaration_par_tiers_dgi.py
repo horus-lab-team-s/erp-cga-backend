@@ -46,6 +46,10 @@ class FicheDeclaree:
     denomination: str
     niu: str | None
     pays: str | None = "CAMEROUN"
+    #: Du registre des tiers du dossier (16 octobre 2026) ; vides tant qu'il ne les porte pas.
+    sigle: str | None = None
+    telephone: str | None = None
+    ville: str | None = None
 
 
 @cache
@@ -117,10 +121,10 @@ def remplir_la_declaration_par_tiers(
                 _nombre("A", r, style, i + 1),
                 _texte("B", r, style, fiche.niu),
                 _texte("C", r, style, fiche.denomination),
-                _texte("D", r, style, None),
-                _texte("E", r, style, None),
+                _texte("D", r, style, fiche.sigle),
+                _texte("E", r, style, fiche.telephone),
                 _texte("F", r, style, fiche.pays),
-                _texte("G", r, style, None),
+                _texte("G", r, style, fiche.ville),
             ]
             for j, (colonne, montant) in enumerate(zip(_MONTANTS, _montants(x), strict=True)):
                 cellules.append(_nombre(colonne, r, style, montant))

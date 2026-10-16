@@ -150,6 +150,97 @@ class TestLeFichier:
         assert '<c r="A33"' in xml and '<row r="35"' in xml  # la ligne qui suivait, décalée
         assert re.search(r'<dimension ref="A1:O35"/>', xml)
 
+    def test_sigle_telephone_et_ville_viennent_de_la_fiche(self):
+        """16 octobre 2026 : les colonnes D, E et G partaient vides."""
+        ligne = LigneParTiers(
+            tiers="M053311224455R",
+            ouverture=MontantHtTva(),
+            facturation=MontantHtTva(ht=D(1000), tva=D(193)),
+            paiement=MontantHtTva(),
+            cloture=MontantHtTva(ht=D(1000), tva=D(193)),
+            sommes_versees=False,
+        )
+        fiche = FicheDeclaree(
+            denomination="QUINCAILLERIE DU WOURI",
+            niu="M053311224455R",
+            sigle="QDW",
+            telephone="+237 699 00 11 22",
+            ville="Douala",
+        )
+        rempli = remplir_la_declaration_par_tiers("fournisseurs", [ligne], {ligne.tiers: fiche})
+        xml = zipfile.ZipFile(io.BytesIO(rempli)).read("xl/worksheets/sheet1.xml").decode()
+
+        def cellule(ref: str) -> str | None:
+            m = re.search(rf'<c r="{ref}"[^>]*><is><t[^>]*>([^<]*)</t></is></c>', xml)
+            return m.group(1) if m else None
+
+        lues = (cellule("D14"), cellule("E14"), cellule("F14"), cellule("G14"))
+        assert lues == ("QDW", "+237 699 00 11 22", "CAMEROUN", "Douala")
+
+
+@exige_postgresql
+class TestLeRegistreDesTiers:
+    """16 octobre 2026 : le comptable complète la fiche d'un tiers une fois ; la déclaration
+    et le modèle de la DGI la reprennent."""
+
+    URL = "/comptabilite/dossiers/M081234567890P/declarations-par-tiers"
+    REGISTRE = "/portefeuille/entreprises/M081234567890P/tiers"
+
+    def _quincaillerie(self, client) -> dict:
+        lignes = client.get(f"{self.URL}/fournisseurs", params={"exercice": "2026"}).json()
+        return next(x for x in lignes["lignes"] if x["denomination"] == "QUINCAILLERIE DU WOURI")
+
+    def test_la_fiche_renseignee_remplit_la_declaration_et_le_modele(self, plateforme):
+        client = plateforme
+        ouvrir_une_session(client, "l.fotso@cga-brcg.cm")
+        avant = self._quincaillerie(client)
+        assert (avant["au_registre"], avant["telephone"], avant["ville"]) == (False, None, None)
+
+        reponse = client.put(
+            f"{self.REGISTRE}/{avant['tiers']}",
+            json={
+                "denomination": "QUINCAILLERIE DU WOURI",
+                "niu": avant["niu"],
+                "sigle": "QDW",
+                "telephone": "+237 699 00 11 22",
+                "ville": " Douala ",
+            },
+        )
+        assert reponse.status_code == 200, reponse.text
+        assert reponse.json()["ville"] == "Douala"
+
+        apres = self._quincaillerie(client)
+        lus = (apres["au_registre"], apres["sigle"], apres["telephone"], apres["ville"])
+        assert lus == (True, "QDW", "+237 699 00 11 22", "Douala")
+        registre = client.get(self.REGISTRE).json()
+        assert [t["code"] for t in registre] == [avant["tiers"]]
+
+        excel = client.get(f"{self.URL}/fournisseurs/excel", params={"exercice": "2026"})
+        xml = zipfile.ZipFile(io.BytesIO(excel.content)).read("xl/worksheets/sheet1.xml").decode()
+        repris = "+237 699 00 11 22" in xml and ">QDW<" in xml  # booléen : feuille longue
+        assert repris
+
+    def test_un_tiers_etranger_porte_son_pays(self, plateforme):
+        client = plateforme
+        ouvrir_une_session(client, "l.fotso@cga-brcg.cm")
+        code = self._quincaillerie(client)["tiers"]
+        corps = {"denomination": "QUINCAILLERIE DU WOURI", "etranger": True, "pays": "GABON"}
+        assert client.put(f"{self.REGISTRE}/{code}", json=corps).status_code == 200
+        ligne = self._quincaillerie(client)
+        assert (ligne["etranger"], ligne["pays"]) == (True, "GABON")
+        # Le pays d'un tiers résident ne se lit pas : il réside au Cameroun.
+        corps |= {"etranger": False}
+        assert client.put(f"{self.REGISTRE}/{code}", json=corps).json()["pays"] is None
+        assert self._quincaillerie(client)["pays"] == "CAMEROUN"
+
+    def test_sans_la_saisie_des_ecritures_rien_ne_s_ecrit(self, plateforme):
+        client = plateforme
+        ouvrir_une_session(client, "p.moukouri@cga-brcg.cm")  # chargée de clientèle
+        refus = client.put(f"{self.REGISTRE}/X1", json={"denomination": "TIERS"})
+        assert refus.status_code == 403
+        ouvrir_une_session(client, "l.fotso@cga-brcg.cm")
+        assert client.get(self.REGISTRE).json() == []
+
 
 @exige_postgresql
 class TestParLesRoutes:

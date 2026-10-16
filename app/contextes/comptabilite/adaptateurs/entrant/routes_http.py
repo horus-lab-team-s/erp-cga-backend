@@ -1404,6 +1404,12 @@ class LigneDeclaree(BaseModel):
     denomination: str | None
     niu: str | None
     pays: str | None
+    sigle: str | None = None
+    telephone: str | None = None
+    ville: str | None = None
+    #: Au registre des tiers du dossier : sinon, sa fiche est à créer avant le dépôt.
+    au_registre: bool = False
+    etranger: bool = False
     ouverture: MontantDeclare
     facturation: MontantDeclare
     paiement: MontantDeclare
@@ -1434,16 +1440,22 @@ def _declaration_par_tiers(entreprise: str, exercice: str, nature: str):
     _, fiches_auxiliaires, dossier = _balance_auxiliaire_du_dossier(
         entreprise, exercice, NatureAuxiliaire.FOURNISSEURS
     )
-    etrangers = {t.code for t in dossier.tiers if t.etranger} if dossier else set()
-    etrangers |= {t.niu for t in dossier.tiers if t.etranger and t.niu} if dossier else set()
-    fiches = {
-        code: FicheDeclaree(
+    registre = _registre_des_tiers(dossier)
+
+    def fiche(code: str, f) -> FicheDeclaree:
+        t = registre.get(code)
+        if t is None:
+            return FicheDeclaree(denomination=f.denomination, niu=f.niu)
+        return FicheDeclaree(
             denomination=f.denomination,
             niu=f.niu,
-            pays=None if code in etrangers else "CAMEROUN",
+            pays=t.pays if t.etranger else "CAMEROUN",
+            sigle=t.sigle,
+            telephone=t.telephone,
+            ville=t.ville,
         )
-        for code, f in fiches_auxiliaires.items()
-    }
+
+    fiches = {code: fiche(code, f) for code, f in fiches_auxiliaires.items()}
     avertissements = [
         "Règlements et soldes sont des montants TTC : ils sont répartis entre HT et TVA à la "
         "proportion des factures du même tiers sur l'exercice."
@@ -1464,7 +1476,27 @@ def _declaration_par_tiers(entreprise: str, exercice: str, nature: str):
         )
     if any(fiches.get(x.tiers) and fiches[x.tiers].pays is None for x in lignes):
         avertissements.append("Pays de résidence des fournisseurs étrangers à compléter.")
+    incomplets = [
+        x.tiers
+        for x in lignes
+        if not (fiches.get(x.tiers) and fiches[x.tiers].telephone and fiches[x.tiers].ville)
+    ]
+    if incomplets:
+        avertissements.append(
+            f"{len(incomplets)} tiers sans téléphone ou sans ville : à compléter au registre "
+            "des tiers du dossier, repris ensuite par chaque export."
+        )
     return lignes, fiches, avertissements
+
+
+def _registre_des_tiers(dossier) -> dict:
+    """Les fiches du registre du dossier, par code et par NIU : une écriture née d'une
+    facture lue porte le NIU du fournisseur. Le code l'emporte sur un NIU homonyme."""
+    if dossier is None:
+        return {}
+    registre = {t.niu: t for t in dossier.tiers if t.niu}
+    registre.update({t.code: t for t in dossier.tiers})
+    return registre
 
 
 @routeur.get(
@@ -1482,6 +1514,7 @@ def lire_la_declaration_par_tiers(
     from app.contextes.comptabilite.adaptateurs.sortant.declaration_par_tiers_dgi import MODELES
 
     lignes, fiches, avertissements = _declaration_par_tiers(entreprise, exercice, nature)
+    registre = _registre_des_tiers(_dossier_du_portefeuille(entreprise))
 
     def montant(m) -> MontantDeclare:
         return MontantDeclare(ht=m.ht, tva=m.tva)
@@ -1496,6 +1529,11 @@ def lire_la_declaration_par_tiers(
                 denomination=(fiches[x.tiers].denomination or None) if x.tiers in fiches else None,
                 niu=fiches[x.tiers].niu if x.tiers in fiches else x.tiers,
                 pays=fiches[x.tiers].pays if x.tiers in fiches else "CAMEROUN",
+                sigle=fiches[x.tiers].sigle if x.tiers in fiches else None,
+                telephone=fiches[x.tiers].telephone if x.tiers in fiches else None,
+                ville=fiches[x.tiers].ville if x.tiers in fiches else None,
+                au_registre=x.tiers in registre,
+                etranger=bool(registre.get(x.tiers) and registre[x.tiers].etranger),
                 ouverture=montant(x.ouverture),
                 facturation=montant(x.facturation),
                 paiement=montant(x.paiement),
