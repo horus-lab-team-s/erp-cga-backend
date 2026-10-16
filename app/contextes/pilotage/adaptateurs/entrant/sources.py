@@ -25,7 +25,9 @@ from app.contextes.obligations.api import (
     effectif_du_dossier,
     generer_echeancier,
 )
-from app.contextes.portefeuille.api import DepotEntreprisesSql, entreprises_en_memoire
+from app.contextes.portefeuille.api import (
+    depot_entreprises,
+)
 from app.contextes.transverse.api import session_de_travail
 from app.partage.locataire import courant
 
@@ -42,10 +44,7 @@ _CATALOGUE = DepotTypesObligationMemoire()
 
 
 def depot_dossiers():
-    session = session_de_travail()
-    if session is None:
-        return entreprises_en_memoire()
-    return DepotEntreprisesSql(session, courant())
+    return depot_entreprises()
 
 
 def depot_pieces():

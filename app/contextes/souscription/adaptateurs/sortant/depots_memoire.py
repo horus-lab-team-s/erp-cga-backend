@@ -246,6 +246,12 @@ class DepotDossiersMemoire:
             key=lambda d: d.depuis_le,
         )
 
+    def payes(self) -> list[DossierCommercial]:
+        return sorted(
+            self._entrepot.filtrer(lambda d: d.etat is EtatDossier.PAYEE),
+            key=lambda d: d.depuis_le,
+        )
+
     def lister(self) -> list[DossierCommercial]:
         return sorted(
             self._entrepot.tout(), key=lambda d: d.demande.deposee_le, reverse=True

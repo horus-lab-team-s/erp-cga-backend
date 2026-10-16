@@ -75,12 +75,12 @@ from app.contextes.obligations.application.surveillance_des_seuils import (
 )
 from app.contextes.portefeuille.api import (
     DepotEntreprises,
-    DepotEntreprisesSql,
     Entreprise,
     EntrepriseIntrouvable,
     StatutIntrouvable,
     entreprises_en_memoire,
 )
+from app.contextes.portefeuille.api import depot_entreprises as depot_courant_des_entreprises
 from app.contextes.referentiel.api import (
     ParametreResolu,
     ServiceParametres,
@@ -139,10 +139,7 @@ def depot_entreprises() -> DepotEntreprises:
     portaient sur la mauvaise source.
     ─────────────────────────────────────────────────────────────────────────
     """
-    session = session_de_travail()
-    if session is None:
-        return _entreprises_memoire()
-    return DepotEntreprisesSql(session, courant())
+    return depot_courant_des_entreprises()
 
 
 def depot_ecritures(entreprise: str) -> DepotEcritures:

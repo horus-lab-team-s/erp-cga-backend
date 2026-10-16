@@ -323,12 +323,9 @@ _GROUPE_SUPPOSE = (
 
 
 def _dossiers_du_portefeuille():
-    from app.contextes.portefeuille.api import DepotEntreprisesSql, entreprises_en_memoire
-    from app.contextes.transverse.api import session_de_travail
-    from app.partage.locataire import courant
+    from app.contextes.portefeuille.api import depot_entreprises
 
-    session = session_de_travail()
-    return entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
+    return depot_entreprises()
 
 
 def _groupe_de_risque(

@@ -55,6 +55,8 @@ from app.contextes.souscription.adaptateurs.entrant.sources import (
     boite_du_parcours,
     depot_dossiers,
     depot_proformas,
+    depot_qualifications,
+    qualifications_memoire,
     referentiel_d_acquisition,
 )
 from app.contextes.souscription.adaptateurs.sortant.annuaire_des_candidats import (
@@ -67,13 +69,11 @@ from app.contextes.souscription.adaptateurs.sortant.delais_de_veille import (
     charger_les_delais_de_veille,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
-    DepotQualificationsMemoire,
     DossierIntrouvable,
     ProformaIntrouvable,
     RappelIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
-    DepotQualificationsSql,
     DepotRappelsSql,
 )
 from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
@@ -217,7 +217,7 @@ def reinitialiser_dossiers() -> None:
     réponses données par le test précédent, sur une référence recyclée.
     """
     vider_les_dossiers_memoire()
-    _qualifications_memoire.cache_clear()
+    qualifications_memoire.cache_clear()
 
 
 
@@ -322,7 +322,7 @@ def _preremplir_la_qualification(
         )
     except QuestionnaireIntrouvable:
         return
-    qualifications = _qualifications()
+    qualifications = depot_qualifications()
     avant = qualifications.trouver(reference) or ouvrir_une_qualification(
         reference, questionnaire
     )
@@ -1142,7 +1142,7 @@ def qualifier(
     except QuestionnaireIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    qualifications = _qualifications()
+    qualifications = depot_qualifications()
     # ⚠️ La reprise, et non une ouverture systématique : c'est tout le correctif.
     # Une qualification absente veut dire « pas encore commencée », qui est l'état
     # de tout dossier neuf.
@@ -1493,7 +1493,7 @@ def _proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEnt
         )
     except QuestionnaireIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
-    qualification = _qualifications().trouver(dossier.reference)
+    qualification = depot_qualifications().trouver(dossier.reference)
     if qualification is None or not qualification.complete(questionnaire):
         manquantes = (
             list(qualification.manquantes(questionnaire))
@@ -1868,7 +1868,7 @@ def lire_la_qualification(acces: AccesRequis, reference: str) -> EtatDeQualifica
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    qualification = _qualifications().trouver(reference)
+    qualification = depot_qualifications().trouver(reference)
     # ⚠️ TRAITÉ EN 404, COMME LES TROIS AUTRES APPELS. C'était le dernier qui
     # laissait l'exception s'échapper, et il tombait en **500** : la fiche du
     # dossier ne s'ouvrait plus du tout pour un service sans questionnaire —
@@ -1905,19 +1905,6 @@ def lire_la_qualification(acces: AccesRequis, reference: str) -> EtatDeQualifica
         note=qualification.note,
         faits={code: str(valeur) for code, valeur in qualification.faits().items()},
     )
-
-
-def _qualifications():
-    """Le dépôt des qualifications, durable si la base est là."""
-    session = session_de_travail()
-    if session is None:
-        return _qualifications_memoire()
-    return DepotQualificationsSql(session, courant())
-
-
-@lru_cache
-def _qualifications_memoire() -> DepotQualificationsMemoire:
-    return DepotQualificationsMemoire()
 
 
 def candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:

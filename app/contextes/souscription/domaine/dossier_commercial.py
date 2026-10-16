@@ -242,6 +242,9 @@ class DossierCommercial(BaseModel):
     motif_affectation: str | None = None
 
     reaffectations: int = Field(default=0, ge=0)
+    #: Le NIU sous lequel le cabinet a inscrit l'entreprise au portefeuille, une fois
+    #: payée (16 octobre 2026). Une entreprise s'inscrit une fois.
+    inscrit_sous: str | None = None
 
     #: Ceux qui ont tenu ce dossier et l'ont laissé partir sans rien enregistrer.
     #:

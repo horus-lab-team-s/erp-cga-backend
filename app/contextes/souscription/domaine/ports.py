@@ -146,6 +146,10 @@ class DepotDossiersCommerciaux(Protocol):
         d'abord."""
         ...
 
+    def payes(self) -> list[DossierCommercial]:
+        """Les dossiers payés : ceux dont l'entreprise peut entrer au portefeuille."""
+        ...
+
 
 class DepotProformas(Protocol):
     """Les documents commerciaux chiffrés.

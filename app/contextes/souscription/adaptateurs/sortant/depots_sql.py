@@ -312,6 +312,15 @@ class DepotDossiersSql(DepotDocument[DossierCommercial]):
             requete = requete.where(TableDossierCommercial.etat == etat.value)
         return self._tous(requete)
 
+    def payes(self) -> list[DossierCommercial]:
+        """Les dossiers payés, du plus ancien règlement au plus récent (16 octobre 2026)."""
+        requete = (
+            self._requete()
+            .where(TableDossierCommercial.etat == EtatDossier.PAYEE.value)
+            .order_by(TableDossierCommercial.depuis_le)
+        )
+        return self._tous(requete)
+
     def charge_par_responsable(self) -> dict[str, int]:
         """Combien de dossiers **en cours** chaque responsable porte.
 

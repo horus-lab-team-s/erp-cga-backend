@@ -29,9 +29,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     EntrepriseIntrouvable,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.souscription.application.fonds_de_tiers import (
     constater_le_reversement,
@@ -79,8 +78,7 @@ def _boite():
 
 
 def _entreprise(niu: str):
-    session = session_de_travail()
-    depot = entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
+    depot = depot_entreprises()
     try:
         return depot.lire(niu)
     except EntrepriseIntrouvable as absente:

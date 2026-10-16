@@ -52,10 +52,9 @@ from app.contextes.creation_entreprise.api import (
 )
 from app.contextes.portefeuille.api import (
     CentreRattachement,
-    DepotEntreprisesSql,
     FormeJuridique,
     RegimeFiscal,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.referentiel.api import ServiceParametres, service_parametres
 from app.contextes.transverse.api import (
@@ -1054,11 +1053,7 @@ def convertir_dossier(
     # introuvable au portefeuille (404) : exactement le client « invisible de tous les
     # écrans qui comptent » que l'en-tête de cette route dit empêcher. Le magasin mémoire
     # du portefeuille est celui que ses routes lisent (pas 52).
-    session = session_de_travail()
-    if session is not None:
-        DepotEntreprisesSql(session, courant()).enregistrer(entreprise)
-    else:
-        entreprises_en_memoire().enregistrer(entreprise)
+    depot_entreprises().enregistrer(entreprise)
     enregistree = True
     magasin.enregistrer(clos)
     _annoncer_l_entreprise(clos, entreprise, adherente=demande.adherent)

@@ -71,9 +71,8 @@ from app.contextes.comptabilite.api import (
     ecritures_en_memoire,
 )
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     EntrepriseIntrouvable,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.referentiel.api import (
     AucuneVersionApplicable,
@@ -103,10 +102,7 @@ def depot_ecritures(entreprise: str):
 
 
 def depot_dossiers():
-    session = session_de_travail()
-    if session is None:
-        return entreprises_en_memoire()
-    return DepotEntreprisesSql(session, courant())
+    return depot_entreprises()
 
 
 def parametres() -> ServiceParametres:

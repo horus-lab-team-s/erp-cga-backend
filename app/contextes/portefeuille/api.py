@@ -40,6 +40,10 @@ from app.contextes.portefeuille.adaptateurs.sortant.magasins_memoire import (
     entreprises_en_memoire,
     vider_les_entreprises_en_memoire,
 )
+from app.contextes.portefeuille.application.inscription import (
+    InscriptionImpossible,
+    inscrire_une_entreprise_existante,
+)
 from app.contextes.portefeuille.application.validation_identifiants import (
     AnomalieIdentifiant,
     verifier_identifiants,
@@ -88,6 +92,8 @@ from app.contextes.portefeuille.domaine.regimes import (
 from app.contextes.portefeuille.domaine.temporel import verifier_succession
 
 __all__ = [
+    "InscriptionImpossible",
+    "inscrire_une_entreprise_existante",
     "depot_entreprises",
     "entreprises_en_memoire",
     "vider_les_entreprises_en_memoire",

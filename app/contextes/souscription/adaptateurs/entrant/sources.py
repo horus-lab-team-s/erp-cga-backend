@@ -11,9 +11,13 @@ from functools import lru_cache
 from typing import Any
 
 from app.contextes.souscription.adaptateurs.sortant.catalogue_modeles import CatalogueDeModeles
+from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
+    DepotQualificationsMemoire,
+)
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
     DepotDossiersSql,
     DepotProformasSql,
+    DepotQualificationsSql,
 )
 from app.contextes.souscription.adaptateurs.sortant.grille_tarifaire import (
     charger_les_baremes,
@@ -40,6 +44,8 @@ __all__ = [
     "boite_du_parcours",
     "depot_dossiers",
     "depot_proformas",
+    "depot_qualifications",
+    "qualifications_memoire",
     "referentiel_d_acquisition",
 ]
 
@@ -113,3 +119,16 @@ def referentiel_d_acquisition() -> dict[str, Any]:
             REFERENTIEL / "tarification"
         ),
     }
+
+
+def depot_qualifications():
+    """Le dépôt des qualifications, durable si la base est là."""
+    session = session_de_travail()
+    if session is None:
+        return qualifications_memoire()
+    return DepotQualificationsSql(session, courant())
+
+
+@lru_cache
+def qualifications_memoire() -> DepotQualificationsMemoire:
+    return DepotQualificationsMemoire()

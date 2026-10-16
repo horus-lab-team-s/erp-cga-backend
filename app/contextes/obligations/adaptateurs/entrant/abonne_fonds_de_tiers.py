@@ -106,16 +106,12 @@ def _prevenir_des_fonds(boutique: Any, c: dict) -> None:
     from datetime import date
 
     from app.contextes.obligations.domaine.echeances_adherent import libelle_de_periode
-    from app.contextes.portefeuille.api import DepotEntreprisesSql, entreprises_en_memoire
-    from app.contextes.transverse.api import prevenir_les_adherents, session_de_travail
+    from app.contextes.portefeuille.api import depot_entreprises
+    from app.contextes.transverse.api import prevenir_les_adherents
     from app.infrastructure.config import configuration
     from app.partage.formats import ESPACE_FINE, montant
-    from app.partage.locataire import courant
 
-    session = session_de_travail()
-    dossiers = (
-        entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
-    )
+    dossiers = depot_entreprises()
     try:
         denomination = dossiers.lire(c["niu"]).denomination
     except Exception:  # noqa: BLE001 — un avis ne doit jamais faire échouer l'abonné

@@ -101,12 +101,11 @@ from app.contextes.conformite.api import (
     rapport_arbitre,
 )
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     Entreprise,
     EntrepriseIntrouvable,
     Exercice,
     StatutIntrouvable,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.transverse.api import (
     AccesRequis,
@@ -400,14 +399,8 @@ def dossier_du_portefeuille(entreprise: str) -> Entreprise | None:
     Extrait au pas 73 : l'exercice et le régime se lisent au même endroit, et deux
     lectures recopiées finiraient par ne plus choisir le même dépôt.
     """
-    session = session_de_travail()
-    depot_dossiers = (
-        entreprises_en_memoire()
-        if session is None
-        else DepotEntreprisesSql(session, courant())
-    )
     try:
-        return depot_dossiers.lire(entreprise)
+        return depot_entreprises().lire(entreprise)
     except EntrepriseIntrouvable:
         return None
 

@@ -624,3 +624,25 @@ class TestAucuneAidePriveeNeSortDeSonModule:
                     ]
         trouve = bool(fautes)
         assert not trouve, "\n".join(fautes)
+
+
+class TestUnSeulChoixDuDepotDesEntreprises:
+    """16 octobre 2026 : dix modules recopiaient « session ? SQL : mémoire » pour le dépôt
+    des entreprises. Une copie qui oublie la session lit la démonstration en production,
+    sans qu'aucun écran ne le montre (c'est arrivé aux obligations). Le choix vit dans
+    `portefeuille.api.depot_entreprises`, et nulle part ailleurs hors du portefeuille."""
+
+    PERMIS = {"app/amorcage.py"}  # l'amorçage nomme son locataire, hors requête
+
+    def test_personne_ne_construit_le_depot_sql_hors_du_portefeuille(self):
+        import pathlib
+
+        fautes = [
+            str(f)
+            for f in sorted(pathlib.Path("app").rglob("*.py"))
+            if "DepotEntreprisesSql(" in f.read_text(encoding="utf-8")
+            and not f.as_posix().startswith("app/contextes/portefeuille/")
+            and f.as_posix() not in self.PERMIS
+        ]
+        trouve = bool(fautes)
+        assert not trouve, fautes

@@ -125,6 +125,8 @@ class TestConsoleProtegee:
             "/acquisition/dossiers",
             "/acquisition/dossiers/dos-1",
             "/acquisition/dossiers/en-souffrance",
+            "/acquisition/dossiers/dos-1/inscription",
+            "/acquisition/inscriptions/en-attente",
             "/acquisition/motifs-de-classement",
             "/acquisition/questionnaires/CREATION",
         ],
@@ -239,6 +241,9 @@ class TestMontage:
             "/acquisition/dossiers/{reference}",
             "/acquisition/dossiers/{reference}/affectation",
             "/acquisition/dossiers/{reference}/chiffrage",
+            # 16 octobre 2026 : PROTÉGÉE par `INSCRIRE_STATUT`, avec motif. L'entreprise
+            # existante d'un dossier payé entre au portefeuille.
+            "/acquisition/dossiers/{reference}/inscription",
             # Pas 93 : PROTÉGÉE, comme tout ce qui touche à un dossier nommé.
             # Elle dit si l'espace du client est réellement utilisable — donc si
             # le compte administrateur existe. C'est une information
@@ -252,6 +257,8 @@ class TestMontage:
             # Pas 150 : corriger le service après l'échange, sans réécrire ce
             # que la visiteuse a demandé.
             "/acquisition/dossiers/{reference}/service",
+            # 16 octobre 2026 : PROTÉGÉE par `INSCRIRE_STATUT`. Les payées à inscrire.
+            "/acquisition/inscriptions/en-attente",
             "/acquisition/motifs-de-classement",
             "/acquisition/proformas/{numero}/acceptation",
             "/acquisition/proformas/{numero}/consultation",

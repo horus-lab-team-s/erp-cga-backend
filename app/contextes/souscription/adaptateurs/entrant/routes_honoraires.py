@@ -33,9 +33,8 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     EntrepriseIntrouvable,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.souscription.domaine.honoraires import (
     CanalDeReglement,
@@ -54,11 +53,9 @@ from app.contextes.transverse.api import (
     atelier,
     exiger,
     exiger_dossier,
-    session_de_travail,
 )
 from app.partage import horloge
 from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
-from app.partage.locataire import courant
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
 
 __all__ = ["routeur"]
@@ -80,8 +77,7 @@ def _comptoir():
 def _denomination(niu: str) -> str:
     """La dénomination au portefeuille, ou 404 : un contrat ne se fixe que pour
     une entreprise que le cabinet suit."""
-    session = session_de_travail()
-    depot = entreprises_en_memoire() if session is None else DepotEntreprisesSql(session, courant())
+    depot = depot_entreprises()
     try:
         return depot.lire(niu).denomination
     except EntrepriseIntrouvable as absente:
