@@ -142,6 +142,10 @@ COMPTES_DEMO: list[Compte] = [
     # C'est l'état le plus fréquent en production, et celui qu'on oublie de
     # traiter dans les écrans : ni actif, ni inexistant.
     _compte("A-003", "Émile", "TCHOUMBA", "e.tchoumba@tchoumbaetfils.cm", active=False),
+    # 18 octobre 2026 : le gérant de CABINET NGUEMA CONSEIL, le dossier dont la DSF 2025
+    # reste à faire. Sans lui, aucun adhérent de la démonstration n'avait une DSF à suivre
+    # et des pièces à verser : les autres sont déposées.
+    _compte("A-004", "Sylvain", "NGUEMA", "s.nguema@nguemaconseil.cm"),
     # ── L'externe ────────────────────────────────────────────────────────────
     _compte("I-001", "Georges", "ATANGANA", "g.atangana@inspection.cm"),
 ]
@@ -223,6 +227,8 @@ HABILITATIONS_DEMO: list[Habilitation] = [
     _hab("H-011", "A-002", Role.ADHERENT, {NIU_DEMO["COLOMBE"]}, date(2021, 1, 1),
          motif=MotifHabilitation.SOUSCRIPTION, accordee_par="systeme"),
     _hab("H-012", "A-003", Role.ADHERENT, {NIU_DEMO["TCHOUMBA"]}, date(2023, 2, 1),
+         motif=MotifHabilitation.SOUSCRIPTION, accordee_par="systeme"),
+    _hab("H-015", "A-004", Role.ADHERENT, {NIU_DEMO["NGUEMA"]}, date(2022, 4, 11),
          motif=MotifHabilitation.SOUSCRIPTION, accordee_par="systeme"),
     # L'inspecteur assistant : un dossier, une mission datée, lecture et avis.
     _hab(

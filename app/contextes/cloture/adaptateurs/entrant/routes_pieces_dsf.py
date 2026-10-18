@@ -340,9 +340,29 @@ def _exercices_clos(entreprise: str):
     return sorted(clos, key=lambda e: e.cloture, reverse=True)[:_EXERCICES_MONTRES]
 
 
+def _accuse_de_la_dsf(entreprise: str, periode):
+    """L'accusé de dépôt de la DSF de cet exercice, consigné au registre, ou `None`.
+
+    ⚠️ 18 octobre 2026 : une DSF peut être déposée sans avoir été préparée dans la
+    plateforme (un dossier repris, un dépôt d'avant l'adhésion). Seul l'accusé le dit ;
+    sans lui, « Ma DSF » annonçait « en préparation, 7 pièces à fournir » à un adhérent
+    dont la déclaration était déposée depuis des mois.
+    """
+    reference = f"{entreprise}/DSF/{periode.ouverture:%Y%m%d}-{periode.cloture:%Y%m%d}"
+    return next((a for a in atelier().portail.tous() if a.reference_document == reference), None)
+
+
 def _ma_dsf_de(compte: str, entreprise: str, periode) -> MaDsfDeLExercice:
     dsf = _la_deposee_ou_la_derniere(entreprise, periode.libelle)
     etat = EtatDeMaDsf.EN_PREPARATION if dsf is None else EtatDeMaDsf(dsf.etat.value)
+    numero, deposee_le = (dsf.numero_accuse, dsf.deposee_le) if dsf else (None, None)
+    # La copie ne se rend que d'une version de la plateforme : un dépôt connu par son seul
+    # accusé est « déposé », sans copie à télécharger.
+    copie = etat is EtatDeMaDsf.DEPOSEE
+    if etat is not EtatDeMaDsf.DEPOSEE:
+        accuse = _accuse_de_la_dsf(entreprise, periode)
+        if accuse is not None:
+            etat, numero, deposee_le = EtatDeMaDsf.DEPOSEE, accuse.numero, accuse.depose_le
     deposee = etat is EtatDeMaDsf.DEPOSEE
     lignes = etat_des_pieces(
         _systeme(entreprise, periode.libelle), _marques(entreprise, periode.libelle)
@@ -351,10 +371,10 @@ def _ma_dsf_de(compte: str, entreprise: str, periode) -> MaDsfDeLExercice:
         exercice=periode.libelle,
         cloture=periode.cloture,
         etat=etat,
-        numero_accuse=dsf.numero_accuse if deposee else None,
-        deposee_le=dsf.deposee_le if deposee else None,
-        document=deposee,
-        a_fournir=sum(1 for x in lignes if x.etat is EtatPiece.A_FOURNIR),
+        numero_accuse=numero if deposee else None,
+        deposee_le=deposee_le if deposee else None,
+        document=copie,
+        a_fournir=0 if deposee else sum(1 for x in lignes if x.etat is EtatPiece.A_FOURNIR),
         pieces=[
             MaPieceDsf(
                 numero=x.piece.numero,

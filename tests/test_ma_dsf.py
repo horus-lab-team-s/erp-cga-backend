@@ -16,14 +16,23 @@ from types import SimpleNamespace
 from app.contextes.cloture.adaptateurs.sortant.document_dsf import rendre_la_dsf
 from app.contextes.cloture.adaptateurs.sortant.relecture_dsf_claude import RelectureDeLaDsf
 from tests.conftest import exige_postgresql, ouvrir_une_session
-from tests.test_dsf import _deposee, _texte, _valide
+from tests.test_dsf import _deposee, _liasse, _preparee, _texte, _valide
 
 PDF = b"%PDF-1.4\n% attestation de visa\n%%EOF\n"
 BATIMENT = "M081234567890P"
-ADHERENT = "jp.nkoa@batimentplus.cm"
+# ⚠️ 18 octobre 2026 : les DSF de Bâtiment Plus sont toutes déposées (leurs accusés sont au
+# registre de la démonstration). Les pièces se versent donc sur CABINET NGUEMA CONSEIL, dont
+# la DSF 2025 reste à faire.
+NGUEMA = "P027788990011M"
+ADHERENT = "s.nguema@nguemaconseil.cm"
 AUTRE_ADHERENT = "mc.essomba@lacolombe.cm"
 REVISEUR = "a.bouba@cga-brcg.cm"
-MA_DSF = f"/cloture/dossiers/{BATIMENT}/ma-dsf"
+MA_DSF = f"/cloture/dossiers/{NGUEMA}/ma-dsf"
+
+
+def _nguema():
+    """Une DSF 2025 préparée pour CABINET NGUEMA CONSEIL."""
+    return _preparee(_liasse(entreprise=NGUEMA, denomination="CABINET NGUEMA CONSEIL"))
 
 
 class TestLaCopieDuClient:
@@ -102,7 +111,7 @@ class TestParLesRoutes:
         # Le cabinet la voit dans sa liste, et la déclare sans objet : elle n'est plus à lui.
         client.cookies.clear()
         ouvrir_une_session(client, REVISEUR)
-        jointes = f"/cloture/dossiers/{BATIMENT}/dsf/2025/pieces-jointes"
+        jointes = f"/cloture/dossiers/{NGUEMA}/dsf/2025/pieces-jointes"
         cabinet = next(p for p in client.get(jointes).json()["pieces"] if p["numero"] == 1)
         assert cabinet["etat"] == "JOINTE" and cabinet["nom_du_fichier"] == "visa.pdf"
         client.post(f"{jointes}/1/sans-objet", json={"motif": "Aucun visa requis pour ce dossier."})
@@ -115,7 +124,7 @@ class TestParLesRoutes:
 
     def test_deposee_elle_se_telecharge_et_ne_recoit_plus_rien(self, plateforme):
         client = plateforme
-        _ranger_la_dsf_2025(_deposee(_valide()))
+        _ranger_la_dsf_2025(_deposee(_valide(_nguema())))
         ouvrir_une_session(client, ADHERENT)
         (dernier, *_) = client.get(MA_DSF).json()["exercices"]
         assert dernier["etat"] == "DEPOSEE" and dernier["numero_accuse"] == "DGI-2026-DSF-001"
@@ -131,7 +140,7 @@ class TestParLesRoutes:
 
     def test_validee_elle_ne_se_telecharge_pas_encore(self, plateforme):
         client = plateforme
-        _ranger_la_dsf_2025(_valide())
+        _ranger_la_dsf_2025(_valide(_nguema()))
         ouvrir_une_session(client, ADHERENT)
         (dernier, *_) = client.get(MA_DSF).json()["exercices"]
         assert dernier["etat"] == "VALIDEE" and dernier["document"] is False
@@ -149,12 +158,27 @@ class TestParLesRoutes:
     def test_sans_cle_l_agent_le_dit_et_rien_ne_bloque(self, plateforme):
         client = plateforme
         ouvrir_une_session(client, REVISEUR)
-        relue = client.post(f"/cloture/dossiers/{BATIMENT}/dsf/2025/relecture-de-l-agent")
+        relue = client.post(f"/cloture/dossiers/{NGUEMA}/dsf/2025/relecture-de-l-agent")
         assert relue.status_code == 200, relue.text
         assert relue.json()["disponible"] is False and "sans lui" in relue.json()["message"]
         client.cookies.clear()
         ouvrir_une_session(client, ADHERENT)
         assert (
-            client.post(f"/cloture/dossiers/{BATIMENT}/dsf/2025/relecture-de-l-agent").status_code
+            client.post(f"/cloture/dossiers/{NGUEMA}/dsf/2025/relecture-de-l-agent").status_code
             == 403
         )
+
+
+@exige_postgresql
+class TestUneDsfConnueParSonAccuse:
+    def test_l_accuse_consigne_suffit_a_la_dire_deposee(self, plateforme):
+        """18 octobre 2026 : déposée hors de la plateforme, la DSF n'a que son accusé. « Ma
+        DSF » le lit : déposée, rien à fournir, et pas de copie à télécharger."""
+        client = plateforme
+        ouvrir_une_session(client, "jp.nkoa@batimentplus.cm")
+        exercices = client.get(f"/cloture/dossiers/{BATIMENT}/ma-dsf").json()["exercices"]
+        (dernier, *_) = exercices
+        assert dernier["exercice"] == "2025" and dernier["etat"] == "DEPOSEE"
+        assert dernier["numero_accuse"] and dernier["deposee_le"]
+        assert dernier["a_fournir"] == 0 and dernier["document"] is False
+        assert not any(p["versable"] for p in dernier["pieces"])

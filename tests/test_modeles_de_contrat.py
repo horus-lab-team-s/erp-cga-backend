@@ -175,3 +175,22 @@ class TestParLesRoutes:
         redaction = self._ouvrir(client)
         inconnu = client.post(f"/missions/{redaction}/modele", json={"modele": "VENTE_DE_LUNE"})
         assert inconnu.status_code == 404
+
+
+class TestLaConsigneAuJuriste:
+    def test_une_consigne_au_juriste_ne_part_pas_au_client(self):
+        """18 octobre 2026 : « à vérifier par le juriste » s'adresse au juriste. Retenue
+        telle quelle, la consigne partirait dans le contrat du client."""
+        m = _redaction().ajouter(
+            [
+                {
+                    "rubrique": "ARTICLE",
+                    "titre": "Durée",
+                    "texte": "Trois ans. Le renouvellement est à vérifier par le juriste.",
+                }
+            ],
+            origine=OrigineProposition.MODELE,
+        )
+        retenue = m.decider(1, decision=DecisionProposition.RETENUE, par="C-007", a_l_instant=LE)
+        with pytest.raises(TransitionMissionRefusee, match="consigne au juriste"):
+            retenue.soumettre(par="C-007", a_l_instant=LE)

@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.partage.copie import transiter
 
 __all__ = [
+    "CONSIGNES_AU_JURISTE",
     "MENTION_A_COMPLETER",
     "DecisionProposition",
     "EtatMission",
@@ -93,6 +94,11 @@ class Gravite(StrEnum):
 
 #: Ce que l'agent et les modèles écrivent là où une donnée manque.
 MENTION_A_COMPLETER = "[À COMPLÉTER"
+
+#: 18 octobre 2026 : ce qui, dans un texte retenu, s'adresse au juriste et non au client.
+#: Les modèles de contrat signalent ainsi une règle légale à vérifier ; retenue telle
+#: quelle, la consigne partirait dans le contrat du client.
+CONSIGNES_AU_JURISTE = (MENTION_A_COMPLETER, "à vérifier par le juriste")
 
 
 class OrigineProposition(StrEnum):
@@ -317,12 +323,14 @@ class Mission(BaseModel):
         # 18 octobre 2026 (point 23) : l'agent et les modèles laissent « [À COMPLÉTER : …] »
         # là où le cahier ne disait rien. Retenue telle quelle, la mention partirait au client.
         a_completer = [
-            str(p.rang) for p in self.retenues if MENTION_A_COMPLETER in (p.texte_retenu or "")
+            str(p.rang)
+            for p in self.retenues
+            if any(c.lower() in (p.texte_retenu or "").lower() for c in CONSIGNES_AU_JURISTE)
         ]
         if a_completer:
             raise TransitionMissionRefusee(
-                f"des articles portent encore « {MENTION_A_COMPLETER} » "
-                f"({', '.join(a_completer)}) : reformulez-les avec la donnée du client."
+                f"des articles portent encore « {MENTION_A_COMPLETER} » ou une consigne au "
+                f"juriste ({', '.join(a_completer)}) : reformulez-les avec la donnée du client."
             )
         return transiter(
             self, etat=EtatMission.A_VALIDER, soumise_par=par, soumise_le=a_l_instant, renvoi=None
