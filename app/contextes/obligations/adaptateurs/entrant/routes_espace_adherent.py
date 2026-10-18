@@ -35,7 +35,7 @@ import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.obligations.adaptateurs.entrant.routes_http import (
@@ -70,6 +70,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
+from app.partage.en_tetes import disposition_en_ligne
 from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 
@@ -587,6 +588,41 @@ def lire_mes_documents(acces: AccesRequis, entreprise: str) -> MesDocuments:
         dossier=entreprise,
         denomination=dossier.denomination,
         documents=sorted(documents, key=lambda d: (d.depose_le, d.numero), reverse=True),
+    )
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/mes-documents/{numero}/recu",
+    summary="Le reçu de dépôt PDF d'une déclaration, à la charte du cabinet",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}, 404: {"description": "Accusé inconnu"}},
+)
+def recu_de_depot(acces: AccesRequis, entreprise: str, numero: str) -> Response:
+    """18 octobre 2026 : « dans Documents, je ne vois que les références ». Le reçu se
+    rend de la MÊME lecture que la liste, pour qu'il ne dise jamais autre chose qu'elle."""
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
+    from app.contextes.obligations.adaptateurs.sortant.document_recu_de_depot import (
+        rendre_le_recu_de_depot,
+    )
+
+    vue = lire_mes_documents(acces, entreprise)
+    document = next((d for d in vue.documents if d.numero == numero), None)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"aucun accusé {numero} à ce dossier.")
+    return Response(
+        content=rendre_le_recu_de_depot(
+            denomination=vue.denomination,
+            niu=vue.dossier,
+            titre=document.titre,
+            periode=document.periode,
+            guichet=document.guichet,
+            numero=document.numero,
+            depose_le=document.depose_le,
+            montant=document.montant_constate,
+            verifiable=document.verifiable,
+        ),
+        media_type="application/pdf",
+        headers={"Content-Disposition": disposition_en_ligne(f"recu-de-depot-{numero}.pdf")},
     )
 
 
