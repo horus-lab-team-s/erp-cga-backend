@@ -103,6 +103,9 @@ class MesHonoraires(BaseModel):
     #: 18 octobre 2026 : en règle, en retard, sous grâce ou bloqué. L'adhérent le lit
     #: aussi : il doit savoir que son dossier ne se traite plus, et pourquoi.
     situation: SituationDeReglement | None = None
+    #: 18 octobre 2026 : l'identité fiscale du cabinet est complète, la facture définitive
+    #: d'une échéance réglée s'émet. L'adhérent lit ce seul booléen, pas l'identité.
+    facture_disponible: bool = False
 
 
 def _mes_honoraires(niu: str) -> MesHonoraires:
@@ -131,7 +134,16 @@ def _mes_honoraires(niu: str) -> MesHonoraires:
         en_retard=sum(1 for e in dues if e.etat is EtatEcheanceDHonoraires.EN_RETARD),
         reglable_en_ligne=True,
         situation=situation_du_dossier(niu),
+        facture_disponible=_facture_disponible(),
     )
+
+
+def _facture_disponible() -> bool:
+    from app.contextes.souscription.adaptateurs.sortant.depots_facturation import (
+        depot_de_l_identite_fiscale,
+    )
+
+    return depot_de_l_identite_fiscale().lire().complete
 
 
 def mes_honoraires(niu: str) -> MesHonoraires:
@@ -386,6 +398,81 @@ def note_de_l_echeance(acces: AccesRequis, niu: str, periode: date) -> Response:
                 f'inline; filename="{numero_de_la_note(niu, periode)}.pdf"'
             )
         },
+    )
+
+
+@routeur.get(
+    "/{niu}/echeances/{periode}/facture",
+    summary="La facture définitive PDF d'une échéance réglée",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}},
+        409: {"description": "Échéance non réglée, ou identité fiscale du cabinet incomplète"},
+    },
+)
+def facture_de_l_echeance(acces: AccesRequis, niu: str, periode: date) -> Response:
+    """18 octobre 2026 : la facture au sens fiscal, une fois l'échéance réglée.
+
+    ⚠️ ÉMISE À LA PREMIÈRE DEMANDE, PUIS RELUE TELLE QUELLE. Le numéro suit l'ordre
+    d'émission ; l'identité du cabinet et les montants sont figés dans la facture. Tant
+    que l'identité fiscale du cabinet est incomplète, rien ne s'émet et le refus dit ce
+    qui manque ; la note d'honoraires reste disponible.
+    """
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    from app.contextes.souscription.adaptateurs.sortant.depots_facturation import (
+        depot_de_l_identite_fiscale,
+        depot_des_factures,
+    )
+    from app.contextes.souscription.adaptateurs.sortant.document_facture import (
+        rendre_la_facture,
+    )
+    from app.contextes.souscription.domaine.facturation import (
+        FactureDHonoraires,
+        numero_de_facture,
+        ventiler,
+    )
+
+    factures = depot_des_factures()
+    facture = factures.de_l_echeance(niu, periode)
+    if facture is None:
+        echeance = next((e for e in _mes_honoraires(niu).echeances if e.debut == periode), None)
+        if echeance is None:
+            raise HTTPException(status_code=404, detail=f"aucune échéance au {periode:%d/%m/%Y}.")
+        if echeance.etat is not EtatEcheanceDHonoraires.REGLEE or echeance.reglement is None:
+            raise HTTPException(
+                status_code=409,
+                detail="la facture s'émet une fois l'échéance réglée ; la note d'honoraires "
+                "dit ce qui est dû d'ici là.",
+            )
+        identite = depot_de_l_identite_fiscale().lire()
+        if not identite.complete:
+            raise HTTPException(
+                status_code=409,
+                detail="la facture définitive attend " + ", ".join(identite.manques) + " : "
+                "la direction les saisit dans les réglages du cabinet. La note d'honoraires "
+                "reste disponible.",
+            )
+        jour = aujourd_hui()
+        ht, tva, ttc = ventiler(echeance.montant, identite)
+        facture = FactureDHonoraires(
+            numero=numero_de_facture(jour.year, factures.emises_en(jour.year) + 1),
+            niu=niu,
+            periode=echeance.debut,
+            periode_fin=echeance.fin,
+            adherent=_denomination(niu),
+            emise_le=jour,
+            identite=identite,
+            montant_ht=ht,
+            tva=tva,
+            montant_ttc=ttc,
+            reglee_le=jour_a_douala(echeance.reglement.constate_le),
+            reference_du_reglement=echeance.reglement.reference_externe,
+        )
+        factures.enregistrer(facture)
+    return Response(
+        content=rendre_la_facture(facture),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{facture.numero}.pdf"'},
     )
 
 

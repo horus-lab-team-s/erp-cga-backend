@@ -784,6 +784,12 @@ def creer_application() -> FastAPI:
 
     application.include_router(routeur_honoraires)
     application.include_router(routeur_reglement)
+    # 18 octobre 2026 : l'identité fiscale du cabinet, que la facture définitive attend.
+    from app.contextes.souscription.adaptateurs.entrant.routes_facturation import (
+        routeur as routeur_facturation,
+    )
+
+    application.include_router(routeur_facturation)
     application.include_router(routeur_caisse)
     # 15 octobre 2026 : la cliente d'une création retrouve sa proforma et son reçu.
     from app.contextes.souscription.adaptateurs.entrant.routes_mes_documents import (

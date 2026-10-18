@@ -36,6 +36,8 @@ __all__ = [
     "TableAppelDeFonds",
     "TableMission",
     "TableContratDHonoraires",
+    "TableFactureDHonoraires",
+    "TableIdentiteFiscaleDuCabinet",
     "TableGraceDeReglement",
     "TableRegleDeDepassement",
     "TableDevis",
@@ -477,3 +479,30 @@ class TableGraceDeReglement(Cloisonne, Document, Base):
     identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
     niu: Mapped[str] = mapped_column(String(64), nullable=False)
     jusqu_au: Mapped[date] = mapped_column(Date, nullable=False)
+
+
+class TableIdentiteFiscaleDuCabinet(Cloisonne, Document, Base):
+    """Le NIU, le RCCM et le régime de TVA du cabinet (18 octobre 2026) : une ligne par
+    locataire, saisie quand la direction les a. Voir `domaine/facturation.py`."""
+
+    __tablename__ = "identite_fiscale_du_cabinet"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class TableFactureDHonoraires(Cloisonne, Document, Base):
+    """Les factures définitives émises (18 octobre 2026), figées au jour de leur émission.
+
+    ⚠️ Une facture par échéance (la contrainte d'unicité) ; le numéro, continu par année,
+    est la clé.
+    """
+
+    __tablename__ = "facture_d_honoraires"
+    __table_args__ = (
+        UniqueConstraint("locataire", "niu", "periode", name="uq_facture_d_honoraires_echeance"),
+    )
+
+    numero: Mapped[str] = mapped_column(String(32), primary_key=True)
+    niu: Mapped[str] = mapped_column(String(64), nullable=False)
+    periode: Mapped[date] = mapped_column(Date, nullable=False)
+    annee: Mapped[int] = mapped_column(Integer, nullable=False)
