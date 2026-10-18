@@ -12,7 +12,7 @@ Tchoumba, annuel : l'année en cours réglée.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from app.contextes.souscription.domaine.abonnements import mois_apres
@@ -33,8 +33,13 @@ _FIXE_PAR = "C-001"
 def honoraires_demo(
     a_la_date: date,
 ) -> tuple[list[ContratDHonoraires], list[ReglementDHonoraires]]:
-    debut_du_mois = a_la_date.replace(day=1)
-    trimestre = date(a_la_date.year, 3 * ((a_la_date.month - 1) // 3) + 1, 1)
+    # ⚠️ 18 octobre 2026 : les périodes en cours commencent cinq jours avant l'amorçage.
+    # Calées sur le 1er, elles passaient « en retard » après le 15 du mois, et la
+    # démonstration, comme trois cas de la suite, ne montrait plus « à régler ». Le jour
+    # est borné à 28 : un mois de février n'a pas de 30.
+    pivot = a_la_date - timedelta(days=5)
+    debut_du_mois = pivot.replace(day=min(pivot.day, 28))
+    trimestre = debut_du_mois
     contrats = [
         ContratDHonoraires(
             niu=NIU_DEMO["BATIMENT"],

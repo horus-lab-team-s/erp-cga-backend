@@ -155,7 +155,7 @@ def _etendre(boutique, poste, compte, charge, reference: str, niu: str, instant)
     from app.infrastructure.config import configuration
 
     deja = any(
-        h.role.value == "ADHERENT" and h.portee is not None and niu in h.portee
+        str(h.role) == "ADHERENT" and h.portee is not None and niu in h.portee
         for h in boutique.habilitations.pour_compte(compte.identifiant)
     )
     try:

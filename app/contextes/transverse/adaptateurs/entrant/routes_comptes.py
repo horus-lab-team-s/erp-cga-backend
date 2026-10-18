@@ -21,6 +21,7 @@ from app.contextes.transverse.adaptateurs.entrant.routes_http import (
 )
 from app.contextes.transverse.api import (
     AccesRefuse,
+    CodeRole,
     Compte,
     CompteIntrouvable,
     CourrielDejaPris,
@@ -30,13 +31,13 @@ from app.contextes.transverse.api import (
     MotifHabilitation,
     Permission,
     RetablissementRefuse,
-    Role,
     SuspensionRefusee,
     affecter_dossier,
     dossiers_accessibles,
     fermer_habilitation,
     habilitations_actives,
     inviter_collaborateur,
+    matrice_en_vigueur,
     reaffecter_dossier,
     retablir_compte,
     roles_au,
@@ -57,7 +58,7 @@ class LigneCompte(BaseModel):
     """Un compte, avec ses rôles résolus à la date demandée."""
 
     compte: Compte
-    roles: list[Role]
+    roles: list[CodeRole]
     dossiers: list[str] | None
     #: Les habilitations actives à la date, avec leur identifiant (pas 70) : l'écran
     #: d'administration en a besoin pour affecter un dossier ou fermer un rôle. Sans
@@ -86,7 +87,7 @@ def lister_comptes(
         lignes.append(
             LigneCompte(
                 compte=compte,
-                roles=sorted(roles_au(habilitations, a_la_date), key=lambda r: r.value),
+                roles=sorted(roles_au(habilitations, a_la_date), key=str),
                 dossiers=None if dossiers is None else sorted(dossiers),
                 habilitations=habilitations_actives(habilitations, a_la_date),
             )
@@ -98,7 +99,8 @@ class DemandeInvitation(BaseModel):
     courriel: str = Field(min_length=3)
     nom: str = Field(min_length=1)
     prenom: str = Field(min_length=1)
-    role: Role
+    #: 18 octobre 2026 : un rôle livré, ou un rôle créé par le cabinet.
+    role: CodeRole
     #: `null` = tout le portefeuille. Refusé pour un adhérent ou un inspecteur.
     portee: list[str] | None = None
     depuis: date
@@ -132,6 +134,8 @@ class Invitation(BaseModel):
 )
 def inviter(acces: AccesRequis, demande: DemandeInvitation) -> Invitation:
     exiger(acces, Permission.GERER_COMPTES)
+    if str(demande.role) not in matrice_en_vigueur():
+        raise HTTPException(status_code=422, detail=f"le cabinet n'a pas de rôle {demande.role}.")
     boutique = atelier()
     try:
         compte, jeton, secret = inviter_collaborateur(
@@ -403,5 +407,3 @@ def fermer(acces: AccesRequis, identifiant: str, demande: DemandeFermeture) -> H
         raise HTTPException(status_code=404, detail=str(absence)) from absence
     except ValueError as invalide:
         raise HTTPException(status_code=422, detail=message_lisible(invalide)) from invalide
-
-

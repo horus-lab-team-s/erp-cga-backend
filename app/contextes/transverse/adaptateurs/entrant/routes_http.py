@@ -50,7 +50,6 @@ from app.contextes.transverse.adaptateurs.sortant.lectures_des_notifications imp
 )
 from app.contextes.transverse.api import (
     DUREE_SESSION,
-    PERMISSIONS_PAR_ROLE,
     ROLES_A_PORTEE_OBLIGATOIRE,
     Acces,
     Compte,
@@ -61,10 +60,10 @@ from app.contextes.transverse.api import (
     MotDePasseRefuse,
     MotifRevocation,
     Permission,
-    Role,
     definir_mot_de_passe,
     emettre_jeton,
     fermer_session,
+    matrice_en_vigueur,
     ouvrir_session,
     resoudre_acces,
     revoquer_les_sessions,
@@ -100,7 +99,9 @@ def nouvel_identifiant(prefixe: str) -> str:
 
 
 class FicheRole(BaseModel):
-    role: Role
+    #: 18 octobre 2026 : un rôle livré, ou un rôle créé par le cabinet.
+    role: str
+    libelle: str
     permissions: list[Permission]
     portee_obligatoire: bool
 
@@ -115,13 +116,15 @@ class FicheRole(BaseModel):
     ),
 )
 def lire_roles() -> list[FicheRole]:
+    # 18 octobre 2026 : la matrice du cabinet servi, et non plus la matrice livrée.
     return [
         FicheRole(
-            role=role,
-            permissions=sorted(permissions, key=lambda p: p.value),
-            portee_obligatoire=role in ROLES_A_PORTEE_OBLIGATOIRE,
+            role=fiche.code,
+            libelle=fiche.libelle,
+            permissions=sorted(fiche.permissions, key=lambda p: p.value),
+            portee_obligatoire=fiche.code in {r.value for r in ROLES_A_PORTEE_OBLIGATOIRE},
         )
-        for role, permissions in sorted(PERMISSIONS_PAR_ROLE.items(), key=lambda i: i[0].value)
+        for fiche in sorted(matrice_en_vigueur().values(), key=lambda f: f.code)
     ]
 
 

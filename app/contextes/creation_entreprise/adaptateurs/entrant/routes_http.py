@@ -214,6 +214,8 @@ class DemandePiece(BaseModel):
     empreinte: str | None = None
     #: Par où le cabinet l'a reçue : messagerie, guichet, courriel (14 octobre 2026).
     canal: CanalDeLaPiece | None = None
+    #: Le nom d'une pièce hors liste (code `AUTRE`) ; sans effet sur une pièce connue.
+    libelle: str | None = Field(default=None, max_length=120)
 
 
 class DemandeIdentifiant(BaseModel):
@@ -925,6 +927,7 @@ def recevoir_piece(
         empreinte=demande.empreinte,
         canal=demande.canal,
         versee_par=acces.compte,
+        libelle=(demande.libelle or "").strip() or None,
     )
     magasin.enregistrer(dossier)
     return dossier

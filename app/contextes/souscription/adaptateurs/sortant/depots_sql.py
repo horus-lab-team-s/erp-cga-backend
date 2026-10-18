@@ -21,10 +21,12 @@ from app.contextes.souscription.adaptateurs.sortant.tables import (
     TableContratDHonoraires,
     TableDevis,
     TableDossierCommercial,
+    TableGraceDeReglement,
     TablePaiement,
     TableProforma,
     TableQualification,
     TableRappelAPasser,
+    TableRegleDeDepassement,
     TableReglementDHonoraires,
     TableSouscription,
     TableSuiviDeRelance,
@@ -47,6 +49,10 @@ from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
 from app.contextes.souscription.domaine.rappels import RappelAPasser
 from app.contextes.souscription.domaine.relance import SuiviDeRelance
+from app.contextes.souscription.domaine.situation_de_reglement import (
+    GraceDeReglement,
+    RegleDeDepassement,
+)
 from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
@@ -56,6 +62,8 @@ from app.infrastructure.depot_document import DepotDocument
 __all__ = [
     "DepotAppelsDeFondsSql",
     "DepotContratsDHonorairesSql",
+    "DepotGracesDeReglementSql",
+    "DepotRegleDeDepassementSql",
     "DepotReglementsDHonorairesSql",
     "DepotDevisSql",
     "DepotTarifsFixesSql",
@@ -207,6 +215,14 @@ class DepotPaiementsSql(DepotDocument[Paiement]):
         return self._tous(
             self._requete()
             .where(TablePaiement.reference_reglee == souscription)
+            .order_by(TablePaiement.initie_le)
+        )
+
+    def encaisses(self) -> list[Paiement]:
+        """Les paiements validés, toutes natures : le journal de caisse (18 octobre 2026)."""
+        return self._tous(
+            self._requete()
+            .where(TablePaiement.statut == StatutPaiement.VALIDE.value)
             .order_by(TablePaiement.initie_le)
         )
 
@@ -647,3 +663,48 @@ class DepotAppelsDeFondsSql(DepotDocument[AppelDeFonds]):
 
     def lister(self) -> list[AppelDeFonds]:
         return self._tous(self._requete().order_by(TableAppelDeFonds.arrete_le))
+
+
+class DepotRegleDeDepassementSql(DepotDocument[RegleDeDepassement]):
+    """La règle de dépassement du cabinet. Voir `TableRegleDeDepassement`."""
+
+    _table = TableRegleDeDepassement
+    _entite = RegleDeDepassement
+
+    def _cle(self, entite: RegleDeDepassement) -> dict[str, Any]:
+        return {"locataire": self.locataire}
+
+    def _colonnes(self, entite: RegleDeDepassement) -> dict[str, Any]:
+        return {"fixee_le": entite.fixee_le}
+
+    def lire(self) -> RegleDeDepassement | None:
+        return self._premier(self._requete())
+
+    def enregistrer(self, regle: RegleDeDepassement) -> None:
+        self._poser(regle)
+
+
+class DepotGracesDeReglementSql(DepotDocument[GraceDeReglement]):
+    """Les grâces de règlement. Voir `TableGraceDeReglement`."""
+
+    _table = TableGraceDeReglement
+    _entite = GraceDeReglement
+
+    def _cle(self, entite: GraceDeReglement) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: GraceDeReglement) -> dict[str, Any]:
+        return {"niu": entite.niu, "jusqu_au": entite.jusqu_au}
+
+    def pour(self, niu: str) -> list[GraceDeReglement]:
+        return sorted(
+            self._tous(self._requete().where(TableGraceDeReglement.niu == niu)),
+            key=lambda g: g.accordee_le,
+            reverse=True,
+        )
+
+    def toutes(self) -> list[GraceDeReglement]:
+        return self._tous(self._requete())
+
+    def enregistrer(self, grace: GraceDeReglement) -> None:
+        self._poser(grace)

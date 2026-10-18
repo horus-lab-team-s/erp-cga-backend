@@ -447,3 +447,122 @@ def deposer(
 # Le statut « déposée » se lit aussi à l'échéancier : l'accusé consigné au registre du
 # guichet fait passer l'obligation DSF à déclarée, sans arête vers les Obligations.
 _ = EtatDSF
+
+
+# ── La relecture par l'agent (18 octobre 2026, point 24) ──────────────────────────
+
+
+class RemarqueLue(BaseModel):
+    sujet: str
+    constat: str
+    suggestion: str
+
+
+class RelectureDeLAgent(BaseModel):
+    #: Faux sans clé, ou quand l'agent n'a pas répondu : la DSF se prépare sans lui.
+    disponible: bool
+    remarques: list[RemarqueLue]
+    message: str
+
+
+def service_de_relecture():
+    """L'agent de relecture, ou `None` sans clé."""
+    from app.infrastructure.config import configuration
+
+    reglages = configuration()
+    if not reglages.anthropic_cle_api:
+        return None
+    from app.contextes.cloture.adaptateurs.sortant.relecture_dsf_claude import RelectureDeLaDsf
+
+    return RelectureDeLaDsf(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+
+
+def _dossier_pour_l_agent(entreprise: str, exercice: str) -> str:
+    """Ce que l'agent lit : sans NIU, sans dénomination, sans nom (voir son en-tête)."""
+    from app.contextes.cloture.adaptateurs.entrant.routes_pieces_dsf import (
+        lignes_des_pieces_dsf,
+    )
+
+    dossier, periode, etat = _format_dgi(entreprise, exercice)
+    fiche = dossier.fiche_dsf
+    lignes = [
+        f"Forme juridique : {dossier.forme_juridique}",
+        f"Activité déclarée au dossier : {dossier.activite or 'non renseignée'}",
+        f"Exercice : du {periode.ouverture:%d/%m/%Y} au {periode.cloture:%d/%m/%Y}",
+        f"Système : {'normal' if dossier.regime_au(periode.cloture) == 'REEL' else 'SMT'}",
+        f"Total du bilan : {etat.etats.passif['DZ']} FCFA ; résultat : "
+        f"{etat.etats.resultat['XI']} FCFA",
+    ]
+    if fiche is None:
+        lignes.append("Fiche signalétique : non renseignée.")
+    else:
+        manquantes = [
+            nom
+            for nom in (
+                "telephone",
+                "ville",
+                "adresse_geographique",
+                "numero_cnps_employeur",
+                "signataire_qualite",
+                "etats_approuves_en_ag",
+                "banque",
+                "controle",
+            )
+            if getattr(fiche, nom) is None
+        ]
+        lignes.append(f"Fiche signalétique : {fiche.etat.value.lower()}.")
+        lignes.append(f"Rubriques non renseignées : {', '.join(manquantes) or 'aucune'}")
+        for a in fiche.activites:
+            ca = (
+                "CA non renseigné"
+                if a.chiffre_affaires_ht is None
+                else f"CA HT {a.chiffre_affaires_ht}"
+            )
+            lignes.append(f"Activité : {a.designation} ; code NACAM {a.code_nacam} ; {ca}")
+        if not fiche.activites:
+            lignes.append("Aucune activité déclarée avec son code NACAM.")
+    lignes.append("Pièces à joindre :")
+    lignes += [
+        f"- {x.piece.libelle} : {x.etat.value}" for x in lignes_des_pieces_dsf(entreprise, exercice)
+    ]
+    if etat.obstacles:
+        lignes.append("Obstacles au format DGI : " + " ; ".join(etat.obstacles))
+    if etat.etats.avertissements:
+        lignes.append("Avertissements de la liasse : " + " ; ".join(etat.etats.avertissements))
+    return "\n".join(lignes)
+
+
+@routeur.post(
+    "/dossiers/{entreprise}/dsf/{exercice}/relecture-de-l-agent",
+    summary="Demander à l'agent une relecture du dossier de la DSF (il propose, ne bloque rien)",
+)
+def demander_une_relecture(
+    acces: AccesRequis, entreprise: str, exercice: str
+) -> RelectureDeLAgent:
+    exiger_dossier(acces, Permission.PREPARER_DSF, entreprise)
+    service = service_de_relecture()
+    if service is None:
+        return RelectureDeLAgent(
+            disponible=False,
+            remarques=[],
+            message="L'agent n'est pas branché sur ce poste : la DSF se prépare sans lui.",
+        )
+    remarques = service.relire(_dossier_pour_l_agent(entreprise, exercice))
+    if remarques is None:
+        return RelectureDeLAgent(
+            disponible=False,
+            remarques=[],
+            message="L'agent n'a pas répondu. Réessayez plus tard ; rien n'attend sa réponse.",
+        )
+    return RelectureDeLAgent(
+        disponible=True,
+        remarques=[
+            RemarqueLue(sujet=r.sujet, constat=r.constat, suggestion=r.suggestion)
+            for r in remarques
+        ],
+        message=(
+            "Des propositions à juger : l'agent ne lit que le dossier, pas les pièces."
+            if remarques
+            else "L'agent n'a rien relevé. Cela ne vaut pas validation."
+        ),
+    )

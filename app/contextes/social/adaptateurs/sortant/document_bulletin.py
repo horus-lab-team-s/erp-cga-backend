@@ -25,11 +25,11 @@ from app.partage.formats import montant as _montant_ecran
 
 __all__ = ["rendre_le_bulletin"]
 
-_INDIGO = HexColor("#3B2A6B")
+_INDIGO = HexColor("#2E1B4D")
 _MAGENTA = HexColor("#8C2D86")
-_GRIS = HexColor("#555555")
-_FOND = HexColor("#EEEAF5")
-_TRAIT = HexColor("#BBBBBB")
+_GRIS = HexColor("#5B556B")
+_FOND = HexColor("#F6F4FB")
+_TRAIT = HexColor("#E2DDEA")
 
 _TEXTE = ParagraphStyle("t", fontName="Helvetica", fontSize=9, leading=12)
 _PETIT = ParagraphStyle("p", parent=_TEXTE, fontSize=7.5, leading=10, textColor=_GRIS)
@@ -132,9 +132,8 @@ def rendre_le_bulletin(
     if non_valide:
         contenu += [
             _p(
-                "Certaines lignes reposent sur des valeurs du référentiel que le fiscaliste "
-                "du cabinet n'a pas encore validées : ce bulletin n'est pas opposable avant "
-                "cette validation.",
+                "Bulletin provisoire : certains taux appliqués restent à confirmer. Il "
+                "n'est pas opposable avant cette confirmation.",
                 _ALERTE,
             ),
             Spacer(0, 2 * mm),

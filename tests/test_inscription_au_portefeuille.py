@@ -8,7 +8,8 @@
 * le dossier créé est complet : régime et centre depuis la création, exercice en cours,
   groupe CNPS repris par la paie ;
 * une création datée d'après aujourd'hui ou une clôture passée sont refusées ;
-* seule `INSCRIRE_STATUT` inscrit (réviseur, direction).
+* 18 octobre 2026, décision du gérant : le responsable affecté au dossier commercial
+  l'inscrit, ou la direction ; un réviseur qui ne suit pas ce client ne l'inscrit plus.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ from tests.test_paie_au_catalogue import REPONSES, RESPONSABLE, _dossier_affecte
 pytestmark = exige_postgresql
 
 REVISEUR = "a.bouba@cga-brcg.cm"
+#: La direction inscrit tout dossier ; le responsable, ceux qu'il suit.
+DIRECTION = RESPONSABLE
+JURISTE = "p.moukouri@cga-brcg.cm"  # C-007, chargée de formalités
 NIU = "M099988877766Q"
 DEMANDE = {
     "niu": NIU,
@@ -36,7 +40,7 @@ DEMANDE = {
 }
 
 
-def _dossier_paye(client, telephone: str) -> str:
+def _dossier_paye(client, telephone: str, *, responsable: str | None = None) -> str:
     """Un dossier PAIE qualifié par l'API, puis marqué payé en base : la proforma et le
     règlement ont leurs propres tests, ici seul compte l'état atteint."""
     from app.contextes.souscription.adaptateurs.sortant.depots_sql import DepotDossiersSql
@@ -53,7 +57,10 @@ def _dossier_paye(client, telephone: str) -> str:
     assert qualification.status_code == 200, qualification.text
     with etabli("CGA-BRCG"), unite_de_travail("CGA-BRCG") as boutique:
         depot = DepotDossiersSql(boutique.session, "CGA-BRCG")
-        depot.enregistrer(depot.lire(reference).model_copy(update={"etat": EtatDossier.PAYEE}))
+        changes = {"etat": EtatDossier.PAYEE}
+        if responsable:
+            changes["responsable"] = responsable
+        depot.enregistrer(depot.lire(reference).model_copy(update=changes))
     client.cookies.clear()
     return reference
 
@@ -61,7 +68,7 @@ def _dossier_paye(client, telephone: str) -> str:
 def test_le_dossier_paye_preremplit_puis_s_inscrit_et_la_paie_reprend_le_groupe(plateforme):
     client = plateforme
     reference = _dossier_paye(client, "699331100")
-    ouvrir_une_session(client, REVISEUR)
+    ouvrir_une_session(client, DIRECTION)
 
     attente = client.get("/acquisition/inscriptions/en-attente")
     assert attente.status_code == 200, attente.text
@@ -96,7 +103,7 @@ def test_le_dossier_paye_preremplit_puis_s_inscrit_et_la_paie_reprend_le_groupe(
     echeances = [o["obligation"]["echeance"] for o in echeancier.json()]
     passees = [e for e in echeances if e < jour.isoformat()]
     assert echeances and passees == []
-    mois = (jour.replace(day=1) - __import__("datetime").timedelta(days=1))
+    mois = jour.replace(day=1) - __import__("datetime").timedelta(days=1)
     dipe = client.get(
         f"/social/dossiers/{NIU}/declaration/{mois.year}/{mois.month}",
         params={"a_la_date": jour.isoformat()},
@@ -117,7 +124,7 @@ def test_ni_dossier_non_paye_ni_niu_deja_present(plateforme):
     ouvrir_une_session(client, RESPONSABLE)
     reference = _dossier_affecte(client, "699331101")
     client.cookies.clear()
-    ouvrir_une_session(client, REVISEUR)
+    ouvrir_une_session(client, DIRECTION)
     assert (
         client.get(f"/acquisition/dossiers/{reference}/inscription").json()["inscriptible"] is False
     )
@@ -128,7 +135,7 @@ def test_ni_dossier_non_paye_ni_niu_deja_present(plateforme):
 
     client.cookies.clear()
     paye = _dossier_paye(client, "699331102")
-    ouvrir_une_session(client, REVISEUR)
+    ouvrir_une_session(client, DIRECTION)
     deja = client.post(
         f"/acquisition/dossiers/{paye}/inscription", json=DEMANDE | {"niu": "M081234567890P"}
     )
@@ -138,7 +145,7 @@ def test_ni_dossier_non_paye_ni_niu_deja_present(plateforme):
 def test_des_dates_incoherentes_sont_refusees(plateforme):
     client = plateforme
     reference = _dossier_paye(client, "699331103")
-    ouvrir_une_session(client, REVISEUR)
+    ouvrir_une_session(client, DIRECTION)
     url = f"/acquisition/dossiers/{reference}/inscription"
     futur = client.post(url, json=DEMANDE | {"date_creation": "2099-01-01"})
     assert futur.status_code == 422 and "après aujourd'hui" in futur.json()["detail"]
@@ -158,3 +165,33 @@ def test_seul_qui_inscrit_les_statuts_inscrit(plateforme):
         client.post(f"/acquisition/dossiers/{reference}/inscription", json=DEMANDE).status_code
         == 403
     )
+
+
+def test_le_responsable_affecte_inscrit_et_le_reviseur_non(plateforme):
+    """18 octobre 2026 : celui qui suit le client renseigne lui-même NIU et RCCM."""
+    client = plateforme
+    reference = _dossier_paye(client, "699331105", responsable="C-007")
+
+    ouvrir_une_session(client, REVISEUR)
+    url = f"/acquisition/dossiers/{reference}/inscription"
+    assert client.post(url, json=DEMANDE | {"niu": "M099988877700Q"}).status_code == 403
+
+    client.cookies.clear()
+    ouvrir_une_session(client, JURISTE)
+    file = client.get("/acquisition/inscriptions/en-attente").json()
+    assert [e["reference"] for e in file] == [reference]
+    assert file[0]["responsable"] == "C-007"
+    inscrite = client.post(url, json=DEMANDE | {"niu": "M099988877700Q"})
+    assert inscrite.status_code == 201, inscrite.text
+
+
+def test_un_charge_de_formalites_n_inscrit_pas_le_dossier_d_un_autre(plateforme):
+    client = plateforme
+    reference = _dossier_paye(client, "699331106", responsable="C-999")
+    ouvrir_une_session(client, JURISTE)
+    url = f"/acquisition/dossiers/{reference}/inscription"
+    refus = client.post(url, json=DEMANDE | {"niu": "M099988877711Q"})
+    assert refus.status_code == 403 and "responsable affecté" in refus.text, refus.text
+    assert reference not in [
+        e["reference"] for e in client.get("/acquisition/inscriptions/en-attente").json()
+    ]

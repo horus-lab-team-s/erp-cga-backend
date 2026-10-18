@@ -47,9 +47,9 @@ from app.contextes.transverse.domaine.identites import Compte
 from app.contextes.transverse.domaine.roles import (
     EXIGE_MFA,
     EXIGE_MOTIF,
-    ROLES_INTERNES,
+    CodeRole,
     Permission,
-    Role,
+    est_interne,
     permissions_de,
 )
 from app.contextes.transverse.domaine.sessions import Session
@@ -94,7 +94,7 @@ class Acces(BaseModel):
     session: str
     nom_complet: str
 
-    roles: list[Role]
+    roles: list[CodeRole]
     permissions: list[Permission]
 
     #: `None` = tous les dossiers du cabinet.
@@ -122,7 +122,7 @@ class Acces(BaseModel):
         plutôt que vers l'espace adhérent. Sérialisé parce que c'est le front qui
         décide où poser l'utilisateur après connexion, et il ne doit pas
         réinventer la règle."""
-        return any(role in ROLES_INTERNES for role in self.roles)
+        return any(est_interne(role) for role in self.roles)
 
     # ── Les deux questions ──────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ class Acces(BaseModel):
         if permission not in self.permissions:
             raise AccesRefuse(
                 f"{self.compte} ne détient pas {permission} au {self.a_la_date}. "
-                f"Rôles à cette date : {', '.join(r.value for r in self.roles) or 'aucun'}."
+                f"Rôles à cette date : {', '.join(str(r) for r in self.roles) or 'aucun'}."
             )
         if permission in EXIGE_MFA and not self.facteur_fort:
             raise SecondFacteurRequis(
@@ -191,7 +191,7 @@ def resoudre_acces(
         locataire=compte.locataire,
         session=session.identifiant,
         nom_complet=compte.nom_complet,
-        roles=sorted(roles, key=lambda r: r.value),
+        roles=sorted(roles, key=str),
         permissions=sorted(permissions_de(roles), key=lambda p: p.value),
         dossiers=None if dossiers is None else sorted(dossiers),
         # ⚠️ 16 octobre 2026 (revue de sécurité) : le défaut était minuit, et « minuit <

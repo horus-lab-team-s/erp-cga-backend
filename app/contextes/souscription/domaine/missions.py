@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.partage.copie import transiter
 
 __all__ = [
+    "MENTION_A_COMPLETER",
     "DecisionProposition",
     "EtatMission",
     "Gravite",
@@ -90,9 +91,15 @@ class Gravite(StrEnum):
     ELEVEE = "ELEVEE"
 
 
+#: Ce que l'agent et les modèles écrivent là où une donnée manque.
+MENTION_A_COMPLETER = "[À COMPLÉTER"
+
+
 class OrigineProposition(StrEnum):
     AGENT = "AGENT"
     COLLABORATEUR = "COLLABORATEUR"
+    #: 18 octobre 2026 (point 23) : un article type, versé depuis un modèle de contrat.
+    MODELE = "MODELE"
 
 
 class DecisionProposition(StrEnum):
@@ -286,6 +293,17 @@ class Mission(BaseModel):
             propositions=tuple(decidee if p.rang == rang else p for p in self.propositions),
         )
 
+    def reaffecter(self, responsable: str) -> Mission:
+        """Confier la mission à un autre collaborateur (18 octobre 2026, point 22).
+
+        ⚠️ Pas une mission livrée : son livrable est parti, et qui l'a instruite doit le
+        rester au dossier. Le motif et l'auteur du geste vont au journal d'audit."""
+        if self.etat is EtatMission.LIVREE:
+            raise TransitionMissionRefusee("la mission est livrée : elle ne change plus de main.")
+        if responsable == self.responsable:
+            raise TransitionMissionRefusee("ce collaborateur est déjà responsable de la mission.")
+        return transiter(self, responsable=responsable)
+
     def soumettre(self, *, par: str, a_l_instant: datetime) -> Mission:
         self._exiger_ouverte("soumettre")
         if self.en_attente:
@@ -296,6 +314,16 @@ class Mission(BaseModel):
             )
         if not self.retenues:
             raise TransitionMissionRefusee("aucune proposition retenue : le livrable serait vide.")
+        # 18 octobre 2026 (point 23) : l'agent et les modèles laissent « [À COMPLÉTER : …] »
+        # là où le cahier ne disait rien. Retenue telle quelle, la mention partirait au client.
+        a_completer = [
+            str(p.rang) for p in self.retenues if MENTION_A_COMPLETER in (p.texte_retenu or "")
+        ]
+        if a_completer:
+            raise TransitionMissionRefusee(
+                f"des articles portent encore « {MENTION_A_COMPLETER} » "
+                f"({', '.join(a_completer)}) : reformulez-les avec la donnée du client."
+            )
         return transiter(
             self, etat=EtatMission.A_VALIDER, soumise_par=par, soumise_le=a_l_instant, renvoi=None
         )

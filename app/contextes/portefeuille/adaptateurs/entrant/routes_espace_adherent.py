@@ -89,7 +89,7 @@ def _interlocuteur(niu: str, jour: date) -> Interlocuteur | None:
         candidats.append(
             CandidatInterlocuteur(
                 compte=compte.identifiant,
-                role=h.role.value,
+                role=str(h.role),
                 nommee_sur_le_dossier=h.portee is not None,
                 debut=h.debut,
                 nom=compte.nom_affiche,

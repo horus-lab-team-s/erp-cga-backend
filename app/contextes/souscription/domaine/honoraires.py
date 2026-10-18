@@ -53,6 +53,8 @@ __all__ = [
     "PeriodeDejaReglee",
     "PeriodiciteDHonoraires",
     "ReglementDHonoraires",
+    "RevisionDHonoraires",
+    "RevisionRefusee",
     "echeancier_d_honoraires",
     "reference_du_contrat",
 ]
@@ -80,8 +82,35 @@ def reference_du_contrat(niu: str) -> str:
     return f"HON-{niu}"
 
 
+class RevisionRefusee(ValueError):
+    """La révision remonterait sur une période déjà réglée, ou avant le contrat."""
+
+
+class RevisionDHonoraires(BaseModel):
+    """Un nouveau montant, à partir d'une date (18 octobre 2026).
+
+    ⚠️ CE QUE LE GÉRANT A DEMANDÉ : « les frais de suivi comptable peuvent changer avec
+    le temps ». Une révision vaut pour les périodes qui commencent à partir de
+    `a_partir_du` ; celles d'avant gardent leur prix. Jusque-là, refixer le contrat
+    réécrivait aussi le passé, et un reçu déjà remis ne concordait plus avec
+    l'échéancier.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    montant: Decimal = Field(gt=0, description="Par période, en francs CFA")
+    a_partir_du: date
+    motif: str = Field(min_length=5, max_length=500)
+    fixe_par: str = Field(min_length=1)
+    fixe_le: datetime
+
+
 class ContratDHonoraires(BaseModel):
-    """Ce que le cabinet et l'adhérent ont convenu. **Une décision, datée et signée.**"""
+    """Ce que le cabinet et l'adhérent ont convenu. **Une décision, datée et signée.**
+
+    18 octobre 2026 : `montant` est le prix de départ ; `revisions` le fait évoluer,
+    dans l'ordre des dates. `montant_au` dit le prix d'une période.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -93,10 +122,49 @@ class ContratDHonoraires(BaseModel):
     debut: date
     fixe_par: str = Field(min_length=1)
     fixe_le: datetime
+    revisions: tuple[RevisionDHonoraires, ...] = ()
 
     @property
     def reference(self) -> str:
         return reference_du_contrat(self.niu)
+
+    def montant_au(self, debut_de_periode: date) -> Decimal:
+        """Le prix d'une période : la dernière révision en vigueur à son début."""
+        montant = self.montant
+        for revision in self.revisions:
+            if revision.a_partir_du <= debut_de_periode:
+                montant = revision.montant
+        return montant
+
+    def reviser(
+        self,
+        revision: RevisionDHonoraires,
+        reglements: Sequence[ReglementDHonoraires],
+    ) -> ContratDHonoraires:
+        """Ajoute une révision. ⚠️ Jamais sur une période déjà réglée : ce que
+        l'adhérent a payé, au prix convenu ce jour-là, ne change pas après coup."""
+        if revision.a_partir_du <= self.debut:
+            raise RevisionRefusee(
+                f"une révision part d'une date postérieure au début du contrat "
+                f"({self.debut:%d/%m/%Y}) ; pour changer le prix de départ, refixer le contrat."
+            )
+        derniere = max((r.a_partir_du for r in self.revisions), default=None)
+        if derniere is not None and revision.a_partir_du <= derniere:
+            raise RevisionRefusee(
+                f"une révision existe déjà à partir du {derniere:%d/%m/%Y} : la suivante "
+                "part d'une date postérieure."
+            )
+        reglees = sorted(
+            r.periode
+            for r in reglements
+            if r.niu == self.niu and r.periode >= revision.a_partir_du
+        )
+        if reglees:
+            raise RevisionRefusee(
+                f"la période du {reglees[0]:%d/%m/%Y} est déjà réglée : une révision ne "
+                "change pas le prix de ce qui est payé. Choisir une date postérieure."
+            )
+        return self.model_copy(update={"revisions": (*self.revisions, revision)})
 
 
 class CanalDeReglement(StrEnum):
@@ -194,7 +262,7 @@ def echeancier_d_honoraires(
                 debut=debut,
                 fin=fin,
                 exigible_le=debut,
-                montant=contrat.montant,
+                montant=contrat.montant_au(debut),
                 etat=etat,
                 reglement=reglement,
             )

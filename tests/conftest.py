@@ -435,3 +435,31 @@ def depot_tva_sans_revue_exigee(monkeypatch):
 
     sans = ReglagesDuDepotTVA(revue_du_mois_exigee=ExigenceDeRevue.AUCUNE)
     monkeypatch.setattr(routes_http, "charger_les_reglages_du_depot_tva", lambda _chemin: sans)
+
+
+def tolerer_les_retards_d_honoraires() -> None:
+    """Fixe la règle de dépassement du cabinet de démonstration à un an (18 octobre 2026).
+
+    ⚠️ Pour les cas qui figent l'horloge des mois après l'amorçage : les honoraires de
+    démonstration y sont en retard de plusieurs périodes, et le dossier ne se traiterait
+    plus (`423`). Ce que ces cas éprouvent, la clôture ou la saisie, n'en dépend pas ; le
+    blocage a ses propres cas, dans `test_situation_de_reglement.py`.
+    """
+    from datetime import datetime
+
+    from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+        DepotRegleDeDepassementSql,
+    )
+    from app.contextes.souscription.domaine.situation_de_reglement import RegleDeDepassement
+    from app.contextes.transverse.api import unite_de_travail
+    from app.partage.locataire import etabli
+
+    with etabli("CGA-BRCG"), unite_de_travail("CGA-BRCG") as boutique:
+        DepotRegleDeDepassementSql(boutique.session, "CGA-BRCG").enregistrer(
+            RegleDeDepassement(
+                delai_jours=365,
+                motif="cas de test hors règlement",
+                fixee_par="test",
+                fixee_le=datetime(2026, 10, 18),
+            )
+        )

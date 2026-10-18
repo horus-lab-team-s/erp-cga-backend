@@ -67,6 +67,8 @@ class Proposition(BaseModel):
 class EtatDeLInscription(BaseModel):
     reference: str
     service: str
+    #: 18 octobre 2026 : celui qui suit le dossier commercial, et qui l'inscrit.
+    responsable: str | None = None
     #: Seul un dossier payé s'inscrit.
     inscriptible: bool
     motif: str | None = None
@@ -96,6 +98,33 @@ class InscriptionDemandee(BaseModel):
     justification: str = Field(min_length=30, max_length=500)
 
 
+def _direction(acces) -> bool:
+    """La direction : elle affecte les dossiers et inscrit les statuts. Lue aux droits, pas
+    au nom du rôle : la matrice se règle (18 octobre 2026)."""
+    return acces.detient(Permission.INSCRIRE_STATUT) and acces.detient(Permission.AFFECTER_DOSSIER)
+
+
+def _droit_d_inscrire(acces) -> Permission:
+    """⚠️ DÉCISION DU GÉRANT, 18 OCTOBRE 2026 : « c'est au responsable à qui l'inscription
+    a été confiée de renseigner lui-même le RCCM et le NIU ». Le responsable affecté au
+    dossier commercial l'inscrit (il qualifie les demandes), ou la direction. Un réviseur
+    qui ne suit pas ce client ne l'inscrit plus : il n'a pas vu ses pièces.
+
+    La route exige le droit rendu ici, puis `_exiger_le_responsable`."""
+    return Permission.INSCRIRE_STATUT if _direction(acces) else Permission.QUALIFIER_PROSPECT
+
+
+def _exiger_le_responsable(acces, dossier) -> None:
+    if _direction(acces):
+        return
+    if dossier.responsable != acces.compte:
+        raise HTTPException(
+            status_code=403,
+            detail="Action non permise : seul le responsable affecté au dossier, ou la "
+            "direction, inscrit cette entreprise.",
+        )
+
+
 def _dossier(reference: str):
     try:
         return depot_dossiers().lire(reference)
@@ -118,6 +147,7 @@ def _etat(dossier) -> EtatDeLInscription:
     return EtatDeLInscription(
         reference=dossier.reference,
         service=dossier.service,
+        responsable=dossier.responsable,
         inscriptible=motif is None,
         motif=motif,
         inscrit_sous=dossier.inscrit_sous,
@@ -138,11 +168,12 @@ def _etat(dossier) -> EtatDeLInscription:
 def lister_les_inscriptions_en_attente(acces: AccesRequis) -> list[EtatDeLInscription]:
     """Hors création de société : celle-là entre au portefeuille par sa conversion, à la
     livraison des formalités. Elle n'a ni NIU ni RCCM au moment du paiement."""
-    exiger(acces, Permission.INSCRIRE_STATUT, motif="lister les inscriptions en attente")
+    exiger(acces, _droit_d_inscrire(acces), motif="lister les inscriptions en attente")
+    # La direction voit toute la file ; un responsable, les dossiers qu'il suit.
     return [
         _etat(d)
         for d in depot_dossiers().payes()
-        if _etat_inscriptible(d)
+        if _etat_inscriptible(d) and (_direction(acces) or d.responsable == acces.compte)
     ]
 
 
@@ -155,8 +186,10 @@ def _etat_inscriptible(dossier) -> bool:
     summary="Ce que l'inscription au portefeuille reprend du dossier commercial",
 )
 def lire_l_inscription(acces: AccesRequis, reference: str) -> EtatDeLInscription:
-    exiger(acces, Permission.INSCRIRE_STATUT, motif=f"préparer l'inscription de {reference}")
-    return _etat(_dossier(reference))
+    exiger(acces, _droit_d_inscrire(acces), motif=f"préparer l'inscription de {reference}")
+    dossier = _dossier(reference)
+    _exiger_le_responsable(acces, dossier)
+    return _etat(dossier)
 
 
 @routeur.post(
@@ -171,8 +204,9 @@ def lire_l_inscription(acces: AccesRequis, reference: str) -> EtatDeLInscription
 def inscrire(
     acces: AccesRequis, reference: str, demande: InscriptionDemandee
 ) -> EtatDeLInscription:
-    exiger(acces, Permission.INSCRIRE_STATUT, motif=demande.justification)
+    exiger(acces, _droit_d_inscrire(acces), motif=demande.justification)
     dossier = _dossier(reference)
+    _exiger_le_responsable(acces, dossier)
     etat = _etat(dossier)
     if not etat.inscriptible:
         raise HTTPException(status_code=409, detail=etat.motif)

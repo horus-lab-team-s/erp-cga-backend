@@ -41,7 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.contextes.obligations.adaptateurs.entrant.routes_http import (
     dispense_de_dsf,
     entreprise_du_portefeuille,
-    estimateur_de_l_igs,
+    estimateur_du_dossier,
 )
 from app.contextes.obligations.adaptateurs.sortant.accuses import accuses_du_portail
 from app.contextes.obligations.adaptateurs.sortant.catalogue_obligations import (
@@ -105,7 +105,7 @@ def instances_de_l_echeancier(dossier, jour: date, horizon: int) -> list[Obligat
                 exercice,
                 emploie_sur=effectif_du_dossier(dossier.niu),
                 accuse_de=accuses,
-                estimer=estimateur_de_l_igs(dossier, exercice),
+                estimer=estimateur_du_dossier(dossier, exercice),
                 dispense=dispense_de_dsf(dossier, exercice),
             )
         )
@@ -165,6 +165,11 @@ def preuves_du_dossier(niu: str | None) -> list[PreuveEnvoyee]:
                 motif=v.apres.get("motif") if v else None,
                 verifiee_le=v.horodatage if v else None,
                 verifiee_par=v.acteur if v else None,
+                montant_quittance=(
+                    Decimal(v.apres["montant_quittance"])
+                    if v and v.apres.get("montant_quittance")
+                    else None
+                ),
             )
         )
     return preuves
@@ -381,6 +386,9 @@ class VerdictDemande(BaseModel):
     verdict: VerdictDeLaPreuve
     #: Exigé pour un refus : c'est ce que l'adhérent lira pour envoyer la bonne quittance.
     motif: str | None = Field(default=None, max_length=500)
+    #: 18 octobre 2026 (point 7) : le montant que porte la quittance. Facultatif ; relevé,
+    #: il sert l'écriture de paiement et se compare à ce qui était dû.
+    montant_quittance: Decimal | None = Field(default=None, gt=0)
 
 
 def _prevenir_du_verdict(entreprise: str, demande, motif: str, jour: date) -> None:
@@ -480,6 +488,11 @@ def juger_une_quittance(
             "piece": demande.piece,
             "verdict": demande.verdict.value,
             **({"motif": motif} if motif else {}),
+            **(
+                {"montant_quittance": str(demande.montant_quittance)}
+                if demande.montant_quittance
+                else {}
+            ),
         },
     )
     try:
@@ -578,3 +591,110 @@ def lire_mes_documents(acces: AccesRequis, entreprise: str) -> MesDocuments:
 
 
 __all__ = ["routeur"]
+
+
+# ── L'écriture de paiement proposée (18 octobre 2026, point 7) ─────────────────────
+#
+# « Comment fonctionne le rapprochement des quittances ? » La quittance prouvait le
+# paiement, mais aucune écriture n'en sortait : le comptable la passait à la main.
+# Une quittance VALIDÉE propose maintenant son écriture : au débit le compte de l'État
+# ou de la CNPS que le paiement solde, au crédit la trésorerie qui a payé.
+#
+# ⚠️ UNE PROPOSITION. Rien n'est passé ici : l'écran l'enregistre en brouillon par la
+# route de saisie, qui rejoue tous ses contrôles, et un comptable la valide. Le compte
+# de trésorerie est un choix : le cabinet sait si l'adhérent a payé par banque, mobile
+# money ou en espèces.
+
+#: Le compte que le paiement solde, au plan du cabinet (`plan_syscohada.py`).
+COMPTE_DE_L_OBLIGATION = {
+    "CNPS": "431",
+    "IRPP_SALAIRES": "4441",
+    "TVA": "4431",
+}
+COMPTES_DE_TRESORERIE = {"521": "banque", "5231": "mobile money", "571": "caisse"}
+
+
+class LigneProposee(BaseModel):
+    compte: str
+    libelle: str
+    sens: str
+    montant: Decimal
+
+
+class EcritureDePaiementProposee(BaseModel):
+    journal: str
+    exercice: str
+    date_operation: date
+    libelle: str
+    piece_justificative: str
+    lignes: list[LigneProposee]
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/preuves-de-paiement/ecriture-proposee",
+    summary="L'écriture de paiement qu'une quittance validée propose",
+)
+def proposer_l_ecriture_de_paiement(
+    acces: AccesRequis,
+    entreprise: str,
+    code_obligation: str,
+    periode_debut: date,
+    piece: str,
+    compte_tresorerie: str = "521",
+    montant: Decimal | None = None,
+) -> EcritureDePaiementProposee:
+    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    preuve = next(
+        (
+            p
+            for p in preuves_du_dossier(entreprise)
+            if p.code_obligation == code_obligation
+            and p.periode_debut == periode_debut
+            and p.piece == piece
+        ),
+        None,
+    )
+    if preuve is None or preuve.verdict is not VerdictDeLaPreuve.VALIDEE:
+        raise HTTPException(
+            status_code=409,
+            detail="Seule une quittance validée propose son écriture : la vérifier d'abord.",
+        )
+    compte = next(
+        (c for code, c in COMPTE_DE_L_OBLIGATION.items() if code_obligation.startswith(code)),
+        None,
+    )
+    if compte is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"aucun compte connu pour {code_obligation} : passer l'écriture à la main.",
+        )
+    if compte_tresorerie not in COMPTES_DE_TRESORERIE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"trésorerie {compte_tresorerie} inconnue : "
+            + ", ".join(f"{c} ({n})" for c, n in COMPTES_DE_TRESORERIE.items()),
+        )
+    retenu = montant or preuve.montant_quittance
+    if retenu is None:
+        raise HTTPException(
+            status_code=422,
+            detail="le montant de la quittance n'a pas été relevé : le donner.",
+        )
+    jour = (preuve.verifiee_le or maintenant()).date()
+    libelle = f"Paiement {code_obligation} {periode_debut:%m/%Y}"
+    return EcritureDePaiementProposee(
+        journal="BQ" if compte_tresorerie != "571" else "CA",
+        exercice=str(jour.year),
+        date_operation=jour,
+        libelle=libelle,
+        piece_justificative=piece,
+        lignes=[
+            LigneProposee(compte=compte, libelle=libelle, sens="DEBIT", montant=retenu),
+            LigneProposee(
+                compte=compte_tresorerie,
+                libelle=f"{libelle} ({COMPTES_DE_TRESORERIE[compte_tresorerie]})",
+                sens="CREDIT",
+                montant=retenu,
+            ),
+        ],
+    )

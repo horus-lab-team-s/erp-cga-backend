@@ -251,7 +251,7 @@ def lire_echeancier(
         periode,
         emploie_sur=effectif_du_dossier(dossier.niu),
         accuse_de=accuses_du_portail(),
-        estimer=estimateur_de_l_igs(dossier, periode),
+        estimer=estimateur_du_dossier(dossier, periode),
         dispense=dispense_de_dsf(dossier, periode),
     )
     return [
@@ -1034,6 +1034,52 @@ def estimateur_de_l_igs(dossier: Entreprise, exercice):
         else:
             explication = f"{base} : {_fcfa(e.annuel)} sur l'année."
         return e.trimestriel, explication
+
+    return estimer
+
+
+def estimateur_des_charges_arretees(dossier: Entreprise):
+    """Le montant que le cabinet a arrêté pour la CNPS et les retenues d'un mois.
+
+    18 octobre 2026 (point 8, suite) : « seul l'arrêté sert ensuite ». La paie propose,
+    un collaborateur arrête (`social/domaine/arrete_des_charges.py`) ; l'arrêté devient
+    le montant de l'échéance, et préremplit l'appel de fonds d'un adhérent mandaté. Un
+    mois sans arrêté n'a pas de montant : `None`, jamais la proposition de la paie.
+    """
+    from app.contextes.social.api import depot_des_arretes, montant_arrete_pour
+    from app.partage.formats import MOIS
+
+    arretes = depot_des_arretes()
+
+    def estimer(type_obligation, debut, fin):
+        if type_obligation.code not in ("CNPS", "IRPP_SALAIRES"):
+            return None
+        arrete = arretes.lire(dossier.niu, f"{debut:%Y-%m}")
+        montant = None if arrete is None else montant_arrete_pour(arrete, type_obligation.code)
+        if montant is None:
+            return None
+        return montant, (
+            f"Arrêté par le cabinet sur la paie de {MOIS[debut.month - 1]} {debut.year}."
+        )
+
+    return estimer
+
+
+def estimateur_du_dossier(dossier: Entreprise, exercice):
+    """Les estimations de l'échéancier, réunies : l'IGS d'abord, puis les charges sociales
+    arrêtées. Chacune ne répond que pour ses obligations."""
+    estimateurs = [
+        e
+        for e in (estimateur_de_l_igs(dossier, exercice), estimateur_des_charges_arretees(dossier))
+        if e is not None
+    ]
+
+    def estimer(type_obligation, debut, fin):
+        for e in estimateurs:
+            trouve = e(type_obligation, debut, fin)
+            if trouve is not None:
+                return trouve
+        return None
 
     return estimer
 

@@ -57,6 +57,11 @@ CODES_MESSAGES: dict[str, str] = {
     "adherent.quittance_refusee": "Quittance à renvoyer, avec le motif",
     "adherent.fonds_recus": "Fonds reçus par le cabinet, qui règle l'administration",
     "adherent.honoraires_regles": "Honoraires réglés : le reçu est dans l'espace",
+    # 18 octobre 2026 (point 25) : la réponse relue du cabinet à un candidat.
+    "recrutement.reponse": "Réponse du cabinet à un candidat",
+    # 18 octobre 2026 (point 22) : la prestation ponctuelle, prise en charge puis livrée.
+    "mission.ouverte": "Prestation ponctuelle prise en charge",
+    "mission.livree": "Prestation ponctuelle livrée",
     "compte.adhesion_ajoutee": (
         "Votre société est immatriculée, l'espace adhérent s'ajoute à votre compte"
     ),

@@ -2370,6 +2370,8 @@ def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
     ─────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.ENCAISSER)
+    # 18 octobre 2026 : la matrice peut retirer cette famille de la vue de la caisse.
+    exiger(acces, Permission.VOIR_VERSEMENTS_COMMERCE)
     proformas = depot_proformas()
     dus: list[tuple[datetime, ReglementDeCaisse]] = []
     regles: list[tuple[datetime, ReglementDeCaisse]] = []

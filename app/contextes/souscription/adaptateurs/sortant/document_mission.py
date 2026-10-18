@@ -7,6 +7,10 @@ pas livrée, le document porte « PROJET » en tête de chaque page.
 ⚠️ AUCUNE MENTION DE L'AGENT DANS LE CORPS : le client reçoit l'avis du cabinet. La
 page de garde dit, elle, comment l'analyse a été conduite (lecture assistée, décision
 humaine), parce que le cabinet s'y est engagé.
+
+⚠️ AUCUN NOM DE COLLABORATEUR (18 octobre 2026) : le livrable part chez le client, et qui
+l'a instruit ou validé est une information interne. Le cabinet signe ; le journal d'audit
+et l'écran de la mission gardent les noms.
 """
 
 from __future__ import annotations
@@ -31,9 +35,9 @@ from app.partage.horloge import a_douala
 
 __all__ = ["rendre_le_livrable"]
 
-_INDIGO = HexColor("#3B2A6B")
+_INDIGO = HexColor("#2E1B4D")
 _MAGENTA = HexColor("#8C2D86")
-_GRIS = HexColor("#555555")
+_GRIS = HexColor("#5B556B")
 
 _ORDRE = [
     (Rubrique.RESUME, "Objet du contrat"),
@@ -91,8 +95,7 @@ def _projet_de_contrat(contenu: list, mission: Mission, retenues) -> None:
         contenu.append(Spacer(0, 3 * mm))
 
 
-def rendre_le_livrable(mission: Mission, *, noms: dict[str, str] | None = None) -> bytes:
-    noms = noms or {}
+def rendre_le_livrable(mission: Mission) -> bytes:
     tampon = BytesIO()
     marge = 18 * mm
     document = SimpleDocTemplate(
@@ -176,17 +179,11 @@ def rendre_le_livrable(mission: Mission, *, noms: dict[str, str] | None = None) 
                 contenu.append(Spacer(0, 3 * mm))
             contenu.append(Spacer(0, 3 * mm))
 
-    def qui(compte: str | None) -> str:
-        return noms.get(compte, compte) if compte else ""
-
     contenu.append(Spacer(0, 6 * mm))
-    visa = f"Instruit par {qui(mission.soumise_par or mission.responsable)}"
-    if mission.soumise_le:
-        visa += f", soumis le {_douala(mission.soumise_le)}"
     if livree and mission.validee_le:
-        visa += f" ; validé par {qui(mission.validee_par)} le {_douala(mission.validee_le)}."
+        visa = f"Validé par le cabinet le {_douala(mission.validee_le)}."
     else:
-        visa += " ; validation en attente."
+        visa = "Projet en cours de validation par le cabinet."
     contenu.append(_p(visa, _NOTE))
     document.build(contenu, onFirstPage=habiller, onLaterPages=habiller)
     return tampon.getvalue()

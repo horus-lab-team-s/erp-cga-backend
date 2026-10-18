@@ -48,6 +48,9 @@ PUBLIQUES: dict[tuple[str, str], str] = {
     # vérifié sur son contenu, et une personne ne postule qu'une fois à une offre.
     ("GET", "/vitrine/offres"): "Les postes ouverts, publiés pour être lus.",
     ("GET", "/vitrine/offres/{identifiant}"): "Un poste ouvert et ses qualifications.",
+    ("GET", "/vitrine/offres/{identifiant}/image"): (
+        "L'image d'un poste ouvert, publiée avec lui ; une offre en brouillon ou close rend 404."
+    ),
     ("POST", "/vitrine/offres/{identifiant}/candidatures"): (
         "Postuler ne demande pas de compte : le candidat n'en a pas, et n'a pas à en créer un."
     ),

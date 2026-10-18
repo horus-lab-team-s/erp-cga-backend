@@ -40,7 +40,8 @@ class TestLaListe:
             for x in etat_des_pieces(SystemeDsf.NORMAL, {})
             if x.etat is EtatPiece.PRODUITE
         }
-        assert produites == {2, 3, 8, 9}
+        # 7 : le tableau des amortissements, produit du registre des immobilisations (17 octobre).
+        assert produites == {2, 3, 7, 8, 9}
 
     def test_la_derniere_marque_fait_foi(self):
         jointe = Marque(etat=EtatPiece.JOINTE, par="a.bouba", le=LE, nom_du_fichier="visa.pdf")

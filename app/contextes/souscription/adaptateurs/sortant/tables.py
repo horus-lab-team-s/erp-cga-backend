@@ -36,6 +36,8 @@ __all__ = [
     "TableAppelDeFonds",
     "TableMission",
     "TableContratDHonoraires",
+    "TableGraceDeReglement",
+    "TableRegleDeDepassement",
     "TableDevis",
     "TableReglementDHonoraires",
     "TableProforma",
@@ -447,3 +449,31 @@ class TableMission(Cloisonne, Document, Base):
     type: Mapped[str] = mapped_column(String(24), nullable=False)
     etat: Mapped[str] = mapped_column(String(16), nullable=False)
     ouverte_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableRegleDeDepassement(Cloisonne, Document, Base):
+    """La règle de dépassement du cabinet (18 octobre 2026) : une ligne par locataire.
+
+    Sans ligne, la règle d'office s'applique (aucun dépassement toléré). Voir
+    `domaine/situation_de_reglement.py`.
+    """
+
+    __tablename__ = "regle_de_depassement"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fixee_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableGraceDeReglement(Cloisonne, Document, Base):
+    """Les grâces accordées à un adhérent en retard (18 octobre 2026).
+
+    ⚠️ Une grâce levée reste : on doit pouvoir dire, dans un an, pourquoi ce dossier a
+    été traité alors qu'il ne payait pas.
+    """
+
+    __tablename__ = "grace_de_reglement"
+    __table_args__ = (Index("ix_grace_de_reglement_niu", "locataire", "niu"),)
+
+    identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
+    niu: Mapped[str] = mapped_column(String(64), nullable=False)
+    jusqu_au: Mapped[date] = mapped_column(Date, nullable=False)

@@ -29,7 +29,7 @@ from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 
-from reportlab.lib.colors import HexColor, black, white
+from reportlab.lib.colors import HexColor, black
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
@@ -40,7 +40,17 @@ from app.partage.formats import ESPACE_FINE, en_toutes_lettres
 from app.partage.formats import montant as _montant_ecran
 from app.partage.marque import LOGO
 
-__all__ = ["rendre_le_document"]
+__all__ = [
+    "FILET",
+    "FOND",
+    "GRIS",
+    "INDIGO",
+    "MARGE",
+    "entete_de_document",
+    "montant_imprime",
+    "pied_de_document",
+    "rendre_le_document",
+]
 
 
 def montant_imprime(valeur: Decimal) -> str:
@@ -79,11 +89,19 @@ MARGE = 20 * mm
 #: La charte. Les mêmes valeurs que les courriels (`gabarits_courriel.py`) :
 #: un client qui reçoit le message puis ouvre le document doit voir la même
 #: maison.
-INDIGO = HexColor("#3B2A6B")
+#:
+#: 18 octobre 2026 (points 19 et 20) : « des factures plus soft, avec de bonnes
+#: séparations, comme celles des grandes entreprises ». Page blanche, filets fins, la
+#: marque en accent seulement (titre, total) ; plus de bandeau plein. L'indigo est celui
+#: de la console (`--brand-indigo-900`), et non plus un voisin approximatif.
+INDIGO = HexColor("#2E1B4D")
 _MAGENTA = HexColor("#8C2D86")
 #: Le gris des mentions secondaires, assez foncé pour rester lisible à
 #: l'impression en noir et blanc, que le cabinet pratique.
-GRIS = HexColor("#555555")
+GRIS = HexColor("#5B556B")
+#: Les filets et les fonds de cartouche : présents, jamais appuyés.
+FILET = HexColor("#E2DDEA")
+FOND = HexColor("#F6F4FB")
 
 #: Le pied de page, tel qu'il figure sur les documents du cabinet.
 #: ⚠️ Le point médian « · » et non le tiret cadratin : aucun tiret cadratin
@@ -144,57 +162,63 @@ _LARGEUR_LOGO = 30 * mm
 
 
 def entete_de_document(page: canvas.Canvas) -> float:
-    """Le logo à gauche, le bandeau à sa droite : l'en-tête des documents papier.
+    """Le logo et la maison à gauche, un filet fin dessous : l'en-tête des documents.
 
     ⚠️ **LE LOGO MANQUAIT, ET LE CABINET L'A RELEVÉ** (14 octobre 2026). Un
-    document sans la marque de la maison se lit comme un brouillon, et c'est lui
-    que le client compare au papier qu'on lui remettait jusque-là.
+    document sans la marque de la maison se lit comme un brouillon.
 
-    ⚠️ **SON ABSENCE NE FAIT PAS ÉCHOUER LE RENDU.** Une image mal construite, où
-    le fichier manquerait, doit encore émettre des proformas : le bandeau reprend
-    alors toute la largeur, comme avant.
+    ⚠️ **SON ABSENCE NE FAIT PAS ÉCHOUER LE RENDU.** Sans fichier, la raison sociale
+    prend sa place, et le document s'émet quand même.
+
+    18 octobre 2026 : le bandeau indigo plein cède la place à une page blanche ; la
+    raison sociale reste écrite une fois par page.
     """
-    haut = _HAUTEUR - 14 * mm
-    gauche = 0.0
+    haut = _HAUTEUR - 16 * mm
+    gauche = MARGE
     if _LOGO.is_file():
+        hauteur_logo = 13 * mm
         page.drawImage(
             ImageReader(str(_LOGO)),
-            MARGE - 6 * mm,
-            haut - 15.5 * mm,
-            width=_LARGEUR_LOGO,
-            height=_LARGEUR_LOGO * 162 / 288,
+            MARGE,
+            haut - hauteur_logo,
+            width=hauteur_logo * 288 / 162,
+            height=hauteur_logo,
             preserveAspectRatio=True,
             mask=None,
         )
-        gauche = MARGE - 6 * mm + _LARGEUR_LOGO + 4 * mm
+        gauche = MARGE + hauteur_logo * 288 / 162 + 5 * mm
     page.setFillColor(INDIGO)
-    page.rect(gauche, haut - 14 * mm, _LARGEUR - gauche, 14 * mm, stroke=0, fill=1)
-    page.setFillColor(white)
-    page.setFont("Helvetica-Bold", 16)
-    page.drawString(max(gauche + 5 * mm, MARGE), haut - 6 * mm, "CGA BROAD RANGE CONSULTING")
-    page.setFont("Helvetica", 7 if gauche else 7.5)
+    page.setFont("Helvetica-Bold", 11)
+    page.drawString(gauche, haut - 5 * mm, "CGA BROAD RANGE CONSULTING")
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica", 7.5)
     page.drawString(
-        max(gauche + 5 * mm, MARGE),
-        haut - 11 * mm,
-        "ASSISTANCE COMPTABLE ET FISCALE  ·  ASSISTANCE JURIDIQUE  ·  FORMATIONS"
-        "  ·  PROCÉDURES ADMINISTRATIVES",
+        gauche,
+        haut - 9.5 * mm,
+        "Centre de gestion agréé  ·  Comptabilité, fiscalité, juridique, formations",
     )
+    page.drawRightString(_LARGEUR - MARGE, haut - 5 * mm, "www.cga-brcgroup.com")
+    page.drawRightString(_LARGEUR - MARGE, haut - 9.5 * mm, "contact@cga-brcgroup.com")
+    page.setStrokeColor(FILET)
+    page.setLineWidth(0.8)
+    page.line(MARGE, haut - 16 * mm, _LARGEUR - MARGE, haut - 16 * mm)
+    page.setStrokeColor(black)
+    page.setFillColor(black)
     return haut - 26 * mm
 
 
 def _titre(page: canvas.Canvas, composition: CompositionProforma, y: float) -> float:
-    page.setFillColor(HexColor("#EDE7F3"))
-    page.rect(MARGE, y - 2 * mm, _LARGEUR - 2 * MARGE, 8 * mm, stroke=0, fill=1)
-    page.setFillColor(black)
-    page.setFont("Helvetica-Bold", 11.5)
-    page.drawCentredString(_LARGEUR / 2, y + 0.6 * mm, composition.titre)
-    y -= 10 * mm
-    page.setFont("Helvetica-Bold", 8.5)
-    for ligne in _couper(
-        page, composition.libelle, "Helvetica-Bold", 8.5, _LARGEUR - 2 * MARGE
-    ):
-        page.drawCentredString(_LARGEUR / 2, y, ligne)
+    """Le type de document en grand, à gauche ; ce qu'il propose, dessous."""
+    page.setFillColor(INDIGO)
+    page.setFont("Helvetica-Bold", 17)
+    page.drawString(MARGE, y, composition.titre)
+    y -= 7 * mm
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica", 9)
+    for ligne in _couper(page, composition.libelle, "Helvetica", 9, _LARGEUR - 2 * MARGE):
+        page.drawString(MARGE, y, ligne)
         y -= 4.6 * mm
+    page.setFillColor(black)
     return y - 3 * mm
 
 
@@ -206,43 +230,58 @@ def _identification(
     client: str,
     y: float,
 ) -> float:
-    """Le numéro, la version et le client. **Absents des documents papier.**
+    """Le numéro, la version et le client, en deux colonnes. **Absents des documents papier.**
 
     ⚠️ Les proformas du cabinet n'en portent pas : elles sont établies à la main,
-    une par client, et le classeur fait office de numérotation. Un document émis
-    par un système doit se désigner lui-même, sans quoi deux propositions
-    successives au même client ne se distinguent que par leur date.
+    une par client. Un document émis par un système doit se désigner lui-même, sans
+    quoi deux propositions successives au même client ne se distinguent que par leur
+    date.
     """
-    page.setFont("Helvetica", 9)
+    milieu = _LARGEUR / 2 + 10 * mm
     page.setFillColor(GRIS)
-    page.drawString(MARGE, y, f"N° {numero}   ·   version {version}   ·   {emise_le:%d/%m/%Y}")
-    page.drawRightString(_LARGEUR - MARGE, y, f"Établie pour : {client}")
+    page.setFont("Helvetica-Bold", 7)
+    page.drawString(MARGE, y, "ÉTABLIE POUR")
+    page.drawString(milieu, y, "RÉFÉRENCE")
     page.setFillColor(black)
-    return y - 8 * mm
+    page.setFont("Helvetica-Bold", 10)
+    page.drawString(MARGE, y - 5 * mm, client[:60])
+    page.setFont("Helvetica", 9)
+    page.drawString(milieu, y - 5 * mm, f"N° {numero}   ·   version {version}")
+    page.setFillColor(GRIS)
+    page.drawString(milieu, y - 9.5 * mm, f"Émise le {emise_le:%d/%m/%Y}")
+    page.setFillColor(black)
+    return y - 17 * mm
 
 
 def _rubrique(page: canvas.Canvas, rubrique, y: float) -> float:
-    page.setFont("Helvetica-Bold", 10)
-    page.drawCentredString(_LARGEUR / 2, y, f"{rubrique.numero}.   {rubrique.intitule}")
+    """Une rubrique : son intitulé en petites capitales sur un filet, ses lignes dessous."""
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica-Bold", 7.5)
+    page.drawString(MARGE, y, f"{rubrique.numero}.  {rubrique.intitule.upper()}")
+    page.setStrokeColor(FILET)
+    page.setLineWidth(0.6)
+    page.line(MARGE, y - 2 * mm, _LARGEUR - MARGE, y - 2 * mm)
+    page.setStrokeColor(black)
+    page.setFillColor(black)
     y -= 6.5 * mm
     page.setFont("Helvetica", 9.5)
     for ligne in rubrique.lignes:
-        page.drawString(MARGE + 4 * mm, y, f"•  {ligne.libelle}")
+        page.drawString(MARGE + 2 * mm, y, ligne.libelle)
         page.drawRightString(_LARGEUR - MARGE, y, f"{montant_imprime(ligne.montant)} FCFA")
         y -= 5.2 * mm
     # ⚠️ Le sous-total se calcule, il n'est pas au référentiel : une seconde
     # vérité à côté des lignes finirait par en diverger.
     if len(rubrique.lignes) > 1:
-        # ⚠️ Le filet est AU-DESSUS du sous-total, avec de l'air. Il passait à
-        # 2,5 mm de la ligne de base, c'est-à-dire au travers des chiffres : le
-        # sous-total se lisait barré, donc annulé.
+        # ⚠️ Le filet est AU-DESSUS du sous-total, avec de l'air : passé au travers des
+        # chiffres, il faisait lire le sous-total barré, donc annulé.
+        page.setStrokeColor(FILET)
         page.setLineWidth(0.6)
         page.line(_LARGEUR - MARGE - 42 * mm, y + 2.6 * mm, _LARGEUR - MARGE, y + 2.6 * mm)
+        page.setStrokeColor(black)
         y -= 2.2 * mm
         page.setFont("Helvetica-Bold", 9.5)
-        page.drawRightString(
-            _LARGEUR - MARGE, y, f"{montant_imprime(rubrique.sous_total)} FCFA"
-        )
+        page.drawString(_LARGEUR - MARGE - 70 * mm, y, "Sous-total")
+        page.drawRightString(_LARGEUR - MARGE, y, f"{montant_imprime(rubrique.sous_total)} FCFA")
         y -= 5 * mm
     return y - 3 * mm
 
@@ -253,11 +292,17 @@ def _total(page: canvas.Canvas, total: Decimal, total_compose: Decimal, y: float
     # descend donc moins : sans cette marge, le cadre du total venait toucher sa
     # dernière ligne, et seulement dans ce cas-là.
     y -= 5 * mm
-    page.setLineWidth(1.2)
-    page.rect(MARGE, y - 3 * mm, _LARGEUR - 2 * MARGE, 10 * mm, stroke=1, fill=0)
-    page.setFont("Helvetica-Bold", 12)
-    page.drawString(MARGE + 4 * mm, y + 0.8 * mm, "TOTAL GENERAL")
-    page.drawRightString(_LARGEUR - MARGE - 4 * mm, y + 0.8 * mm, f"{montant_imprime(total)} FCFA")
+    # 18 octobre 2026 : un cartouche à fond clair, sans cadre noir ; le montant porte
+    # seul la couleur de la maison.
+    page.setFillColor(FOND)
+    page.roundRect(MARGE, y - 3.5 * mm, _LARGEUR - 2 * MARGE, 11 * mm, 2 * mm, stroke=0, fill=1)
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica-Bold", 8.5)
+    page.drawString(MARGE + 5 * mm, y + 0.6 * mm, "TOTAL GENERAL")
+    page.setFillColor(INDIGO)
+    page.setFont("Helvetica-Bold", 13)
+    page.drawRightString(_LARGEUR - MARGE - 5 * mm, y + 0.4 * mm, f"{montant_imprime(total)} FCFA")
+    page.setFillColor(black)
     y -= 12 * mm
 
     # ⚠️ LE MONTANT EN TOUTES LETTRES : la seule protection contre un chiffre
@@ -298,6 +343,19 @@ def _total(page: canvas.Canvas, total: Decimal, total_compose: Decimal, y: float
 _PLANCHER = 30 * mm
 
 
+def _intitule_de_section(page: canvas.Canvas, titre: str, y: float) -> None:
+    """Un intitulé en petites capitales grises, posé sur un filet : la séparation des
+    documents de la maison (18 octobre 2026)."""
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica-Bold", 7.5)
+    page.drawString(MARGE, y, titre)
+    page.setStrokeColor(FILET)
+    page.setLineWidth(0.6)
+    page.line(MARGE, y - 2 * mm, _LARGEUR - MARGE, y - 2 * mm)
+    page.setStrokeColor(black)
+    page.setFillColor(black)
+
+
 def _suite(page: canvas.Canvas, composition: CompositionProforma, y: float) -> None:
     """Ce que le client apporte, ce qu'il reçoit, en combien de temps.
 
@@ -324,9 +382,7 @@ def _suite(page: canvas.Canvas, composition: CompositionProforma, y: float) -> N
         ]
         hauteur = 9 * mm + sum(len(b) for b in blocs) * 4.8 * mm + len(blocs) * 1 * mm
         y = placer(y - 4 * mm, hauteur)
-        page.setFillColor(black)
-        page.setFont("Helvetica-Bold", 10)
-        page.drawCentredString(_LARGEUR / 2, y, titre)
+        _intitule_de_section(page, titre, y)
         y -= 7 * mm
         page.setFont("Helvetica", 9.5)
         for rang, lignes in enumerate(blocs, start=1):
@@ -345,8 +401,7 @@ def _suite(page: canvas.Canvas, composition: CompositionProforma, y: float) -> N
             page, composition.delai_d_execution, "Helvetica", 9.5, largeur, equilibrer=False
         )
         y = placer(y - 4 * mm, 9 * mm + len(lignes) * 4.8 * mm)
-        page.setFont("Helvetica-Bold", 10)
-        page.drawString(MARGE, y, "DELAI D'EXECUTION ET REGLEMENT")
+        _intitule_de_section(page, "DELAI D'EXECUTION ET REGLEMENT", y)
         y -= 6.5 * mm
         page.setFont("Helvetica", 9.5)
         for ligne in lignes:
@@ -355,15 +410,19 @@ def _suite(page: canvas.Canvas, composition: CompositionProforma, y: float) -> N
 
 
 def pied_de_document(page: canvas.Canvas) -> None:
+    """Un filet fin, puis les coordonnées en petit gris : le pied des documents."""
     bas = 22 * mm
-    page.setFillColor(INDIGO)
-    page.rect(0, 0, _LARGEUR, bas, stroke=0, fill=1)
-    page.setFillColor(white)
-    page.setFont("Helvetica", 7.5)
+    page.setStrokeColor(FILET)
+    page.setLineWidth(0.6)
+    page.line(MARGE, bas, _LARGEUR - MARGE, bas)
+    page.setStrokeColor(black)
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica", 7)
     y = bas - 5 * mm
     for ligne in _PIED:
         page.drawCentredString(_LARGEUR / 2, y, ligne)
-        y -= 4.2 * mm
+        y -= 3.8 * mm
+    page.setFillColor(black)
 
 
 def _couper(
@@ -391,6 +450,7 @@ def _couper(
     centré. On cherche donc la plus petite largeur qui tient toujours dans le
     même nombre de lignes, et on recoupe avec elle.
     """
+
     def decouper(maximum: float) -> list[str]:
         lignes: list[str] = []
         courante = ""

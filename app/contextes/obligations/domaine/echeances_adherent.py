@@ -165,6 +165,8 @@ class PreuveEnvoyee(BaseModel):
     motif: str | None = None
     verifiee_le: datetime | None = None
     verifiee_par: str | None = None
+    #: 18 octobre 2026 (point 7) : le montant porté par la quittance, relevé au verdict.
+    montant_quittance: Decimal | None = None
 
 
 class FondsRecusParLeCabinet(BaseModel):

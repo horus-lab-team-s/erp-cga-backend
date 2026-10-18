@@ -26,6 +26,12 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
+    "ETATS_FINAUX",
+    "LIBELLES_ETAT",
+    "CandidatureRefusee",
+    "DecisionSurCandidature",
+    "EtatCandidature",
+    "ReponseAuCandidat",
     "Candidature",
     "EtatOffre",
     "OffreDePoste",
@@ -67,6 +73,10 @@ class OffreDePoste(BaseModel):
     creee_par: str
     publiee_le: datetime | None = None
     close_le: datetime | None = None
+    #: 18 octobre 2026 (point 25) : l'image de l'offre, au magasin de fichiers (JPEG ou PNG,
+    #: type lu dans les octets). Facultative : une offre sans image s'affiche sans.
+    image_empreinte: str | None = None
+    image_type: str | None = None
 
     def modifier(self, **champs) -> OffreDePoste:
         if self.etat is EtatOffre.CLOSE:
@@ -93,6 +103,54 @@ class OffreDePoste(BaseModel):
         )
 
 
+class CandidatureRefusee(ValueError):
+    """Le geste contredit l'état de la candidature."""
+
+
+class EtatCandidature(StrEnum):
+    RECUE = "RECUE"
+    PRESELECTIONNEE = "PRESELECTIONNEE"
+    ENTRETIEN = "ENTRETIEN"
+    RETENUE = "RETENUE"
+    NON_RETENUE = "NON_RETENUE"
+
+
+LIBELLES_ETAT = {
+    EtatCandidature.RECUE: "reçue",
+    EtatCandidature.PRESELECTIONNEE: "présélectionnée",
+    EtatCandidature.ENTRETIEN: "convoquée en entretien",
+    EtatCandidature.RETENUE: "retenue",
+    EtatCandidature.NON_RETENUE: "non retenue",
+}
+
+ETATS_FINAUX = frozenset({EtatCandidature.RETENUE, EtatCandidature.NON_RETENUE})
+
+
+class DecisionSurCandidature(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    etat: EtatCandidature
+    par: str
+    le: datetime
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class ReponseAuCandidat(BaseModel):
+    """Ce qui a été écrit au candidat, tel qu'il l'a reçu."""
+
+    model_config = ConfigDict(frozen=True)
+
+    objet: str = Field(min_length=3, max_length=200)
+    corps: str = Field(min_length=20, max_length=5000)
+    #: `MODELE` (le texte type du cabinet) ou `AGENT` (une proposition relue).
+    source: str
+    par: str
+    le: datetime
+    #: Le courriel est-il parti ? Sans adresse, la réponse est gardée pour être dite
+    #: au téléphone, et l'écran le montre.
+    envoyee: bool
+
+
 class Candidature(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -106,3 +164,32 @@ class Candidature(BaseModel):
     cv_empreinte: str
     cv_nom: str = Field(max_length=200)
     recue_le: datetime
+    #: 18 octobre 2026 (point 25) : où en est la candidature, comment on y est arrivé, et
+    #: ce qui a été répondu au candidat.
+    etat: EtatCandidature = EtatCandidature.RECUE
+    decisions: tuple[DecisionSurCandidature, ...] = ()
+    reponses: tuple[ReponseAuCandidat, ...] = ()
+
+    @property
+    def appellation(self) -> str:
+        """Comment saluer le candidat : le premier mot du nom (« Bonjour Aïcha »), jamais
+        une chaîne vide, puisque le nom en a au moins deux caractères."""
+        mots = self.nom.split()
+        return mots[0] if mots else self.nom
+
+    def decider(
+        self, etat: EtatCandidature, *, par: str, le: datetime, note: str | None = None
+    ) -> Candidature:
+        """⚠️ Une décision finale (retenue, non retenue) ne se rouvre pas sans le dire : on
+        passe par une nouvelle décision motivée, jamais par l'effacement de la précédente."""
+        if etat is self.etat:
+            raise CandidatureRefusee(f"la candidature est déjà {LIBELLES_ETAT[etat]}.")
+        if self.etat in ETATS_FINAUX and not (note and len(note.strip()) >= 10):
+            raise CandidatureRefusee(
+                "la candidature avait reçu une décision finale : dire pourquoi elle est revue."
+            )
+        decision = DecisionSurCandidature(etat=etat, par=par, le=le, note=note)
+        return self.model_copy(update={"etat": etat, "decisions": (*self.decisions, decision)})
+
+    def repondre(self, reponse: ReponseAuCandidat) -> Candidature:
+        return self.model_copy(update={"reponses": (*self.reponses, reponse)})

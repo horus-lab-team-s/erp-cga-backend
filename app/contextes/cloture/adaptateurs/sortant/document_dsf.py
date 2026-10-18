@@ -41,11 +41,11 @@ from app.partage.horloge import a_douala
 
 __all__ = ["rendre_la_dsf"]
 
-_INDIGO = HexColor("#3B2A6B")
+_INDIGO = HexColor("#2E1B4D")
 _MAGENTA = HexColor("#8C2D86")
-_GRIS = HexColor("#555555")
-_FOND = HexColor("#EEEAF5")
-_TRAIT = HexColor("#BBBBBB")
+_GRIS = HexColor("#5B556B")
+_FOND = HexColor("#F6F4FB")
+_TRAIT = HexColor("#E2DDEA")
 _ROUGE = HexColor("#A61B1B")
 _VERT = HexColor("#1B6E3A")
 
@@ -119,11 +119,16 @@ def _postes(liasse: dict, sens: str, largeur: float, titre_total: str) -> LongTa
     return _table(lignes, fixes, totaux=[len(lignes) - 1], montants=[3])
 
 
-def rendre_la_dsf(dsf: DeclarationDSF, *, noms: dict[str, str] | None = None) -> bytes:
+def rendre_la_dsf(
+    dsf: DeclarationDSF, *, noms: dict[str, str] | None = None, pour_le_client: bool = False
+) -> bytes:
     """Le PDF de la version, en octets ; déterministe pour une même version et les mêmes noms.
 
     `noms` : identifiant de compte → nom, pour les visas. Le nom se lit, l'identifiant
     reste entre parenthèses : c'est lui que le journal d'audit porte.
+
+    `pour_le_client` (18 octobre 2026, point 21) : la copie remise à l'adhérent signe
+    chaque visa « le cabinet », sans nom ni identifiant de collaborateur.
     """
     noms = noms or {}
 
@@ -134,6 +139,8 @@ def rendre_la_dsf(dsf: DeclarationDSF, *, noms: dict[str, str] | None = None) ->
     def qui(compte: str | None) -> str:
         if not compte:
             return ""
+        if pour_le_client:
+            return "le cabinet"
         return f"{noms[compte]} ({compte})" if compte in noms else compte
 
     liasse = json.loads(dsf.contenu)

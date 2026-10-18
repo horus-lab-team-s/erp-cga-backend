@@ -41,6 +41,10 @@ from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
 from app.contextes.souscription.domaine.rappels import RappelAPasser
 from app.contextes.souscription.domaine.relance import SuiviDeRelance
+from app.contextes.souscription.domaine.situation_de_reglement import (
+    GraceDeReglement,
+    RegleDeDepassement,
+)
 from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
@@ -48,6 +52,8 @@ from app.contextes.souscription.domaine.souscriptions import (
 from app.partage.depot_memoire import EntrepotMemoire
 
 __all__ = [
+    "DepotGracesDeReglementMemoire",
+    "DepotRegleDeDepassementMemoire",
     "DepotDevisMemoire",
     "DepotProformasMemoire",
     "DepotQualificationsMemoire",
@@ -176,6 +182,13 @@ class DepotPaiementsMemoire:
                 lambda p: p.statut == StatutPaiement.EN_ATTENTE
                 and (depuis is None or p.initie_le >= depuis)
             ),
+            key=lambda p: p.initie_le,
+        )
+
+    def encaisses(self) -> list[Paiement]:
+        """Les paiements validés, toutes natures : le journal de caisse (18 octobre 2026)."""
+        return sorted(
+            self._entrepot.filtrer(lambda p: p.statut == StatutPaiement.VALIDE),
             key=lambda p: p.initie_le,
         )
 
@@ -462,3 +475,36 @@ class DepotAppelsDeFondsMemoire:
 
     def lister(self) -> list[AppelDeFonds]:
         return sorted(self._appels.values(), key=lambda a: a.arrete_le)
+
+
+class DepotRegleDeDepassementMemoire:
+    """La règle de dépassement, en mémoire (18 octobre 2026)."""
+
+    def __init__(self) -> None:
+        self._regle: RegleDeDepassement | None = None
+
+    def lire(self) -> RegleDeDepassement | None:
+        return self._regle
+
+    def enregistrer(self, regle: RegleDeDepassement) -> None:
+        self._regle = regle
+
+
+class DepotGracesDeReglementMemoire:
+    """Les grâces de règlement, en mémoire (18 octobre 2026)."""
+
+    def __init__(self) -> None:
+        self._graces: dict[str, GraceDeReglement] = {}
+
+    def pour(self, niu: str) -> list[GraceDeReglement]:
+        return sorted(
+            (g for g in self._graces.values() if g.niu == niu),
+            key=lambda g: g.accordee_le,
+            reverse=True,
+        )
+
+    def toutes(self) -> list[GraceDeReglement]:
+        return list(self._graces.values())
+
+    def enregistrer(self, grace: GraceDeReglement) -> None:
+        self._graces[grace.identifiant] = grace

@@ -13,7 +13,8 @@ système. Le portail garde le bouton « Soumettre » inactif tant qu'il en manqu
 
 OÙ EN EST UNE PIÈCE
     PRODUITE   la plateforme la fabrique : balances auxiliaires, modèles FOURNISSEURS et
-               TIERS de la DGI ; rien à faire, sinon la télécharger ;
+               TIERS de la DGI, tableau des amortissements (depuis le registre des
+               immobilisations, 17 octobre 2026) ; rien à faire, sinon la télécharger ;
     JOINTE     le cabinet l'a versée (un PDF ou un scan) ;
     NEANT      sans objet pour ce dossier (pas de prix de transfert, pas d'accises…),
                avec le motif, qui va au journal ;
@@ -66,7 +67,9 @@ PIECES_DSF: tuple[PieceDsf, ...] = (
     PieceDsf(4, "Déclaration des dépenses fiscales", "Fiche R2", None),
     PieceDsf(5, "Déclaration des prix de transfert, selon le modèle annexé", "Fiche R2", None),
     PieceDsf(6, "Attestation de dématérialisation des titres", "Fiche R3", None),
-    PieceDsf(7, "Tableau des amortissements", "Note 3C", None),
+    PieceDsf(
+        7, "Tableau des amortissements, en Excel", "Note 3C", None, "tableau-amortissements"
+    ),
     PieceDsf(
         8, "Déclaration annuelle des sommes versées aux tiers", "Note 24", "Note 6", "dgi-tiers"
     ),

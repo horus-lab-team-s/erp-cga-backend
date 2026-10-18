@@ -933,3 +933,132 @@ def _moteur_de_conformite():
 
     return moteur_par_defaut()
 
+
+
+# ── Les soldes à regarder, et la relecture par l'agent (18 octobre 2026, point 15) ──
+
+
+class SoldeARegarderLu(BaseModel):
+    compte: str
+    solde: Decimal
+    constat: str
+    suggestion: str
+
+
+class SoldesARegarder(BaseModel):
+    soldes: list[SoldeARegarderLu]
+
+
+def _soldes_et_releve(entreprise: str, exercice: str):
+    from app.contextes.comptabilite.domaine.soldes_a_regarder import soldes_a_regarder
+
+    soldes = balance(depot(entreprise).lister(exercice))
+    periode = exercice_du_portefeuille(entreprise, exercice)
+    return soldes, periode, soldes_a_regarder(soldes, cloture=bool(periode and periode.clos))
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/balance/soldes-a-regarder",
+    summary="Les soldes dont le sens contredit la nature du compte (relevé sans agent)",
+)
+def lire_les_soldes_a_regarder(
+    acces: AccesRequis, entreprise: str, exercice: str = Query(...)
+) -> SoldesARegarder:
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    _, _, releve = _soldes_et_releve(entreprise, exercice)
+    return SoldesARegarder(
+        soldes=[
+            SoldeARegarderLu(
+                compte=r.compte, solde=r.solde, constat=r.constat, suggestion=r.suggestion
+            )
+            for r in releve
+        ]
+    )
+
+
+class RemarqueSurLaBalanceLue(BaseModel):
+    compte: str | None
+    constat: str
+    suggestion: str
+
+
+class RelectureDeLaBalanceLue(BaseModel):
+    #: Faux sans clé, ou quand l'agent n'a pas répondu : rien n'attend sa réponse.
+    disponible: bool
+    remarques: list[RemarqueSurLaBalanceLue]
+    message: str
+
+
+def service_de_relecture_de_balance():
+    """L'agent comptable, ou `None` sans clé."""
+    reglages = configuration()
+    if not reglages.anthropic_cle_api:
+        return None
+    from app.contextes.comptabilite.adaptateurs.sortant.relecture_balance_claude import (
+        RelectureDeLaBalance,
+    )
+
+    return RelectureDeLaBalance(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+
+
+def _balance_pour_l_agent(entreprise: str, exercice: str) -> str:
+    """Ce que l'agent lit : sans NIU, sans dénomination, sans libellé ni tiers."""
+    soldes, periode, releve = _soldes_et_releve(entreprise, exercice)
+    dossier = dossier_du_portefeuille(entreprise)
+    intitules = {c.numero: c.intitule for c in depot_du_plan.charger()}
+    lignes = []
+    if dossier is not None:
+        lignes.append(f"Forme juridique : {dossier.forme_juridique}")
+    if periode is not None:
+        lignes.append(
+            f"Exercice : du {periode.ouverture:%d/%m/%Y} au {periode.cloture:%d/%m/%Y}"
+            f" ({'clos' if periode.clos else 'en cours'})"
+        )
+        if dossier is not None:
+            lignes.append(f"Régime à la clôture : {dossier.regime_au(periode.cloture)}")
+    lignes.append("Balance (compte ; intitulé ; total débit ; total crédit ; solde) :")
+    lignes += [
+        f"{s.compte} ; {intitules.get(s.compte, '')} ; {s.total_debit} ; {s.total_credit} ; "
+        f"{s.solde}"
+        for s in soldes
+    ]
+    if releve:
+        lignes.append("Soldes déjà relevés par les règles du plan :")
+        lignes += [f"- {r.compte} : {r.constat}" for r in releve]
+    return "\n".join(lignes)
+
+
+@routeur.post(
+    "/dossiers/{entreprise}/balance/relecture-de-l-agent",
+    summary="Demander à l'agent comptable une relecture de la balance (il propose, n'écrit rien)",
+)
+def demander_une_relecture_de_la_balance(
+    acces: AccesRequis, entreprise: str, exercice: str = Query(...)
+) -> RelectureDeLaBalanceLue:
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    service = service_de_relecture_de_balance()
+    if service is None:
+        return RelectureDeLaBalanceLue(
+            disponible=False,
+            remarques=[],
+            message="L'agent n'est pas branché sur ce poste : le relevé ci-dessus reste valable.",
+        )
+    remarques = service.relire(_balance_pour_l_agent(entreprise, exercice))
+    if remarques is None:
+        return RelectureDeLaBalanceLue(
+            disponible=False,
+            remarques=[],
+            message="L'agent n'a pas répondu. Réessayez plus tard ; rien n'attend sa réponse.",
+        )
+    return RelectureDeLaBalanceLue(
+        disponible=True,
+        remarques=[
+            RemarqueSurLaBalanceLue(compte=r.compte, constat=r.constat, suggestion=r.suggestion)
+            for r in remarques
+        ],
+        message=(
+            "Des propositions à juger : aucune écriture n'est passée."
+            if remarques
+            else "L'agent n'a rien relevé. Cela ne vaut pas révision."
+        ),
+    )

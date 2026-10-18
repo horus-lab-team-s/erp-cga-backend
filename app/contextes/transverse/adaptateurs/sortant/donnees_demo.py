@@ -128,6 +128,9 @@ COMPTES_DEMO: list[Compte] = [
     # La responsable de caisse (14 octobre 2026) : elle constate les règlements
     # reçus au guichet. Elle ne voit ni les comptes des adhérents ni les dossiers.
     _compte("C-009", "Nadège", "ESSAMA", "n.essama@cga-brcg.cm"),
+    # Le super administrateur (18 octobre 2026) : il règle la matrice des rôles et
+    # accorde les faveurs. Un compte à part : il ne tient aucun dossier.
+    _compte("C-010", "Hervé", "KAMGA", "h.kamga@cga-brcg.cm"),
     # Parti en avril. Le compte est suspendu, l'habilitation fermée, et l'un
     # comme l'autre demeurent : les écritures qu'il a validées portent son
     # identifiant, et le journal d'audit y renvoie.
@@ -205,6 +208,8 @@ HABILITATIONS_DEMO: list[Habilitation] = [
          precision="cumule les formalités depuis le départ de A. TCHINDA"),
     _hab("H-013", "C-009", Role.CAISSE, None, date(2026, 10, 1),
          accordee_par="C-001", precision="tient la caisse du cabinet"),
+    _hab("H-014", "C-010", Role.SUPER_ADMIN, None, date(2026, 10, 18),
+         accordee_par="C-001", precision="désigné par le gérant pour régler la matrice"),
     # Le comptable parti : habilitation fermée, ligne conservée. Résoudre les
     # droits de C-008 au 1er mars et au 1er juin 2026 donne deux réponses.
     _hab(

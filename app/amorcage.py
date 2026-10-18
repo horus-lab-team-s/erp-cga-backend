@@ -72,7 +72,7 @@ from app.contextes.transverse.api import (
     unite_de_travail,
 )
 from app.demonstration_a_jour import consigner
-from app.partage.horloge import aujourd_hui
+from app.partage.horloge import aujourd_hui, maintenant
 
 __all__ = ["AmorcageRefuse", "amorcer"]
 
@@ -198,6 +198,24 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             DepotContratsDHonorairesSql(session, locataire).enregistrer(contrat_h)
         for reglement_h in reglements_honoraires:
             DepotReglementsDHonorairesSql(session, locataire).enregistrer(reglement_h)
+        # 18 octobre 2026 : la règle de dépassement du cabinet de démonstration. Trente
+        # jours : Bâtiment Plus, en retard d'un mois, se traite encore ; sans règle, le
+        # « d'office » l'aurait bloqué dès l'amorçage.
+        from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+            DepotRegleDeDepassementSql,
+        )
+        from app.contextes.souscription.domaine.situation_de_reglement import (
+            RegleDeDepassement,
+        )
+
+        DepotRegleDeDepassementSql(session, locataire).enregistrer(
+            RegleDeDepassement(
+                delai_jours=30,
+                motif="règle de la démonstration : un mois de retard toléré",
+                fixee_par="C-010",
+                fixee_le=maintenant(),
+            )
+        )
 
         return {
             "creations": len(PIPELINE_DEMO),

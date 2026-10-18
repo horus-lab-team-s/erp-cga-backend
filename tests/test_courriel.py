@@ -120,6 +120,25 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "denomination": "SARL BATIMENT PLUS",
         "lien": "https://app.cga-brcg.cm/fr/mon-espace/echeances",
     },
+    "mission.ouverte": {
+        # Recopié de `routes_missions._prevenir_le_client`.
+        "client": "Briqueterie du Wouri",
+        "objet_de_la_demande": "Analyse du bail commercial",
+        "reference": "DC-2026-0042",
+    },
+    "mission.livree": {
+        "client": "Briqueterie du Wouri",
+        "objet_de_la_demande": "Analyse du bail commercial",
+        "reference": "DC-2026-0042",
+    },
+    "recrutement.reponse": {
+        # Recopié de `routes_recrutement.repondre` : le texte relu, en paragraphes.
+        "objet": "Entretien pour le poste de Comptable confirmé",
+        "poste": "Comptable confirmé",
+        "p1": "Bonjour Claire,",
+        "p2": "Nous avons le plaisir de vous inviter à un entretien.",
+        **{f"p{rang}": "" for rang in range(3, 11)},
+    },
     "adherent.honoraires_regles": {
         # Recopié de `abonne_avis_honoraires.prevenir_du_reglement`.
         "prenom": "Jean-Pierre",

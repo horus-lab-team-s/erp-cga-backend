@@ -184,7 +184,13 @@ def _texte(
     gabarit_: Gabarit, valeurs: dict[str, str], tableau: list[tuple[str, str]] | None = None
 ) -> str:
     lignes = [_sans_balises(_remplir(gabarit_.titre, valeurs)), ""]
-    lignes.extend(_sans_balises(_remplir(p, valeurs)) + "\n" for p in gabarit_.paragraphes)
+    # 18 octobre 2026 : un paragraphe qui se remplit à vide ne s'écrit pas (la réponse à un
+    # candidat en a jusqu'à dix, selon la longueur du texte relu).
+    lignes.extend(
+        _sans_balises(_remplir(p, valeurs)) + "\n"
+        for p in gabarit_.paragraphes
+        if _remplir(p, valeurs).strip()
+    )
     if tableau:
         lignes.extend(f"  {designation} : {valeur}" for designation, valeur in tableau)
         lignes.append("")
@@ -245,6 +251,7 @@ def _html(
         f'<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:{_INK_900};">'
         f"{_remplir(p, valeurs)}</p>"
         for p in gabarit_.paragraphes
+        if _remplir(p, valeurs).strip()
     )
     if tableau:
         corps += _tableau_html(tableau)
@@ -947,6 +954,41 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
                 "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
             ),
+        ),
+        # 18 octobre 2026 (point 25) : la réponse à un candidat, telle que le cabinet l'a
+        # relue. Le texte arrive découpé en paragraphes `p1` à `p10` ; les vides ne
+        # s'écrivent pas. Échappé comme toute valeur : aucun balisage ne passe.
+        # 18 octobre 2026 (point 22) : le client d'une prestation ponctuelle apprend qu'un
+        # juriste l'a prise en charge, puis que le livrable est prêt. Sans nom de juriste :
+        # c'est le cabinet qui répond (point 21).
+        Gabarit(
+            code="mission.ouverte",
+            objet="Votre demande {reference} est prise en charge",
+            titre="Votre demande est entre de bonnes mains",
+            paragraphes=(
+                "Bonjour,",
+                "Le cabinet a bien reçu votre règlement et a ouvert le travail sur votre "
+                "demande : <strong>{objet_de_la_demande}</strong>.",
+                "Un juriste du cabinet l'instruit ; un second relit avant que rien ne vous "
+                "soit remis. Vous serez prévenu dès que le livrable sera prêt.",
+            ),
+        ),
+        Gabarit(
+            code="mission.livree",
+            objet="Votre demande {reference} est traitée",
+            titre="Votre livrable est prêt",
+            paragraphes=(
+                "Bonjour,",
+                "Le travail sur votre demande <strong>{objet_de_la_demande}</strong> est "
+                "terminé et validé par le cabinet.",
+                "Votre interlocuteur vous le remet et reste disponible pour en parler.",
+            ),
+        ),
+        Gabarit(
+            code="recrutement.reponse",
+            objet="{objet}",
+            titre="{poste}",
+            paragraphes=tuple(f"{{p{rang}}}" for rang in range(1, 11)),
         ),
         Gabarit(
             code="adherent.honoraires_regles",

@@ -38,24 +38,69 @@ la suit, avant qu'elle existe : sa portée est son dossier de formalité.
 Ces quatre-là doivent obligatoirement porter une portée explicite : un adhérent
 dont la portée serait « tous les dossiers » lirait la comptabilité de ses
 concurrents. Voir `habilitations.py`, où la contrainte est vérifiée.
+
+LA MATRICE SE RÈGLE PAR LE CABINET (18 octobre 2026)
+
+Le gérant a demandé « un RBAC dynamique, qui ressorte la matrice des rôles et cache
+les vues dont un rôle n'a pas le droit ». `PERMISSIONS_PAR_ROLE` reste la matrice
+**par défaut**, livrée ; le cabinet la règle par-dessus, rôle par rôle, et crée ses
+propres rôles (« ressources humaines »). Ce qui est réglé vit en base, par locataire ;
+`matrice_en_vigueur()` rend la matrice du cabinet servi, et `permissions_de` la lit.
+
+Celui qui règle est un rôle à part, le **super administrateur**, sur décision du
+gérant. Il ne tient aucun acte métier : la séparation des tâches de l'en-tête tient
+toujours, elle passe seulement d'une constante à une décision tracée. Trois bornes ne
+se règlent pas, parce qu'elles protègent le cabinet de lui-même :
+
+* `GERER_ROLES` et `ACCORDER_FAVEURS` n'appartiennent qu'au super administrateur, et
+  il ne peut pas les perdre : une matrice qui ne laisse plus personne la régler ne se
+  répare qu'en base ;
+* un rôle externe (adhérent, client, inspecteur) ne reçoit que des droits externes :
+  un adhérent qui validerait des écritures validerait les siennes ;
+* les droits du client (régler ses honoraires, confier ses fonds…) ne vont qu'aux
+  rôles externes : chez un collaborateur, sur tout le portefeuille, ils feraient payer
+  le cabinet à la place de tous ses adhérents.
+
+Un rôle créé par le cabinet est toujours **interne** : un rôle externe exige une
+portée, et cette mécanique ne s'invente pas depuis un écran.
 ─────────────────────────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable, Iterable, Mapping
+from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 __all__ = [
     "EXIGE_MFA",
     "EXIGE_MOTIF",
+    "FAMILLES_DE_PERMISSIONS",
+    "LIBELLES_PERMISSION",
     "LIBELLES_ROLE",
+    "PERMISSIONS_DU_CLIENT",
+    "PERMISSIONS_EXTERNES",
+    "PERMISSIONS_DE_TRAITEMENT",
     "PERMISSIONS_PAR_ROLE",
+    "PERMISSIONS_RESERVEES",
     "ROLES_A_PORTEE_OBLIGATOIRE",
+    "ROLES_EXTERNES",
     "ROLES_INTERNES",
+    "CodeRole",
+    "FicheDeRole",
     "Permission",
     "Role",
+    "est_interne",
+    "installer_la_source_des_roles",
     "libelle_role",
+    "matrice_en_vigueur",
+    "matrice_par_defaut",
     "permissions_de",
+    "role_de",
 ]
 
 
@@ -82,6 +127,10 @@ class Role(StrEnum):
     CLIENT_CREATION = "CLIENT_CREATION"
     #: Externe — lecture et avis seulement, jamais d'écriture.
     INSPECTEUR = "INSPECTEUR"
+    #: 18 octobre 2026, décision du gérant : celui qui règle la matrice des rôles et
+    #: accorde les faveurs (mandat « le cabinet paie pour moi », grâce de règlement).
+    #: Aucun acte métier. Voir l'en-tête.
+    SUPER_ADMIN = "SUPER_ADMIN"
 
 
 #: Le nom de chaque rôle en clair, pour ce qui est lu par un humain.
@@ -104,6 +153,7 @@ LIBELLES_ROLE: dict[Role, str] = {
     Role.ADHERENT: "adhérent",
     Role.CLIENT_CREATION: "client en création",
     Role.INSPECTEUR: "inspecteur",
+    Role.SUPER_ADMIN: "super administrateur",
 }
 
 
@@ -113,11 +163,14 @@ def libelle_role(role: Role | str) -> str:
     Ne lève pas : un libellé manquant ne doit pas empêcher un courriel de partir
     ni un écran de s'afficher. Le pire est alors une valeur technique visible,
     qui se corrige ; une exception, elle, coûterait l'invitation.
+
+    18 octobre 2026 : un rôle créé par le cabinet se lit à la matrice en vigueur.
     """
     try:
         return LIBELLES_ROLE[Role(role)]
     except ValueError:
-        return str(role)
+        fiche = matrice_en_vigueur().get(str(role))
+        return fiche.libelle if fiche else str(role)
 
 
 class Permission(StrEnum):
@@ -322,6 +375,140 @@ class Permission(StrEnum):
     AFFECTER_DOSSIER = "AFFECTER_DOSSIER"
     EDITER_VITRINE = "EDITER_VITRINE"
 
+    # ── La matrice et les faveurs (18 octobre 2026) ──────────────────────────
+    #: Régler la matrice : cocher les droits d'un rôle, créer un rôle du cabinet.
+    GERER_ROLES = "GERER_ROLES"
+    #: Accorder une faveur à un adhérent nommé : le mandat « le cabinet paie pour
+    #: moi », une grâce de règlement. Un écart à la règle commune, donc une décision.
+    ACCORDER_FAVEURS = "ACCORDER_FAVEURS"
+
+    # ── Ce que la caisse voit (18 octobre 2026) ──────────────────────────────
+    #: « L'administrateur peut vouloir retirer la vue sur certains versements, de façon
+    #: explicite. » Trois familles, une case chacune dans la matrice : les versements
+    #: commerciaux (inscription, création, prestations, abonnements en ligne), les
+    #: honoraires, les fonds de tiers (TVA, CNPS, IRPP), qui ne sont pas au cabinet.
+    VOIR_VERSEMENTS_COMMERCE = "VOIR_VERSEMENTS_COMMERCE"
+    VOIR_VERSEMENTS_HONORAIRES = "VOIR_VERSEMENTS_HONORAIRES"
+    VOIR_VERSEMENTS_FONDS_DE_TIERS = "VOIR_VERSEMENTS_FONDS_DE_TIERS"
+
+    #: 18 octobre 2026 (point 25) : lire les candidatures et leurs CV, décider, répondre.
+    #: Distincte de `EDITER_VITRINE` : un CV est une donnée personnelle, et qui édite le
+    #: site n'a pas à lire les dossiers des candidats. Un rôle « ressources humaines » se
+    #: crée dans la matrice et reçoit ce droit.
+    GERER_RECRUTEMENT = "GERER_RECRUTEMENT"
+
+
+#: Chaque droit en clair, rangé par famille, pour la matrice que lit le gérant
+#: (18 octobre 2026). ⚠️ Un droit ajouté sans libellé fait échouer `test_matrice_des_roles` :
+#: une case sans nom dans la grille se coche au hasard.
+FAMILLES_DE_PERMISSIONS: tuple[tuple[str, tuple[tuple[Permission, str], ...]], ...] = (
+    (
+        "Lecture et pilotage",
+        (
+            (Permission.LIRE_DOSSIER, "Lire les dossiers"),
+            (Permission.LIRE_PIECE, "Lire les pièces"),
+            (Permission.LIRE_COMPTABILITE, "Lire la comptabilité"),
+            (Permission.LIRE_AUDIT, "Lire le journal d'audit"),
+            (Permission.LIRE_PILOTAGE, "Lire le pilotage"),
+            (Permission.DECIDER_SUR_DOSSIER, "Décider une mesure sur un dossier à risque"),
+        ),
+    ),
+    (
+        "Pièces et relances",
+        (
+            (Permission.DEPOSER_PIECE, "Déposer une pièce"),
+            (Permission.IDENTIFIER_PIECE, "Identifier une pièce"),
+            (Permission.ARBITRER_DOUBLON, "Arbitrer un doublon"),
+            (Permission.RELANCER_ADHERENT, "Relancer un adhérent"),
+            (Permission.RELANCER_PIECES, "Relancer les pièces manquantes"),
+            (Permission.VERIFIER_UN_REGLEMENT, "Vérifier une quittance"),
+        ),
+    ),
+    (
+        "Gestes du client",
+        (
+            (Permission.REPONDRE_AU_CABINET, "Répondre au cabinet"),
+            (Permission.SIGNALER_UN_CHANGEMENT, "Signaler un changement"),
+            (Permission.REGLER_SES_RAPPELS, "Régler ses rappels"),
+            (Permission.TENIR_SA_PAIE, "Tenir sa paie"),
+            (Permission.SUIVRE_MA_CREATION, "Suivre sa création"),
+            (Permission.REGLER_SES_HONORAIRES, "Régler ses honoraires"),
+            (Permission.CONFIER_SES_FONDS, "Confier ses fonds (TVA, CNPS)"),
+        ),
+    ),
+    (
+        "Conformité",
+        (
+            (Permission.CONTROLER_CONFORMITE, "Contrôler la conformité"),
+            (Permission.ECARTER_CONSTAT, "Écarter un constat"),
+            (Permission.EMETTRE_AVIS, "Émettre un avis"),
+        ),
+    ),
+    (
+        "Comptabilité",
+        (
+            (Permission.SAISIR_ECRITURE, "Saisir une écriture"),
+            (Permission.VALIDER_ECRITURE, "Valider une écriture"),
+            (Permission.CONTRE_PASSER, "Contre-passer une écriture"),
+            (Permission.REVISER_DOSSIER, "Réviser un dossier"),
+        ),
+    ),
+    (
+        "Déclarations, clôture et missions",
+        (
+            (Permission.DEPOSER_DECLARATION, "Déposer une déclaration"),
+            (Permission.CLOTURER_EXERCICE, "Clôturer un exercice"),
+            (Permission.PREPARER_DSF, "Préparer la DSF"),
+            (Permission.RENSEIGNER_FICHE_DSF, "Renseigner la fiche de la DSF"),
+            (Permission.VALIDER_FICHE_DSF, "Valider la fiche de la DSF"),
+            (Permission.TRAITER_MISSION, "Traiter une mission ponctuelle"),
+            (Permission.VALIDER_MISSION, "Valider une mission ponctuelle"),
+            (Permission.INSCRIRE_STATUT, "Inscrire un statut (régime, NIU, RCCM)"),
+        ),
+    ),
+    (
+        "Référentiel",
+        (
+            (Permission.MODIFIER_PARAMETRE, "Modifier un paramètre"),
+            (Permission.MODIFIER_REGLE, "Modifier une règle"),
+            (Permission.ARRETER_POLITIQUE, "Arrêter une politique du cabinet"),
+        ),
+    ),
+    (
+        "Commerce, formalités et caisse",
+        (
+            (Permission.LIRE_PROSPECT, "Lire les demandes"),
+            (Permission.QUALIFIER_PROSPECT, "Qualifier une demande"),
+            (Permission.FIXER_LES_TARIFS, "Fixer les tarifs et honoraires"),
+            (Permission.SUIVRE_FORMALITE, "Suivre une création d'entreprise"),
+            (Permission.ENCAISSER, "Encaisser"),
+            (Permission.AFFECTER_DOSSIER, "Affecter un dossier"),
+            (Permission.EDITER_VITRINE, "Éditer le site et les offres de poste"),
+            (Permission.GERER_RECRUTEMENT, "Traiter les candidatures (CV, réponses)"),
+        ),
+    ),
+    (
+        "Caisse : versements visibles",
+        (
+            (Permission.VOIR_VERSEMENTS_COMMERCE, "Voir inscriptions, créations, prestations"),
+            (Permission.VOIR_VERSEMENTS_HONORAIRES, "Voir les honoraires"),
+            (Permission.VOIR_VERSEMENTS_FONDS_DE_TIERS, "Voir les fonds de tiers (TVA, CNPS…)"),
+        ),
+    ),
+    (
+        "Administration",
+        (
+            (Permission.GERER_COMPTES, "Gérer les comptes"),
+            (Permission.GERER_ROLES, "Régler la matrice des rôles"),
+            (Permission.ACCORDER_FAVEURS, "Accorder une faveur à un adhérent"),
+        ),
+    ),
+)
+
+LIBELLES_PERMISSION: dict[Permission, str] = {
+    permission: libelle for _, droits in FAMILLES_DE_PERMISSIONS for permission, libelle in droits
+}
+
 
 #: Les actions du tableau « actions sensibles » de 05-securite-multitenant.md qui
 #: réclament une authentification forte. Le domaine se contente de le déclarer :
@@ -331,7 +518,12 @@ class Permission(StrEnum):
 #: ⚠️ Le second facteur n'est pas encore implémenté. La déclaration existe pour
 #: que le jour où il l'est, il n'y ait rien à retrouver — et pour que
 #: `autoriser()` puisse déjà refuser une session non renforcée.
-EXIGE_MFA: frozenset[Permission] = frozenset({Permission.DEPOSER_DECLARATION})
+#:
+#: 18 octobre 2026 : régler la matrice ou accorder une faveur change ce que d'autres
+#: peuvent faire, ou ce que le cabinet doit à un adhérent. Même exigence.
+EXIGE_MFA: frozenset[Permission] = frozenset(
+    {Permission.DEPOSER_DECLARATION, Permission.GERER_ROLES, Permission.ACCORDER_FAVEURS}
+)
 
 
 #: Les actions qui ne s'exécutent pas sans motif écrit.
@@ -353,12 +545,24 @@ EXIGE_MOTIF: frozenset[Permission] = frozenset(
         # Une mesure de direction se relit en comité et peut finir en fin d'adhésion :
         # « pourquoi » doit être écrit au moment où elle est décidée, puis close.
         Permission.DECIDER_SUR_DOSSIER,
+        # 18 octobre 2026 : un droit donné ou retiré, une faveur accordée à un adhérent
+        # nommé. Dans trois ans, « pourquoi lui » doit avoir une réponse écrite.
+        Permission.GERER_ROLES,
+        Permission.ACCORDER_FAVEURS,
     }
 )
 
 
 _LECTURE_DOSSIER: frozenset[Permission] = frozenset(
     {Permission.LIRE_DOSSIER, Permission.LIRE_PIECE}
+)
+
+_VOIR_LES_VERSEMENTS: frozenset[Permission] = frozenset(
+    {
+        Permission.VOIR_VERSEMENTS_COMMERCE,
+        Permission.VOIR_VERSEMENTS_HONORAIRES,
+        Permission.VOIR_VERSEMENTS_FONDS_DE_TIERS,
+    }
 )
 
 PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
@@ -466,9 +670,13 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         Permission.LIRE_PROSPECT,
         Permission.QUALIFIER_PROSPECT,
         Permission.FIXER_LES_TARIFS,
-    },
-    # Voir l'en-tête : aucune permission comptable ou déclarative.
-    Role.CAISSE: {Permission.ENCAISSER},
+        Permission.GERER_RECRUTEMENT,
+    }
+    # 18 octobre 2026 : le suivi financier global, par axe.
+    | _VOIR_LES_VERSEMENTS,
+    # Voir l'en-tête : aucune permission comptable ou déclarative. 18 octobre 2026 : elle
+    # voit les trois familles de versements ; la matrice peut lui en retirer une.
+    Role.CAISSE: {Permission.ENCAISSER} | _VOIR_LES_VERSEMENTS,
     # Son dossier de formalité, et rien d'autre : ni dossier du portefeuille, ni
     # pièce comptable. Le jour où sa société est immatriculée et qu'elle prend le
     # suivi, son compte reçoit en plus le rôle `ADHERENT`.
@@ -482,9 +690,19 @@ PERMISSIONS_PAR_ROLE: dict[Role, frozenset[Permission]] = {
         # Il affecte les demandes, donc il les voit. Il ne les qualifie pas :
         # remplir un questionnaire suppose d'avoir parlé au client.
         Permission.LIRE_PROSPECT,
-    },
+    }
+    | _VOIR_LES_VERSEMENTS,
     Role.INSPECTEUR: _LECTURE_DOSSIER
     | {Permission.LIRE_COMPTABILITE, Permission.LIRE_AUDIT, Permission.EMETTRE_AVIS},
+    # 18 octobre 2026 : il règle et il accorde, il lit le journal qui en garde la trace.
+    # Il ne tient aucun dossier ; il les lit, pour savoir à qui il accorde une grâce.
+    Role.SUPER_ADMIN: {
+        Permission.LIRE_DOSSIER,
+        Permission.GERER_ROLES,
+        Permission.ACCORDER_FAVEURS,
+        Permission.GERER_COMPTES,
+        Permission.LIRE_AUDIT,
+    },
 }
 
 
@@ -493,22 +711,202 @@ ROLES_A_PORTEE_OBLIGATOIRE: frozenset[Role] = frozenset(
     {Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION}
 )
 
+#: Les rôles qui ne sont pas des salariés du cabinet.
+ROLES_EXTERNES: frozenset[Role] = frozenset({Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION})
+
 #: Les rôles tenus par des salariés du cabinet. Sert à distinguer, à l'ouverture
 #: de session, l'espace de travail de l'espace adhérent — le routage se fait
-#: après authentification, jamais par un choix offert avant.
-ROLES_INTERNES: frozenset[Role] = frozenset(Role) - frozenset(
-    {Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION}
+#: après authentification, jamais par un choix offert avant. Un rôle créé par le
+#: cabinet n'y figure pas, mais il est interne : voir `est_interne`.
+ROLES_INTERNES: frozenset[Role] = frozenset(Role) - ROLES_EXTERNES
+
+
+# ── La matrice réglable (18 octobre 2026) ────────────────────────────────────────
+
+#: Les droits qu'un rôle externe peut recevoir : ceux que la matrice livrée donne déjà
+#: aux trois rôles externes, et aucun autre.
+PERMISSIONS_EXTERNES: frozenset[Permission] = frozenset().union(
+    *(PERMISSIONS_PAR_ROLE[r] for r in ROLES_EXTERNES)
 )
 
+#: Les gestes du client sur SON dossier. Un rôle interne ne les reçoit pas : voir l'en-tête.
+PERMISSIONS_DU_CLIENT: frozenset[Permission] = frozenset(
+    {
+        Permission.REPONDRE_AU_CABINET,
+        Permission.SIGNALER_UN_CHANGEMENT,
+        Permission.REGLER_SES_RAPPELS,
+        Permission.TENIR_SA_PAIE,
+        Permission.SUIVRE_MA_CREATION,
+        Permission.REGLER_SES_HONORAIRES,
+        Permission.CONFIER_SES_FONDS,
+    }
+)
 
-def permissions_de(roles: frozenset[Role]) -> frozenset[Permission]:
-    """L'union des permissions de plusieurs rôles.
+#: Le travail du cabinet sur un dossier (18 octobre 2026) : ce qui s'arrête quand
+#: l'adhérent n'est pas en règle. Ni la lecture, ni le dépôt de pièces, ni la relance,
+#: ni l'encaissement : couper ces portes empêcherait de régulariser.
+PERMISSIONS_DE_TRAITEMENT: frozenset[Permission] = frozenset(
+    {
+        Permission.IDENTIFIER_PIECE,
+        Permission.ARBITRER_DOUBLON,
+        Permission.CONTROLER_CONFORMITE,
+        Permission.ECARTER_CONSTAT,
+        Permission.SAISIR_ECRITURE,
+        Permission.VALIDER_ECRITURE,
+        Permission.CONTRE_PASSER,
+        Permission.REVISER_DOSSIER,
+        Permission.DEPOSER_DECLARATION,
+        Permission.CLOTURER_EXERCICE,
+        Permission.PREPARER_DSF,
+        Permission.VALIDER_FICHE_DSF,
+        Permission.TRAITER_MISSION,
+    }
+)
+
+#: Au super administrateur seul, et il les garde.
+PERMISSIONS_RESERVEES: frozenset[Permission] = frozenset(
+    {Permission.GERER_ROLES, Permission.ACCORDER_FAVEURS}
+)
+
+_FORME_DU_CODE = re.compile(r"^[A-Z][A-Z0-9_]{2,39}$")
+
+
+def _code_bien_forme(code: str) -> str:
+    if not _FORME_DU_CODE.match(code):
+        raise ValueError(
+            f"« {code} » n'est pas un code de rôle : des majuscules, des chiffres et des "
+            "soulignés, 3 à 40 caractères, une lettre en tête."
+        )
+    return code
+
+
+def role_de(code: Role | str) -> Role | str:
+    """Le rôle livré s'il en est un, sinon le code d'un rôle du cabinet."""
+    try:
+        return Role(code)
+    except ValueError:
+        return _code_bien_forme(str(code))
+
+
+#: Un rôle porté par une habilitation : livré (`Role`) ou créé par le cabinet (son code).
+#: ⚠️ `role_de` passe toujours : « COMPTABLE » doit devenir `Role.COMPTABLE`, jamais rester
+#: une chaîne, sans quoi `h.role is Role.COMPTABLE` serait faux sur une ligne relue.
+CodeRole = Annotated[Role | str, Field(union_mode="left_to_right"), AfterValidator(role_de)]
+
+
+class FicheDeRole(BaseModel):
+    """Un rôle tel que le cabinet l'a réglé : ses droits, et qui les a fixés."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code: str
+    libelle: str = Field(min_length=2, max_length=80)
+    permissions: frozenset[Permission]
+    #: Livré avec la plateforme : il se règle, il ne se supprime pas.
+    systeme: bool
+    externe: bool
+    reglee_par: str | None = None
+    reglee_le: datetime | None = None
+
+    @model_validator(mode="after")
+    def _bornes(self) -> FicheDeRole:
+        _code_bien_forme(self.code)
+        livre = self.code in Role.__members__
+        if livre != self.systeme:
+            raise ValueError(
+                f"« {self.code} » est le code d'un rôle livré : un rôle du cabinet en prend "
+                "un autre."
+                if livre
+                else f"« {self.code} » n'est pas un rôle livré."
+            )
+        if livre and self.externe != (Role(self.code) in ROLES_EXTERNES):
+            raise ValueError(f"le rôle {self.code} ne change pas de nature (interne, externe).")
+        if not livre and self.externe:
+            raise ValueError("un rôle créé par le cabinet est un rôle de collaborateur.")
+        if self.externe and not self.permissions <= PERMISSIONS_EXTERNES:
+            interdits = ", ".join(sorted(self.permissions - PERMISSIONS_EXTERNES))
+            raise ValueError(
+                f"un rôle externe ne reçoit pas {interdits} : ce sont des droits du cabinet."
+            )
+        if not self.externe and self.permissions & PERMISSIONS_DU_CLIENT:
+            interdits = ", ".join(sorted(self.permissions & PERMISSIONS_DU_CLIENT))
+            raise ValueError(
+                f"{interdits} : ce sont les gestes du client sur son dossier ; un "
+                "collaborateur les exercerait sur tout le portefeuille."
+            )
+        reservees = self.permissions & PERMISSIONS_RESERVEES
+        if self.code == Role.SUPER_ADMIN:
+            if reservees != PERMISSIONS_RESERVEES:
+                raise ValueError(
+                    "le super administrateur garde GERER_ROLES et ACCORDER_FAVEURS : sans "
+                    "eux, plus personne ne pourrait régler la matrice."
+                )
+        elif reservees:
+            raise ValueError(
+                f"{', '.join(sorted(reservees))} n'appartiennent qu'au super administrateur."
+            )
+        return self
+
+
+def matrice_par_defaut() -> dict[str, FicheDeRole]:
+    """La matrice livrée, en fiches : le point de départ de tout cabinet."""
+    return {
+        role.value: FicheDeRole(
+            code=role.value,
+            libelle=LIBELLES_ROLE[role],
+            permissions=permissions,
+            systeme=True,
+            externe=role in ROLES_EXTERNES,
+        )
+        for role, permissions in PERMISSIONS_PAR_ROLE.items()
+    }
+
+
+_MATRICE_LIVREE = matrice_par_defaut()
+#: Rend les fiches réglées par le cabinet servi (rôles livrés retouchés, rôles créés).
+#: Posée une fois, au démarrage, par l'adaptateur : le domaine ne lit pas la base.
+_source_des_roles: Callable[[], Iterable[FicheDeRole]] | None = None
+
+
+def installer_la_source_des_roles(source: Callable[[], Iterable[FicheDeRole]] | None) -> None:
+    global _source_des_roles
+    _source_des_roles = source
+
+
+def matrice_en_vigueur() -> Mapping[str, FicheDeRole]:
+    """La matrice du cabinet servi : la livrée, recouverte de ce qu'il a réglé.
+
+    ⚠️ Sans source posée (un script, un test de domaine), c'est la matrice livrée : la
+    seule qui soit connue sans base, et le seul cas où elle s'emploie est celui où
+    aucune requête n'est servie.
+    """
+    if _source_des_roles is None:
+        return _MATRICE_LIVREE
+    matrice = dict(_MATRICE_LIVREE)
+    for fiche in _source_des_roles():
+        matrice[fiche.code] = fiche
+    return matrice
+
+
+def est_interne(role: Role | str) -> bool:
+    """Un collaborateur du cabinet. Un rôle créé par le cabinet l'est toujours."""
+    return role not in ROLES_EXTERNES
+
+
+def permissions_de(roles: Iterable[Role | str]) -> frozenset[Permission]:
+    """L'union des permissions de plusieurs rôles, à la matrice en vigueur.
 
     Union et non intersection : une personne qui est à la fois comptable et
     chargée de clientèle cumule les deux métiers, elle ne les additionne pas pour
     n'en garder que la partie commune.
+
+    18 octobre 2026 : lue à la matrice du cabinet. Un rôle qu'elle ne connaît plus (un
+    rôle du cabinet retiré) ne donne rien.
     """
+    matrice = matrice_en_vigueur()
     resultat: frozenset[Permission] = frozenset()
     for role in roles:
-        resultat |= PERMISSIONS_PAR_ROLE[role]
+        fiche = matrice.get(str(role))
+        if fiche is not None:
+            resultat |= fiche.permissions
     return resultat

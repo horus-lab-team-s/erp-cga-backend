@@ -4,6 +4,9 @@ Même en-tête et même pied que la proforma (`document_proforma.py`) : un clien
 l'une puis l'autre doit reconnaître la maison. ⚠️ Le montant vient du règlement constaté,
 jamais d'une saisie ; il est écrit en chiffres ET en lettres, protection contre un chiffre
 altéré, comme sur la proforma.
+
+⚠️ Le reçu ne nomme pas le collaborateur qui a encaissé (18 octobre 2026) : c'est le cabinet
+qui reçoit. Le constat de caisse garde son auteur, au journal.
 """
 
 from __future__ import annotations
@@ -37,9 +40,7 @@ _CANAUX = {
 }
 
 
-def rendre_le_recu(
-    reglement: ReglementDHonoraires, *, adherent: str, periode: str, encaisse_par: str
-) -> bytes:
+def rendre_le_recu(reglement: ReglementDHonoraires, *, adherent: str, periode: str) -> bytes:
     return rendre_un_recu(
         titre="REÇU D'HONORAIRES · ACQUITTÉ",
         numero=reglement.identifiant,
@@ -56,7 +57,6 @@ def rendre_le_recu(
                 f"{_CANAUX.get(reglement.canal, reglement.canal.value)}, référence "
                 f"{reglement.reference_externe}",
             ),
-            ("Encaissé par", encaisse_par),
         ],
     )
 
@@ -106,7 +106,8 @@ def rendre_un_recu(
     page.drawString(
         MARGE,
         y,
-        f"Arrêté le présent reçu à la somme de {en_toutes_lettres(montant)} francs CFA.",
+        f"Arrêté le présent reçu à la somme de "
+        f"{en_toutes_lettres(montant).replace('-', ' ')} francs CFA.",
     )
     pied_de_document(page)
     page.showPage()

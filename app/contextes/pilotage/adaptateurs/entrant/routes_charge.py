@@ -36,10 +36,10 @@ from app.contextes.pilotage.domaine.charge_et_production import (
     proposer_des_reaffectations,
 )
 from app.contextes.transverse.api import (
-    ROLES_INTERNES,
     AccesRequis,
     Permission,
     atelier,
+    est_interne,
     exiger,
     habilitations_actives,
 )
@@ -108,9 +108,9 @@ def _porteurs(nius: list[str], jour: date) -> list[PorteurDeDossiers]:
         for h in habilitations_actives(boutique.habilitations.pour_dossier(niu), jour):
             # Ni transverse (accès à tout, ne porte rien), ni adhérent ou inspecteur (portée
             # explicite, mais aucun travail du cabinet) : le défaut trouvé au pas 105.
-            if h.portee is None or h.role not in ROLES_INTERNES:
+            if h.portee is None or not est_interne(h.role):
                 continue
-            compte, role, portes = par_habilitation.get(h.identifiant, (h.compte, h.role.value, []))
+            compte, role, portes = par_habilitation.get(h.identifiant, (h.compte, str(h.role), []))
             portes.append(niu)
             par_habilitation[h.identifiant] = (compte, role, portes)
     porteurs = []

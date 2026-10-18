@@ -48,7 +48,7 @@ from app.contextes.transverse.domaine.ports import (
     DepotSessions,
     JournalAudit,
 )
-from app.contextes.transverse.domaine.roles import Permission, Role
+from app.contextes.transverse.domaine.roles import Permission, Role, matrice_en_vigueur
 from app.contextes.transverse.domaine.sessions import MotifRevocation
 from app.partage.horloge import jour_a_douala
 
@@ -95,6 +95,22 @@ def _verifier_adresse_libre(courriel: str, comptes: DepotComptes) -> None:
         )
 
 
+def _exiger_le_droit_d_accorder(par: Acces, role: Role | str) -> None:
+    """Le rôle existe au cabinet, et celui qui l'accorde peut l'accorder (18 octobre 2026).
+
+    ⚠️ `GERER_COMPTES` suffit pour accorder un rôle de métier, pas le rôle de super
+    administrateur : l'administrateur se l'accorderait, et réglerait ensuite la matrice
+    pour se donner tout le reste. Ce rôle-là s'accorde par celui qui règle la matrice,
+    avec son second facteur.
+    """
+    if str(role) not in matrice_en_vigueur():
+        raise ValueError(f"le cabinet n'a pas de rôle {role}.")
+    if role == Role.SUPER_ADMIN:
+        par.exiger(
+            Permission.GERER_ROLES, motif="attribution du rôle de super administrateur"
+        )
+
+
 def inviter_collaborateur(
     *,
     par: Acces,
@@ -104,7 +120,7 @@ def inviter_collaborateur(
     courriel: str,
     nom: str,
     prenom: str,
-    role: Role,
+    role: Role | str,
     portee: frozenset[str] | None,
     depuis: date,
     comptes: DepotComptes,
@@ -121,6 +137,7 @@ def inviter_collaborateur(
     existe, et l'appelant doit le placer dans le courriel sans le conserver.
     """
     par.exiger(Permission.GERER_COMPTES)
+    _exiger_le_droit_d_accorder(par, role)
     _verifier_adresse_libre(courriel, comptes)
 
     compte = Compte(
@@ -464,7 +481,7 @@ def etendre_a_l_adhesion(
 
 def _ouvrir_un_acces_externe(
     *,
-    role: Role,
+    role: Role | str,
     dossier: str,
     trace: dict[str, str | None],
     precision: str | None,
@@ -539,7 +556,7 @@ def accorder(
     par: Acces,
     identifiant: str,
     compte: str,
-    role: Role,
+    role: Role | str,
     portee: frozenset[str] | None,
     depuis: date,
     motif: MotifHabilitation,
@@ -556,6 +573,7 @@ def accorder(
     `GERER_COMPTES` deviendrait un chemin d'élévation universel.
     """
     par.exiger(Permission.GERER_COMPTES)
+    _exiger_le_droit_d_accorder(par, role)
 
     if portee is None and not par.transverse:
         raise AccesRefuse(
@@ -728,7 +746,7 @@ def reaffecter_dossier(
         )
     if source.role is not cible.role:
         raise ReaffectationRefusee(
-            f"{source.role.value} vers {cible.role.value} : une réaffectation se fait entre "
+            f"{source.role} vers {cible.role} : une réaffectation se fait entre "
             "collaborateurs du même rôle, sinon personne ne tient plus le dossier."
         )
     le = jour_a_douala(a_l_instant)
@@ -785,7 +803,7 @@ def reaffecter_dossier(
             "dossier": niu,
             "compte_precedent": source_active.compte,
             "compte": cible_active.compte,
-            "role": cible_active.role.value,
+            "role": str(cible_active.role),
         },
         motif=motif.strip(),
     )

@@ -60,11 +60,11 @@ from app.contextes.portefeuille.api import (
 )
 from app.contextes.referentiel.api import ServiceParametres, service_parametres
 from app.contextes.transverse.api import (
-    ROLES_INTERNES,
     Acces,
     AccesRequis,
     Permission,
     atelier,
+    est_interne,
     exiger,
     exiger_dossier,
     habilitations_actives,
@@ -440,7 +440,7 @@ def _qui_suit_quoi(
                 # ⚠️ Pas 105 : un adhérent et un inspecteur ont une portée explicite (leur
                 # dossier, leur mission), et figuraient donc parmi les « collaborateurs » de la
                 # charge. Ils ne portent aucun travail du cabinet.
-                if habilitation.role not in ROLES_INTERNES:
+                if not est_interne(habilitation.role):
                     continue
                 suivi.setdefault(score.entreprise, []).append(habilitation.compte)
         for comptes in suivi.values():

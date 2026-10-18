@@ -26,10 +26,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.portefeuille.api import (
     EntrepriseIntrouvable,
+    MandatDePaiement,
+    MotifChangement,
     depot_entreprises,
 )
 from app.contextes.souscription.application.fonds_de_tiers import (
@@ -52,6 +54,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.partage import horloge
+from app.partage.copie import transiter
 from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
@@ -105,6 +108,8 @@ class MesFondsConfies(BaseModel):
 @routeur.get("/caisse", summary="Les fonds de tiers à recevoir, et reçus récemment")
 def caisse_des_fonds(acces: AccesRequis) -> list[AppelDeFonds]:
     exiger(acces, Permission.ENCAISSER)
+    # 18 octobre 2026 : la matrice peut retirer cette famille de la vue de la caisse.
+    exiger(acces, Permission.VOIR_VERSEMENTS_FONDS_DE_TIERS)
     aujourd_hui = horloge.aujourd_hui()
     appels = _comptoir().appels_de_fonds.lister()
     dus = [a for a in appels if a.etat is EtatAppelDeFonds.A_REGLER]
@@ -316,3 +321,125 @@ def reverser(acces: AccesRequis, niu: str, identifiant: str, corps: Reversement)
         )
     except TransitionDeFondsRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
+
+
+# ── Le mandat « le cabinet paie pour moi » (18 octobre 2026, point 9) ───────────────
+#
+# ⚠️ UNE FAVEUR, PAS UN CHOIX DE L'ADHÉRENT. Le gérant : « la mention le cabinet paie
+# pour moi est une faveur, définie par le super administrateur pour des personnes
+# spécifiques ». Le cabinet détient alors des fonds de tiers : cela engage le cabinet,
+# d'où `ACCORDER_FAVEURS`, le second facteur et le motif. Jusque-là, aucun écran ni
+# aucune route ne créait ce mandat : il n'existait que dans la démonstration.
+
+#: Ce que le cabinet peut payer pour un adhérent avec ses fonds.
+OBLIGATIONS_MANDATABLES = frozenset({"TVA", "CNPS", "IRPP_SALAIRES"})
+
+
+class MandatAAccorder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    obligations: list[str] = Field(min_length=1)
+    a_compter_du: date
+    #: L'accord écrit de l'adhérent : quand, et qui l'a signé pour l'entreprise (son
+    #: gérant). Pas l'auteur de l'acte, qui est le compte de la session.
+    signe_le: date
+    signataire: str = Field(min_length=3, max_length=200)
+    motif: str = Field(min_length=10, max_length=500)
+
+
+def _journal_mandat(acces, niu: str, action: str, apres: dict, motif: str) -> None:
+    from app.contextes.transverse.api import atelier
+
+    atelier().journal.ajouter(
+        horodatage=maintenant(),
+        acteur=acces.compte,
+        action=f"fonds_de_tiers.mandat.{action}",
+        objet_type="mandat_de_paiement",
+        objet_id=niu,
+        apres=apres,
+        motif=motif,
+    )
+
+
+@routeur.post(
+    "/{niu}/mandat", summary="Accorder le mandat « le cabinet paie pour moi »", status_code=201
+)
+def accorder_le_mandat(acces: AccesRequis, niu: str, corps: MandatAAccorder) -> MesFondsConfies:
+    exiger(acces, Permission.ACCORDER_FAVEURS, motif=corps.motif)
+    inconnues = sorted(set(corps.obligations) - OBLIGATIONS_MANDATABLES)
+    if inconnues:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{', '.join(inconnues)} : le cabinet ne paie que "
+            f"{', '.join(sorted(OBLIGATIONS_MANDATABLES))} pour un adhérent.",
+        )
+    if corps.signe_le > corps.a_compter_du:
+        raise HTTPException(
+            status_code=422, detail="le mandat prend effet après sa signature, pas avant."
+        )
+    entreprise = _entreprise(niu)
+    # Le mandat en cours se ferme la veille du nouveau : les mandats se succèdent sans
+    # se chevaucher, et l'histoire reste lisible.
+    mandats = []
+    for m in entreprise.mandats_de_paiement:
+        if m.fin is None or m.fin > corps.a_compter_du:
+            if m.debut >= corps.a_compter_du:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"un mandat commence déjà le {m.debut:%d/%m/%Y} : en accorder un "
+                    "à partir d'une date postérieure.",
+                )
+            m = transiter(m, fin=corps.a_compter_du)
+        mandats.append(m)
+    mandats.append(
+        MandatDePaiement(
+            debut=corps.a_compter_du,
+            motif=MotifChangement.OPTION,
+            obligations=sorted(set(corps.obligations)),
+            signe_le=corps.signe_le,
+            signe_par=corps.signataire,
+            precision=corps.motif,
+        )
+    )
+    depot_entreprises().enregistrer(transiter(entreprise, mandats_de_paiement=mandats))
+    _journal_mandat(
+        acces,
+        niu,
+        "accord",
+        {
+            "obligations": sorted(set(corps.obligations)),
+            "a_compter_du": corps.a_compter_du.isoformat(),
+        },
+        corps.motif,
+    )
+    return fonds_du_dossier(acces, niu)
+
+
+class RetraitDuMandat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    au: date
+    motif: str = Field(min_length=10, max_length=500)
+
+
+@routeur.post("/{niu}/mandat/retrait", summary="Retirer le mandat de paiement")
+def retirer_le_mandat(acces: AccesRequis, niu: str, corps: RetraitDuMandat) -> MesFondsConfies:
+    """⚠️ Le mandat se ferme, il ne s'efface pas : les fonds déjà confiés restent à
+    reverser, et leur trace dit sous quel mandat ils ont été reçus."""
+    exiger(acces, Permission.ACCORDER_FAVEURS, motif=corps.motif)
+    entreprise = _entreprise(niu)
+    ouverts = [m for m in entreprise.mandats_de_paiement if m.fin is None or m.fin > corps.au]
+    if not ouverts:
+        raise HTTPException(
+            status_code=409, detail="aucun mandat de paiement en cours à cette date."
+        )
+    if any(m.debut >= corps.au for m in ouverts):
+        raise HTTPException(
+            status_code=409, detail="le retrait tombe avant le début du mandat : le corriger."
+        )
+    mandats = [
+        transiter(m, fin=corps.au) if m in ouverts else m for m in entreprise.mandats_de_paiement
+    ]
+    depot_entreprises().enregistrer(transiter(entreprise, mandats_de_paiement=mandats))
+    _journal_mandat(acces, niu, "retrait", {"au": corps.au.isoformat()}, corps.motif)
+    return fonds_du_dossier(acces, niu)

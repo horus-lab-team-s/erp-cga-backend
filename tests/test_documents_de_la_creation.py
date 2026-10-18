@@ -51,6 +51,34 @@ def _premiere_piece(client, reference: str) -> str:
 
 
 class TestLaJuristeVerseEtRelit:
+    def test_elle_verse_une_piece_que_la_liste_n_a_pas_prevue(self, plateforme):
+        """18 octobre 2026 : un document reçu par WhatsApp, hors liste, se nomme et se lit."""
+        client = plateforme
+        reference = compte._un_dossier(client, f"c.{uuid4().hex[:6]}@exemple.cm")
+        ouvrir_une_session(client, CHARGEE)
+        envoi = client.post(
+            "/collecte/fichiers-de-formalite",
+            files={"fichier": ("plan.pdf", PDF, "application/pdf")},
+        )
+        assert envoi.status_code == 201, envoi.text
+
+        versee = client.post(
+            f"/creations/{reference}/pieces",
+            json={
+                "code": "AUTRE",
+                "libelle": "Plan de localisation",
+                "empreinte": envoi.json()["empreinte"],
+                "canal": "WHATSAPP",
+            },
+        )
+
+        assert versee.status_code == 200, versee.text
+        (piece,) = [p for p in versee.json()["pieces"] if p["code"] == "AUTRE-1"]
+        assert piece["libelle"] == "Plan de localisation" and piece["canal"] == "WHATSAPP"
+        assert not piece["obligatoire"]
+        document = client.get(f"/creations/{reference}/pieces/AUTRE-1/document")
+        assert document.status_code == 200, document.text
+
     def test_elle_verse_une_piece_recue_par_whatsapp_et_le_dossier_le_dit(self, plateforme):
         client = plateforme
         reference = compte._un_dossier(client, f"c.{uuid4().hex[:6]}@exemple.cm")
@@ -128,7 +156,9 @@ class TestLeDocumentDeLaClienteNeSePerdPas:
         _verser(client, reference, code, canal="GUICHET", fichier=None)
 
         (piece,) = [
-            p for p in client.get(f"/creations/{reference}").json()["dossier"]["pieces"] if p["code"] == code
+            p
+            for p in client.get(f"/creations/{reference}").json()["dossier"]["pieces"]
+            if p["code"] == code
         ]
         assert piece["empreinte"] == envoi.json()["empreinte"]
         assert client.get(f"/creations/{reference}/pieces/{code}/document").content == PDF

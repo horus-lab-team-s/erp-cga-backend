@@ -47,10 +47,10 @@ from app.contextes.souscription.domaine.honoraires import (
     echeancier_d_honoraires,
 )
 from app.contextes.souscription.domaine.paiements import NaturePaiement, Paiement, debit_en_attente
+from app.contextes.souscription.domaine.situation_de_reglement import SituationDeReglement
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
-    atelier,
     exiger,
     exiger_dossier,
 )
@@ -58,7 +58,7 @@ from app.partage import horloge
 from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
 
-__all__ = ["routeur"]
+__all__ = ["mes_honoraires", "routeur"]
 
 routeur = APIRouter(prefix="/souscription/honoraires", tags=["Honoraires des adhérents"])
 
@@ -100,6 +100,9 @@ class MesHonoraires(BaseModel):
     en_retard: int
     #: Le débit mobile se demande depuis l'espace.
     reglable_en_ligne: bool
+    #: 18 octobre 2026 : en règle, en retard, sous grâce ou bloqué. L'adhérent le lit
+    #: aussi : il doit savoir que son dossier ne se traite plus, et pourquoi.
+    situation: SituationDeReglement | None = None
 
 
 def _mes_honoraires(niu: str) -> MesHonoraires:
@@ -117,13 +120,24 @@ def _mes_honoraires(niu: str) -> MesHonoraires:
         for e in echeances
         if e.etat in (EtatEcheanceDHonoraires.A_REGLER, EtatEcheanceDHonoraires.EN_RETARD)
     ]
+    from app.contextes.souscription.adaptateurs.entrant.routes_reglement import (
+        situation_du_dossier,
+    )
+
     return MesHonoraires(
         contrat=contrat,
         echeances=echeances,
         du=sum((e.montant for e in dues), Decimal(0)),
         en_retard=sum(1 for e in dues if e.etat is EtatEcheanceDHonoraires.EN_RETARD),
         reglable_en_ligne=True,
+        situation=situation_du_dossier(niu),
     )
+
+
+def mes_honoraires(niu: str) -> MesHonoraires:
+    """Le contrat, l'échéancier et la situation d'un dossier, pour les autres routes du
+    contexte (18 octobre 2026 : la révision de tarif rend la vue à jour)."""
+    return _mes_honoraires(niu)
 
 
 def _echeance_non_reglee(niu: str, periode: date) -> tuple[ContratDHonoraires, EcheanceDHonoraires]:
@@ -161,6 +175,8 @@ def caisse_des_honoraires(acces: AccesRequis) -> list[LigneDeCaisseHonoraires]:
     """Ce qui est exigible en tête (en retard d'abord), puis ce qui a été réglé
     depuis un mois, quel que soit le canal. Le mobile money y arrive seul."""
     exiger(acces, Permission.ENCAISSER)
+    # 18 octobre 2026 : la matrice peut retirer cette famille de la vue de la caisse.
+    exiger(acces, Permission.VOIR_VERSEMENTS_HONORAIRES)
     boutique = _comptoir()
     aujourd_hui = horloge.aujourd_hui()
     dues: list[LigneDeCaisseHonoraires] = []
@@ -343,6 +359,37 @@ def encaisser_au_guichet(acces: AccesRequis, niu: str, corps: ConstatAuGuichet) 
 
 
 @routeur.get(
+    "/{niu}/echeances/{periode}/note",
+    summary="La note d'honoraires PDF d'une échéance",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def note_de_l_echeance(acces: AccesRequis, niu: str, periode: date) -> Response:
+    """18 octobre 2026 (points 19 et 20) : ce que l'adhérent doit pour une période, par écrit.
+
+    ⚠️ Même garde que son échéancier ; l'échéance est cherchée DANS ce dossier.
+    """
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    from app.contextes.souscription.adaptateurs.sortant.document_note_d_honoraires import (
+        numero_de_la_note,
+        rendre_la_note,
+    )
+
+    echeance = next((e for e in _mes_honoraires(niu).echeances if e.debut == periode), None)
+    if echeance is None:
+        raise HTTPException(status_code=404, detail=f"aucune échéance au {periode:%d/%m/%Y}.")
+    return Response(
+        content=rendre_la_note(echeance, adherent=_denomination(niu), emise_le=aujourd_hui()),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{numero_de_la_note(niu, periode)}.pdf"'
+            )
+        },
+    )
+
+
+@routeur.get(
     "/{niu}/reglements/{identifiant}/recu",
     summary="Le reçu PDF d'un règlement d'honoraires",
     response_class=Response,
@@ -372,16 +419,8 @@ def recu_du_reglement(acces: AccesRequis, niu: str, identifiant: str) -> Respons
         periode = f"{MOIS[echeance.debut.month - 1]} {echeance.debut.year}"
     else:
         periode = f"du {echeance.debut:%d/%m/%Y} au {echeance.fin:%d/%m/%Y}"
-    noms = {c.identifiant: c.nom_affiche for c in atelier().comptes.lister()}
-    encaisse_par = (
-        "paiement en ligne (mobile money)"
-        if reglement.constate_par == "systeme"
-        else noms.get(reglement.constate_par, reglement.constate_par)
-    )
     return Response(
-        content=rendre_le_recu(
-            reglement, adherent=_denomination(niu), periode=periode, encaisse_par=encaisse_par
-        ),
+        content=rendre_le_recu(reglement, adherent=_denomination(niu), periode=periode),
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="recu-{identifiant}.pdf"'},
     )

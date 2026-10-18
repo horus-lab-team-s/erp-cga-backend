@@ -44,6 +44,9 @@ dependencies = [
     "reportlab>=4.0",
     # 15 octobre 2026 : les balances auxiliaires que la DGI demande au format Excel.
     "openpyxl>=3.1,<4",
+    # 18 octobre 2026 (point 23) : le projet de contrat en Word, que les parties retouchent.
+    # Pur Python, comme reportlab et openpyxl.
+    "python-docx>=1.1,<2",
 ]
 
 [project.optional-dependencies]

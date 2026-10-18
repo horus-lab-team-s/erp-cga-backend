@@ -55,10 +55,10 @@ TITRES = {
     Livre.BALANCE: "Balance générale",
 }
 
-_INDIGO = HexColor("#3B2A6B")
-_GRIS = HexColor("#555555")
-_FOND = HexColor("#EEEAF5")
-_TRAIT = HexColor("#BBBBBB")
+_INDIGO = HexColor("#2E1B4D")
+_GRIS = HexColor("#5B556B")
+_FOND = HexColor("#F6F4FB")
+_TRAIT = HexColor("#E2DDEA")
 
 
 class EnteteDuLivre:

@@ -278,8 +278,7 @@ class TestLeLivrable:
         projet = _texte_pdf(rendre_le_livrable(m))
         livre = _texte_pdf(
             rendre_le_livrable(
-                m.soumettre(par="C-007", a_l_instant=LE).valider(par="C-001", a_l_instant=LE),
-                noms={"C-007": "Patricia MOUKOURI", "C-001": "Bernadette MBALLA"},
+                m.soumettre(par="C-007", a_l_instant=LE).valider(par="C-001", a_l_instant=LE)
             )
         )
 
@@ -287,7 +286,9 @@ class TestLeLivrable:
         assert "Préavis de trois mois à obtenir." in livre
         assert "sans préavis" not in livre  # le texte de l'agent, remplacé
         assert "Force majeure" not in livre  # écartée
-        assert "Bernadette MBALLA" in livre
+        assert "Validé par le cabinet le" in livre
+        # 18 octobre 2026 : le client ne lit ni le nom ni l'identifiant de qui a instruit.
+        assert "C-007" not in livre and "C-001" not in livre
 
     def test_une_dsf_ciblee_ne_parle_pas_de_contrat(self):
         """15 octobre 2026 : le livrable d'une DSF ciblée disait « objet du contrat »."""

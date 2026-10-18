@@ -42,13 +42,17 @@ from starlette.concurrency import run_in_threadpool
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     DepotAppelsDeFondsMemoire,
     DepotContratsDHonorairesMemoire,
+    DepotGracesDeReglementMemoire,
+    DepotRegleDeDepassementMemoire,
     DepotReglementsDHonorairesMemoire,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
     DepotAppelsDeFondsSql,
     DepotContratsDHonorairesSql,
     DepotDevisSql,
+    DepotGracesDeReglementSql,
     DepotPaiementsSql,
+    DepotRegleDeDepassementSql,
     DepotReglementsDHonorairesSql,
     DepotSouscriptionsSql,
     DepotTarifsFixesSql,
@@ -130,6 +134,8 @@ class Comptoir:
             self.contrats_honoraires = DepotContratsDHonorairesMemoire()
             self.reglements_honoraires = DepotReglementsDHonorairesMemoire()
             self.appels_de_fonds = DepotAppelsDeFondsMemoire()
+            self.regle_de_depassement = DepotRegleDeDepassementMemoire()
+            self.graces_de_reglement = DepotGracesDeReglementMemoire()
         else:
             self.devis = DepotDevisSql(session, courant())
             self.souscriptions = DepotSouscriptionsSql(session, courant())
@@ -138,6 +144,8 @@ class Comptoir:
             self.contrats_honoraires = DepotContratsDHonorairesSql(session, courant())
             self.reglements_honoraires = DepotReglementsDHonorairesSql(session, courant())
             self.appels_de_fonds = DepotAppelsDeFondsSql(session, courant())
+            self.regle_de_depassement = DepotRegleDeDepassementSql(session, courant())
+            self.graces_de_reglement = DepotGracesDeReglementSql(session, courant())
         # ⚠️ LE JOUR ANNONCÉ EST ARRIVÉ. Ce commentaire disait : « il aura sa
         # table le jour où la direction devra changer un tarif sans
         # redéploiement ». La structure de l'offre reste en code ; les PRIX sont

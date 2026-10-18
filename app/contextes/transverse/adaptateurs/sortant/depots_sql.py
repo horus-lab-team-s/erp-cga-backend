@@ -69,6 +69,7 @@ from app.contextes.transverse.adaptateurs.sortant.tables import (
     TableHabilitation,
     TableJeton,
     TableMandat,
+    TableRoleDuCabinet,
     TableSession,
 )
 from app.contextes.transverse.domaine.audit import EntreeAudit
@@ -76,7 +77,7 @@ from app.contextes.transverse.domaine.habilitations import Habilitation
 from app.contextes.transverse.domaine.identites import Compte
 from app.contextes.transverse.domaine.jetons import Jeton
 from app.contextes.transverse.domaine.mandats import Mandat, MotifMandat
-from app.contextes.transverse.domaine.roles import Role
+from app.contextes.transverse.domaine.roles import FicheDeRole, Permission, Role
 from app.contextes.transverse.domaine.sessions import Session
 from app.contextes.transverse.domaine.teledeclaration import (
     AccuseReception,
@@ -89,6 +90,7 @@ from app.partage.locataire import sous_mandat
 __all__ = [
     "DepotComptesSql",
     "DepotHabilitationsSql",
+    "DepotRolesDuCabinetSql",
     "DepotJetonsSql",
     "DepotSessionsSql",
     "JournalAuditSql",
@@ -326,7 +328,7 @@ class DepotHabilitationsSql:
             self._session.add(ligne)
         ligne.locataire = self.locataire
         ligne.compte = habilitation.compte
-        ligne.role = habilitation.role.value
+        ligne.role = str(habilitation.role)
         ligne.portee = None if habilitation.portee is None else sorted(habilitation.portee)
         ligne.debut = habilitation.debut
         ligne.fin = habilitation.fin
@@ -796,3 +798,62 @@ class DepotMandatsSql:
         ligne.revoque_par = mandat.revoque_par
         ligne.precision = mandat.precision
         self._session.flush()
+
+
+class DepotRolesDuCabinetSql:
+    """Les rôles réglés par le cabinet (18 octobre 2026). Voir `TableRoleDuCabinet`.
+
+    ⚠️ Lus une fois par requête : la matrice se consulte à chaque contrôle de droit, et la
+    requête est l'unité de travail. Une écriture vide la mémoire, pour que la requête qui
+    règle un rôle lise aussitôt ce qu'elle vient de régler.
+    """
+
+    def __init__(self, session: SessionSql, locataire: str) -> None:
+        self._session = session
+        self.locataire = locataire
+        self._lues: list[FicheDeRole] | None = None
+
+    def tous(self) -> list[FicheDeRole]:
+        if self._lues is None:
+            lignes = self._session.scalars(
+                select(TableRoleDuCabinet)
+                .where(TableRoleDuCabinet.locataire == self.locataire)
+                .order_by(TableRoleDuCabinet.code)
+            ).all()
+            self._lues = [
+                FicheDeRole(
+                    code=ligne.code,
+                    libelle=ligne.libelle,
+                    # Un droit retiré de la plateforme depuis le réglage ne se lit plus.
+                    permissions=frozenset(
+                        Permission(p) for p in ligne.permissions if p in Permission.__members__
+                    ),
+                    systeme=ligne.systeme,
+                    externe=ligne.externe,
+                    reglee_par=ligne.reglee_par,
+                    reglee_le=ligne.reglee_le,
+                )
+                for ligne in lignes
+            ]
+        return list(self._lues)
+
+    def enregistrer(self, fiche: FicheDeRole) -> None:
+        ligne = self._session.get(TableRoleDuCabinet, (self.locataire, fiche.code))
+        if ligne is None:
+            ligne = TableRoleDuCabinet(locataire=self.locataire, code=fiche.code)
+            self._session.add(ligne)
+        ligne.libelle = fiche.libelle
+        ligne.permissions = sorted(p.value for p in fiche.permissions)
+        ligne.systeme = fiche.systeme
+        ligne.externe = fiche.externe
+        ligne.reglee_par = fiche.reglee_par
+        ligne.reglee_le = fiche.reglee_le
+        self._session.flush()
+        self._lues = None
+
+    def retirer(self, code: str) -> None:
+        ligne = self._session.get(TableRoleDuCabinet, (self.locataire, code))
+        if ligne is not None:
+            self._session.delete(ligne)
+            self._session.flush()
+        self._lues = None

@@ -27,6 +27,7 @@ from app.contextes.referentiel.api import (
     ServiceParametres,
     service_parametres,
 )
+from app.contextes.social.adaptateurs.sortant.magasins import depot_des_arretes
 from app.contextes.social.api import (
     AvantageNature,
     Bulletin,
@@ -49,10 +50,16 @@ from app.contextes.social.api import (
     inscrire_un_salarie,
     ouvrir_un_contrat,
 )
+from app.contextes.social.domaine.arrete_des_charges import (
+    ArreteDesCharges,
+    RubriqueSociale,
+    proposition_des_charges,
+)
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
     atelier,
+    exiger_dossier,
     exiger_dossier_pour_l_un_de,
 )
 from app.infrastructure.config import configuration
@@ -408,6 +415,91 @@ def lire_declaration(
         groupe_risque_suppose=suppose,
     )
 
+
+
+# ── L'arrêté des charges du mois (18 octobre 2026, point 8) ───────────────────────
+
+
+class ChargesDuMois(BaseModel):
+    """Ce que la paie propose, et ce que le cabinet a arrêté (s'il l'a fait)."""
+
+    proposition: dict[RubriqueSociale, Decimal]
+    arrete: ArreteDesCharges | None
+
+
+def _proposition(entreprise: str, annee: int, mois: int) -> dict[RubriqueSociale, Decimal]:
+    periode = _periode(annee, mois)
+    _, depot_contrats = depots()
+    groupe, _ = _groupe_de_risque(entreprise, None)
+    try:
+        declaration = etablir_la_declaration(
+            entreprise,
+            periode,
+            depot_contrats.du_dossier(entreprise),
+            parametres(),
+            baremes(),
+            groupe_risque=groupe,
+        )
+    except ParametrePaieAbsent as absence:
+        raise HTTPException(status_code=503, detail=str(absence)) from absence
+    return proposition_des_charges(declaration.bulletins)
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/declaration/{annee}/{mois}/arrete",
+    summary="Les charges du mois : la proposition de la paie et l'arrêté du cabinet",
+)
+def lire_les_charges_du_mois(
+    acces: AccesRequis, entreprise: str, annee: int, mois: int
+) -> ChargesDuMois:
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    return ChargesDuMois(
+        proposition=_proposition(entreprise, annee, mois),
+        arrete=depot_des_arretes().lire(entreprise, f"{annee:04d}-{mois:02d}"),
+    )
+
+
+class ArreteDemande(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    montants: dict[RubriqueSociale, Decimal]
+    motif: str | None = Field(default=None, max_length=500)
+
+
+@routeur.put(
+    "/dossiers/{entreprise}/declaration/{annee}/{mois}/arrete",
+    summary="Arrêter les charges du mois, en corrigeant la proposition s'il le faut",
+)
+def arreter_les_charges(
+    acces: AccesRequis, entreprise: str, annee: int, mois: int, demande: ArreteDemande
+) -> ChargesDuMois:
+    """⚠️ Le cabinet arrête : `SAISIR_ECRITURE`, comme la tenue de la paie côté cabinet. Un
+    dossier qui n'est pas en règle ne s'arrête pas (point 5) : c'est un geste de traitement."""
+    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    proposition = _proposition(entreprise, annee, mois)
+    try:
+        arrete = ArreteDesCharges(
+            entreprise=entreprise,
+            periode=f"{annee:04d}-{mois:02d}",
+            montants=demande.montants,
+            proposition=proposition,
+            arrete_par=acces.compte,
+            arrete_le=maintenant(),
+            motif=(demande.motif or "").strip() or None,
+        )
+    except ValueError as invalide:
+        raise HTTPException(status_code=422, detail=message_lisible(invalide)) from invalide
+    depot_des_arretes().enregistrer(arrete)
+    atelier().journal.ajouter(
+        horodatage=arrete.arrete_le,
+        acteur=acces.compte,
+        action="social.arrete_des_charges",
+        objet_type="arrete_des_charges",
+        objet_id=f"{entreprise}/{arrete.periode}",
+        apres={k.value: str(v) for k, v in arrete.montants.items()},
+        motif=arrete.motif,
+    )
+    return ChargesDuMois(proposition=proposition, arrete=arrete)
 
 
 # ── Le groupe de risque professionnel notifié par la CNPS (16 octobre 2026) ──────

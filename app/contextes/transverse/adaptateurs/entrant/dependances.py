@@ -63,12 +63,14 @@ from app.contextes.transverse.adaptateurs.sortant.coffre import Coffre, coffre_d
 from app.contextes.transverse.adaptateurs.sortant.depots_memoire import (
     CompteIntrouvable,
     DepotMandatsMemoire,
+    DepotRolesDuCabinetMemoire,
 )
 from app.contextes.transverse.adaptateurs.sortant.depots_sql import (
     DepotComptesSql,
     DepotHabilitationsSql,
     DepotJetonsSql,
     DepotMandatsSql,
+    DepotRolesDuCabinetSql,
     DepotSessionsSql,
     JournalAuditSql,
     PortailSql,
@@ -101,7 +103,14 @@ from app.contextes.transverse.domaine.ports import (
     JournalAudit,
     ServiceNotification,
 )
-from app.contextes.transverse.domaine.roles import Permission, Role, permissions_de
+from app.contextes.transverse.domaine.roles import (
+    PERMISSIONS_DE_TRAITEMENT,
+    FicheDeRole,
+    Permission,
+    Role,
+    installer_la_source_des_roles,
+    permissions_de,
+)
 from app.contextes.transverse.domaine.sessions import SessionInvalide
 from app.infrastructure.base_de_donnees import (
     fermer_une_session,
@@ -217,6 +226,8 @@ class Atelier:
     #: Les mandats **accordés** par ce locataire. Voir `DepotMandats` : ils sont
     #: rangés chez le mandant, parce que c'est dans son périmètre qu'ils se vérifient.
     mandats: DepotMandats
+    #: 18 octobre 2026 : ce que le cabinet a réglé de la matrice des rôles.
+    roles: DepotRolesDuCabinetMemoire | DepotRolesDuCabinetSql
     journal: JournalAudit
     empreintes: ServiceEmpreinteArgon2
     #: ⚠️ Annoté par le **port**, non par une réalisation : c'est le seul membre
@@ -238,6 +249,7 @@ class AtelierMemoire(Atelier):
             self.journal,
         ) = depots_demo()
         self.mandats = DepotMandatsMemoire()
+        self.roles = DepotRolesDuCabinetMemoire()
         self.empreintes = ServiceEmpreinteArgon2()
         self.notifications = service_de_notification()
         self.portail = PortailManuel()
@@ -260,6 +272,7 @@ class AtelierSql(Atelier):
         self.jetons = DepotJetonsSql(session, locataire)
         self.sessions = DepotSessionsSql(session, locataire)
         self.mandats = DepotMandatsSql(session, locataire)
+        self.roles = DepotRolesDuCabinetSql(session, locataire)
         self.journal = JournalAuditSql(session, locataire)
         self.portail = PortailSql(session, locataire)
         self.empreintes = ServiceEmpreinteArgon2()
@@ -306,6 +319,24 @@ def atelier() -> Atelier:
         "le temps d'une requête : l'ouvrir depuis une tâche de fond ou un script "
         "suppose d'employer `unite_de_travail()` explicitement."
     )
+
+
+def _roles_du_cabinet_servi() -> list[FicheDeRole]:
+    """La source de `roles.matrice_en_vigueur` (18 octobre 2026).
+
+    L'atelier de la requête, ou celui du processus en mémoire. ⚠️ Hors de toute requête
+    en PostgreSQL (un script, une tâche de fond), rien n'est lu et la matrice livrée
+    s'applique : aucun accès ne s'y résout, puisque l'accès se résout à la requête.
+    """
+    courant = _ATELIER_COURANT.get()
+    if courant is None:
+        if configuration().en_base:
+            return []
+        courant = _atelier_du_processus()
+    return courant.roles.tous()
+
+
+installer_la_source_des_roles(_roles_du_cabinet_servi)
 
 
 def session_de_travail() -> SessionSql | None:
@@ -823,6 +854,30 @@ def exiger_dossier(
                 "dans votre portefeuille : en demander l'affectation."
             ),
         )
+    _exiger_le_dossier_en_regle(permission, niu)
+
+
+#: Dit pourquoi un dossier ne se traite plus, ou `None` (18 octobre 2026). Posé par le
+#: contexte qui connaît les honoraires (`souscription`) : le transverse ne le connaît pas.
+_controle_de_reglement: Callable[[str], str | None] | None = None
+
+
+def installer_le_controle_de_reglement(controle: Callable[[str], str | None] | None) -> None:
+    global _controle_de_reglement
+    _controle_de_reglement = controle
+
+
+def _exiger_le_dossier_en_regle(permission: Permission, niu: str) -> None:
+    """Un geste de traitement sur un dossier qui n'est pas en règle rend 423.
+
+    ⚠️ Après le périmètre : un collaborateur hors portée apprend « introuvable », jamais
+    l'état des paiements d'un dossier qu'il ne voit pas.
+    """
+    if _controle_de_reglement is None or permission not in PERMISSIONS_DE_TRAITEMENT:
+        return
+    raison = _controle_de_reglement(niu)
+    if raison is not None:
+        raise HTTPException(status_code=423, detail=raison)
 
 
 def exiger_dossier_pour_l_un_de(
@@ -887,6 +942,7 @@ def exiger_dossier_pour_l_un_de(
                 "dans votre portefeuille : en demander l'affectation."
             ),
         )
+    _exiger_le_dossier_en_regle(detenue, niu)
 
 
 def _acces_sous_mandat(
@@ -980,7 +1036,7 @@ def _acces_sous_mandat(
     )
     return acces.model_copy(
         update={
-            "roles": sorted(couverts, key=lambda r: r.value),
+            "roles": sorted(couverts, key=str),
             "permissions": sorted(permissions_de(frozenset(couverts)), key=lambda p: p.value),
             # ⚠️ Voir l'en-tête : les dossiers du mandataire ne désignent rien chez le
             # mandant. Le mandat est ce qui borne.

@@ -36,6 +36,7 @@ from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
 __all__ = [
     "TableEcriture",
+    "TableImmobilisation",
     "TablePlanImputation",
     "TableRapprochementBancaire",
     "TableLettrage",
@@ -152,3 +153,20 @@ class TableLettrage(Cloisonne, Document, Base):
     exercice: Mapped[str] = mapped_column(String(16), nullable=False)
     compte: Mapped[str] = mapped_column(String(8), nullable=False)
     statut: Mapped[str] = mapped_column(String(8), nullable=False)
+
+
+class TableImmobilisation(Cloisonne, Document, Base):
+    """Une fiche du registre des immobilisations (17 octobre 2026).
+
+    Une fiche ne se supprime pas : un bien cédé, mis au rebut ou saisi par erreur se sort,
+    avec sa date et son motif, et reste au registre.
+    """
+
+    __tablename__ = "immobilisation"
+    __table_args__ = (Index("ix_immobilisation_categorie", "locataire", "entreprise", "categorie"),)
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entreprise: Mapped[str] = mapped_column(String(20), primary_key=True)
+    code: Mapped[str] = mapped_column(String(24), primary_key=True)
+    categorie: Mapped[str] = mapped_column(String(4), nullable=False)
+    mise_en_service: Mapped[date] = mapped_column(Date, nullable=False)

@@ -29,6 +29,13 @@ from app.contextes.collecte.adaptateurs.entrant.routes_facture_lue import (
 from app.contextes.collecte.adaptateurs.entrant.routes_http import (
     routeur as routeur_collecte,
 )
+from app.contextes.collecte.adaptateurs.entrant.routes_lecture_au_depot import (
+    lire_les_pieces_deposees,
+    travail_de_lecture_au_depot,
+)
+from app.contextes.collecte.adaptateurs.entrant.routes_lecture_au_depot import (
+    routeur as routeur_lecture_au_depot,
+)
 from app.contextes.comptabilite.adaptateurs.entrant.routes_annexes_dsf import (
     routeur as routeur_annexes_dsf,
 )
@@ -43,6 +50,9 @@ from app.contextes.comptabilite.adaptateurs.entrant.routes_fiche_ecriture import
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_http import (
     routeur as routeur_comptabilite,
+)
+from app.contextes.comptabilite.adaptateurs.entrant.routes_immobilisations import (
+    routeur as routeur_immobilisations,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_lettrage import (
     routeur as routeur_lettrage,
@@ -136,6 +146,9 @@ from app.contextes.transverse.adaptateurs.entrant.routes_http import (
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_mandats import (
     routeur as routeur_mandats,
+)
+from app.contextes.transverse.adaptateurs.entrant.routes_matrice_des_roles import (
+    routeur as routeur_matrice_des_roles,
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_orchestration import (
     routeur as routeur_orchestration,
@@ -519,6 +532,10 @@ def _inscrire_les_travaux_periodiques() -> None:
 
     inscrire_un_travail(travail_de_relance(), lambda: balayer(Atelier().boite))
 
+    # 18 octobre 2026 (point 13) : la lecture préparée des pièces que déposent les
+    # adhérents consentants. Elle appelle le réseau ; le dépôt, lui, ne l'attend jamais.
+    inscrire_un_travail(travail_de_lecture_au_depot(), lire_les_pieces_deposees)
+
     # ⚠️ **Et l'abonné qui referme la boucle.** Le balayage dépose un `RelanceDue`,
     # le relais le publie, celui-ci le poste. Sans cette ligne, les trois pièces
     # existent et l'événement part en « publié sans abonné » : compté, jamais remis,
@@ -688,6 +705,7 @@ def creer_application() -> FastAPI:
     # dit ce que la loi prévoit.
     application.include_router(routeur_transverse)
     application.include_router(routeur_comptes)
+    application.include_router(routeur_matrice_des_roles)
     application.include_router(routeur_second_facteur)
     application.include_router(routeur_mandats)
     # Le registre des services, sous le même préfixe : c'est une surface
@@ -703,6 +721,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_portefeuille)
     application.include_router(routeur_collecte)
     application.include_router(routeur_facture_lue)
+    application.include_router(routeur_lecture_au_depot)
     application.include_router(routeur_conformite)
     application.include_router(routeur_regles_du_cabinet)
     application.include_router(routeur_comptabilite)
@@ -714,6 +733,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_revue)
     application.include_router(routeur_cloture_mensuelle)
     application.include_router(routeur_lettrage)
+    application.include_router(routeur_immobilisations)
     application.include_router(routeur_fiche_ecriture)
     application.include_router(routeur_relance_des_pieces)
     application.include_router(routeur_accueil_de_l_adherent)
@@ -748,11 +768,23 @@ def creer_application() -> FastAPI:
     # les deux — un visiteur y entre sans compte et en ressort avec.
     application.include_router(routeur_souscription)
     # ⚠️ 14 octobre 2026 : les honoraires des adhérents, sous `/souscription/honoraires`.
+    # 18 octobre 2026 : le journal de caisse, par axe, pour la caisse et la direction.
+    from app.contextes.souscription.adaptateurs.entrant.routes_caisse import (
+        routeur as routeur_caisse,
+    )
     from app.contextes.souscription.adaptateurs.entrant.routes_honoraires import (
         routeur as routeur_honoraires,
     )
 
+    # 18 octobre 2026 : qui est en règle, la règle de dépassement, les grâces, les
+    # révisions de tarif. Monté ici, à côté des honoraires qu'il lit.
+    from app.contextes.souscription.adaptateurs.entrant.routes_reglement import (
+        routeur as routeur_reglement,
+    )
+
     application.include_router(routeur_honoraires)
+    application.include_router(routeur_reglement)
+    application.include_router(routeur_caisse)
     # 15 octobre 2026 : la cliente d'une création retrouve sa proforma et son reçu.
     from app.contextes.souscription.adaptateurs.entrant.routes_mes_documents import (
         routeur as routeur_mes_documents,

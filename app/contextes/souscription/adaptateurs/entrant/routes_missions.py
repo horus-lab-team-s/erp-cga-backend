@@ -12,7 +12,10 @@
 * `POST /missions/{id}/propositions/{rang}/decision` : retenir, modifier, écarter ;
 * `POST /missions/{id}/soumission` puis `/validation` (un autre, VALIDER_MISSION) ou
   `/renvoi` ;
-* `GET  /missions/{id}/livrable` : le PDF des seuls points retenus.
+* `GET  /missions/{id}/livrable` : le PDF des seuls points retenus ;
+* `GET  /missions/modeles-de-contrat` et `POST /missions/{id}/modele` : partir d'un
+  modèle de contrat, avec ou sans agent (18 octobre 2026, point 23) ;
+* `GET  /missions/{id}/livrable/word` : le projet de contrat en Word, à retoucher.
 
 Voir `domaine/missions.py` : l'agent propose, le juriste décide.
 ─────────────────────────────────────────────────────────────────────────────────
@@ -22,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile
@@ -49,12 +53,14 @@ from app.contextes.transverse.api import (
     Permission,
     atelier,
     exiger,
+    habilitations_actives,
+    permissions_de,
     session_de_travail,
 )
 from app.infrastructure.config import configuration
 from app.partage.en_tetes import disposition_en_ligne
 from app.partage.erreurs import message_lisible
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 from app.partage.magasin_de_fichiers import (
     FichierAbsent,
@@ -146,6 +152,132 @@ def lister(acces: AccesRequis) -> list[Mission]:
     return _depot().lister()
 
 
+# ── Les demandes ponctuelles payées, et qui reprend une mission (18 octobre 2026) ──
+
+
+class DemandeAOuvrir(BaseModel):
+    reference: str
+    client: str
+    courriel: str | None
+    telephone: str
+    message: str
+    payee_le: datetime | None
+    #: Le responsable commercial, qui a chiffré la demande.
+    responsable: str | None
+
+
+@routeur.get("/a-ouvrir", summary="Les demandes ponctuelles payées qui attendent leur mission")
+def demandes_a_ouvrir(acces: AccesRequis) -> list[DemandeAOuvrir]:
+    """⚠️ La référence ne se recopie plus à la main : une demande venue de la vitrine,
+    chiffrée et réglée, se présente ici jusqu'à ce qu'une mission la prenne."""
+    exiger(acces, Permission.TRAITER_MISSION)
+    from app.contextes.souscription.adaptateurs.entrant.sources import depot_dossiers
+
+    prises = {m.reference_commerciale for m in _depot().lister() if m.reference_commerciale}
+    return [
+        DemandeAOuvrir(
+            reference=d.reference,
+            client=d.demande.nom,
+            courriel=d.demande.courriel,
+            telephone=d.demande.telephone,
+            message=(d.demande.message or "")[:500],
+            payee_le=d.payee_le,
+            responsable=d.responsable,
+        )
+        for d in depot_dossiers().payes()
+        if d.service == "PONCTUEL" and d.reference not in prises
+    ]
+
+
+class ModeleLu(BaseModel):
+    code: str
+    libelle: str
+    cahier: str
+    articles: int
+
+
+@routeur.get("/modeles-de-contrat", summary="Les modèles de contrat du cabinet")
+def modeles_de_contrat(acces: AccesRequis) -> list[ModeleLu]:
+    exiger(acces, Permission.TRAITER_MISSION)
+    from app.contextes.souscription.domaine.modeles_de_contrat import MODELES_DE_CONTRAT
+
+    return [
+        ModeleLu(code=m.code, libelle=m.libelle, cahier=m.cahier, articles=len(m.articles))
+        for m in MODELES_DE_CONTRAT
+    ]
+
+
+class CandidatALaMission(BaseModel):
+    compte: str
+    nom: str
+
+
+def _candidats() -> list[CandidatALaMission]:
+    """Les comptes actifs qui instruisent les missions, à la matrice du cabinet."""
+    boutique = atelier()
+    jour = aujourd_hui()
+    candidats = []
+    for compte in boutique.comptes.lister():
+        actives = habilitations_actives(
+            boutique.habilitations.pour_compte(compte.identifiant), jour
+        )
+        if Permission.TRAITER_MISSION in permissions_de(h.role for h in actives):
+            candidats.append(CandidatALaMission(compte=compte.identifiant, nom=compte.nom_affiche))
+    return sorted(candidats, key=lambda c: c.nom)
+
+
+@routeur.get("/{identifiant}/candidats", summary="Qui peut reprendre la mission")
+def candidats_a_la_mission(acces: AccesRequis, identifiant: str) -> list[CandidatALaMission]:
+    exiger(acces, Permission.AFFECTER_DOSSIER)
+    _mission(identifiant)
+    return _candidats()
+
+
+class Reaffectation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    responsable: str = Field(min_length=1, max_length=64)
+    motif: str = Field(min_length=10, max_length=500)
+
+
+@routeur.post("/{identifiant}/reaffectation", summary="Confier la mission à un autre")
+def reaffecter(acces: AccesRequis, identifiant: str, demande: Reaffectation) -> Mission:
+    exiger(acces, Permission.AFFECTER_DOSSIER)
+    if demande.responsable not in {c.compte for c in _candidats()}:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{demande.responsable} n'instruit pas de missions : choisir un juriste.",
+        )
+    mission = _refus(lambda: _mission(identifiant).reaffecter(demande.responsable))
+    return _enregistrer(
+        mission,
+        action="reaffectee",
+        par=acces.compte,
+        apres={"responsable": demande.responsable, "motif": demande.motif},
+    )
+
+
+def _prevenir_le_client(mission: Mission, code: str) -> None:
+    """Le client apprend que sa demande est prise en charge, puis livrée. ⚠️ Ne lève
+    jamais : le geste du cabinet est fait, l'avis n'a pas à l'annuler."""
+    if not mission.client_courriel:
+        return
+    try:
+        atelier().notifications.envoyer(
+            code,
+            destinataire=mission.client_courriel,
+            contexte={
+                "client": mission.client,
+                "objet_de_la_demande": mission.objet,
+                "reference": mission.reference_commerciale or mission.identifiant,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("avis %s de %s non envoyé", code, mission.identifiant)
+
+
 @routeur.get("/{identifiant}", summary="Une mission, avec ses propositions")
 def lire(acces: AccesRequis, identifiant: str) -> Mission:
     # Le juriste, ou le second qui valide : il doit lire ce qu'il valide.
@@ -221,6 +353,16 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
                     "mission s'ouvre après le règlement."
                 ),
             )
+        # 18 octobre 2026 (point 22) : une demande, une mission. Une seconde ouverture
+        # ferait travailler deux juristes sur la même prestation payée une fois.
+        deja = next(
+            (m for m in _depot().lister() if m.reference_commerciale == dossier.reference), None
+        )
+        if deja is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"la demande {dossier.reference} a déjà sa mission : {deja.identifiant}.",
+            )
         client = client or dossier.demande.nom
         courriel = courriel or dossier.demande.courriel
     if not client:
@@ -243,7 +385,11 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
         dossier_niu=demande.dossier_niu if demande.type is TypeMission.DSF_CIBLEE else None,
         exercice=demande.exercice if demande.type is TypeMission.DSF_CIBLEE else None,
     )
-    return _enregistrer(mission, action="ouverte", par=acces.compte, apres={"type": mission.type})
+    ouverte = _enregistrer(
+        mission, action="ouverte", par=acces.compte, apres={"type": mission.type}
+    )
+    _prevenir_le_client(ouverte, "mission.ouverte")
+    return ouverte
 
 
 @routeur.post("/{identifiant}/document", summary="Verser le document à analyser")
@@ -361,6 +507,49 @@ def rediger(acces: AccesRequis, identifiant: str) -> Mission:
     )
 
 
+class ModeleChoisi(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    modele: str = Field(min_length=1, max_length=60)
+
+
+@routeur.post(
+    "/{identifiant}/modele",
+    summary="Partir d'un modèle : le canevas du cahier, et ses articles types à décider",
+)
+def partir_d_un_modele(acces: AccesRequis, identifiant: str, demande: ModeleChoisi) -> Mission:
+    """⚠️ Le cahier déjà écrit est gardé : le modèle ne l'écrase pas. Les articles types
+    arrivent EN ATTENTE, et un modèle ne se verse qu'une fois par mission."""
+    exiger(acces, Permission.TRAITER_MISSION)
+    from app.contextes.souscription.domaine.modeles_de_contrat import modele_de_contrat
+
+    modele = modele_de_contrat(demande.modele)
+    if modele is None:
+        raise HTTPException(status_code=404, detail=f"aucun modèle « {demande.modele} ».")
+    mission = _mission(identifiant)
+    if mission.type is not TypeMission.REDACTION_CONTRAT:
+        raise HTTPException(status_code=409, detail="un modèle de contrat sert une rédaction.")
+    if any(p.origine is OrigineProposition.MODELE for p in mission.propositions):
+        raise HTTPException(
+            status_code=409, detail="les articles d'un modèle sont déjà dans cette mission."
+        )
+    if not mission.cahier:
+        mission = _refus(
+            lambda: mission.ecrire_le_cahier(type_de_contrat=modele.libelle, cahier=modele.cahier)
+        )
+    articles = [
+        {"rubrique": Rubrique.ARTICLE, "titre": a.titre, "texte": a.texte}
+        for a in modele.articles
+    ]
+    mise_a_jour = _refus(lambda: mission.ajouter(articles, origine=OrigineProposition.MODELE))
+    return _enregistrer(
+        mise_a_jour,
+        action="modele_verse",
+        par=acces.compte,
+        apres={"modele": modele.code, "articles": len(articles)},
+    )
+
+
 class PropositionManuelle(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -433,7 +622,9 @@ def valider(acces: AccesRequis, identifiant: str) -> Mission:
     mission = _refus(
         lambda: _mission(identifiant).valider(par=acces.compte, a_l_instant=maintenant())
     )
-    return _enregistrer(mission, action="livree", par=acces.compte)
+    livree = _enregistrer(mission, action="livree", par=acces.compte)
+    _prevenir_le_client(livree, "mission.livree")
+    return livree
 
 
 class Renvoi(BaseModel):
@@ -457,9 +648,30 @@ def livrable(acces: AccesRequis, identifiant: str) -> Response:
     if not acces.detient(Permission.VALIDER_MISSION):
         exiger(acces, Permission.TRAITER_MISSION)
     mission = _mission(identifiant)
-    noms = {c.identifiant: c.nom_affiche for c in atelier().comptes.lister()}
     return Response(
-        content=rendre_le_livrable(mission, noms=noms),
+        content=rendre_le_livrable(mission),
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{mission.identifiant}.pdf"'},
+    )
+
+
+@routeur.get(
+    "/{identifiant}/livrable/word",
+    summary="Le projet de contrat en Word : les articles retenus, à retoucher avec le client",
+)
+def livrable_word(acces: AccesRequis, identifiant: str) -> Response:
+    if not acces.detient(Permission.VALIDER_MISSION):
+        exiger(acces, Permission.TRAITER_MISSION)
+    from app.contextes.souscription.adaptateurs.sortant.document_mission_word import (
+        TYPE_WORD,
+        rendre_le_contrat_en_word,
+    )
+
+    mission = _mission(identifiant)
+    if mission.type is not TypeMission.REDACTION_CONTRAT:
+        raise HTTPException(status_code=409, detail="seul un projet de contrat part en Word.")
+    return Response(
+        content=rendre_le_contrat_en_word(mission),
+        media_type=TYPE_WORD,
+        headers={"Content-Disposition": f'attachment; filename="{mission.identifiant}.docx"'},
     )
