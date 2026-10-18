@@ -167,6 +167,10 @@ class PreuveEnvoyee(BaseModel):
     verifiee_par: str | None = None
     #: 18 octobre 2026 (point 7) : le montant porté par la quittance, relevé au verdict.
     montant_quittance: Decimal | None = None
+    #: 18 octobre 2026 : l'écriture de paiement déjà passée pour cette quittance
+    #: (« BQ n° 12 »), ou `None`. Une quittance validée reste offerte à son écriture
+    #: tant qu'elle n'en a pas ; ensuite, elle ne s'écrit pas deux fois.
+    ecriture_de_paiement: str | None = None
 
 
 class FondsRecusParLeCabinet(BaseModel):

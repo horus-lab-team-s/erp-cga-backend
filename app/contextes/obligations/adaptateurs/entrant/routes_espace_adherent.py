@@ -137,6 +137,28 @@ def _fonds_recus(niu: str) -> list[FondsRecusParLeCabinet]:
     ]
 
 
+def ecritures_de_paiement(niu: str) -> dict[str, str]:
+    """Pièce → écriture qui la cite (« BQ n° 12 »), sur tous les exercices du dossier.
+
+    18 octobre 2026 (point 7) : une quittance validée propose son écriture de paiement ;
+    celle-ci cite la quittance en pièce justificative. C'est ce lien qui dit qu'elle est
+    déjà passée, sans second registre.
+    """
+    from app.contextes.obligations.adaptateurs.entrant.routes_http import depot_ecritures
+
+    try:
+        exercices = entreprise_du_portefeuille(niu).exercices
+    except HTTPException:
+        return {}
+    depot = depot_ecritures(niu)
+    trouvees: dict[str, str] = {}
+    for exercice in exercices:
+        for e in depot.lister(exercice.libelle):
+            if e.piece_justificative:
+                trouvees.setdefault(e.piece_justificative, f"{e.journal} n° {e.numero}")
+    return trouvees
+
+
 def preuves_du_dossier(niu: str | None) -> list[PreuveEnvoyee]:
     """Les preuves d'un dossier (ou de tous, `None`), chacune avec son verdict s'il existe.
 
@@ -173,6 +195,11 @@ def preuves_du_dossier(niu: str | None) -> list[PreuveEnvoyee]:
                 ),
             )
         )
+    if niu is not None and any(p.verdict is VerdictDeLaPreuve.VALIDEE for p in preuves):
+        ecrites = ecritures_de_paiement(niu)
+        preuves = [
+            p.model_copy(update={"ecriture_de_paiement": ecrites.get(p.piece)}) for p in preuves
+        ]
     return preuves
 
 
@@ -694,6 +721,13 @@ def proposer_l_ecriture_de_paiement(
         raise HTTPException(
             status_code=409,
             detail="Seule une quittance validée propose son écriture : la vérifier d'abord.",
+        )
+    if preuve.ecriture_de_paiement:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"L'écriture de cette quittance est déjà passée : {preuve.ecriture_de_paiement}."
+            ),
         )
     compte = next(
         (c for code, c in COMPTE_DE_L_OBLIGATION.items() if code_obligation.startswith(code)),

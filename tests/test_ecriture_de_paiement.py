@@ -63,3 +63,29 @@ def test_sans_montant_releve_rien_ne_se_devine():
 
     assert sans.status_code == 422 and "montant" in sans.text
     assert avec.status_code == 200, avec.text
+
+
+def test_une_quittance_ne_s_ecrit_pas_deux_fois():
+    """18 octobre 2026 : une quittance validée reste offerte à son écriture tant qu'elle
+    n'en a pas. Passée, l'écriture se lit sur la preuve, et la proposition est refusée."""
+    verdicts._quittance_envoyee()
+    reviseur = echeances._client(echeances.REVISEUR)
+    reviseur.post(
+        verdicts.VERDICT,
+        json={**verdicts.QUITTANCE, "verdict": "VALIDEE", "montant_quittance": "84000"},
+    )
+    proposee = reviseur.get(PROPOSITION, params=CLE).json()
+    comptable = echeances._client("l.fotso@cga-brcg.cm")
+    passee = comptable.post(f"/comptabilite/dossiers/{echeances.BATIMENT}/ecritures", json=proposee)
+    assert passee.status_code in (200, 201), passee.text
+
+    seconde = reviseur.get(PROPOSITION, params=CLE)
+    assert seconde.status_code == 409 and "déjà passée" in seconde.text
+    (echeance,) = [
+        e
+        for e in reviseur.get(f"/obligations/dossiers/{echeances.BATIMENT}/mes-echeances").json()[
+            "echeances"
+        ]
+        if e["preuve"] and e["preuve"]["piece"] == verdicts.QUITTANCE["piece"]
+    ]
+    assert echeance["preuve"]["ecriture_de_paiement"].endswith(f"n° {passee.json()['numero']}")
