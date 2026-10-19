@@ -125,11 +125,13 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "client": "Briqueterie du Wouri",
         "objet_de_la_demande": "Analyse du bail commercial",
         "reference": "DC-2026-0042",
+        "lien": "https://www.cga-brcg.cm/fr/ma-mission/M-0001?s=abc",
     },
     "mission.livree": {
         "client": "Briqueterie du Wouri",
         "objet_de_la_demande": "Analyse du bail commercial",
         "reference": "DC-2026-0042",
+        "lien": "https://www.cga-brcg.cm/fr/ma-mission/M-0001?s=abc",
     },
     # Site d'appel : `vitrine/.../routes_recrutement._postuler` (19 octobre 2026).
     "recrutement.accuse": {"nom": "Ngo Biyong Claire", "poste": "Comptable confirmé"},

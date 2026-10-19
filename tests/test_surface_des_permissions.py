@@ -79,6 +79,13 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Le visiteur joint ses pièces à la demande qu'il vient de déposer : pas de "
         "compte non plus, mais le jeton de l'accusé, propre à cette demande (point 22)."
     ),
+    ("GET", "/missions/{identifiant}/suivi"): (
+        "Le client suit sa prestation par le lien reçu, sans compte : le sceau est propre "
+        "à la mission et à cet usage (point 22)."
+    ),
+    ("GET", "/missions/{identifiant}/suivi/livrable"): (
+        "Le livrable validé, par le même lien ; rien avant la validation par un second."
+    ),
     ("POST", "/acquisition/devis/{reference}/rappel"): (
         "Le prospect d'un devis au prix à confirmer demande qu'on l'appelle : il "
         "n'a pas de compte. La référence du devis, longue et non devinable, le "

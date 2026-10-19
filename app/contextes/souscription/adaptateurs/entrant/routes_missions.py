@@ -39,7 +39,9 @@ from app.contextes.souscription.adaptateurs.sortant.depots_missions import (
 from app.contextes.souscription.adaptateurs.sortant.document_mission import rendre_le_livrable
 from app.contextes.souscription.domaine.dossier_commercial import EtatDossier
 from app.contextes.souscription.domaine.missions import (
+    LIBELLES_TYPE,
     DecisionProposition,
+    EtatMission,
     Gravite,
     LectureAutomatique,
     Mission,
@@ -67,6 +69,7 @@ from app.partage.magasin_de_fichiers import (
     MagasinFichiersLocal,
     detecter_le_type,
 )
+from app.partage.sceau import SceauInvalide, exiger_le_sceau, sceller
 
 routeur = APIRouter(prefix="/missions", tags=["Prestations ponctuelles"])
 
@@ -257,6 +260,21 @@ def reaffecter(acces: AccesRequis, identifiant: str, demande: Reaffectation) -> 
     )
 
 
+#: L'usage du sceau qui ouvre le suivi d'une mission au client. Voir `partage/sceau`.
+_USAGE_SUIVI = "suivi-de-mission"
+
+
+def _secret_du_suivi() -> str:
+    return configuration().cle_chiffrement or "secret-de-developpement"
+
+
+def lien_de_suivi(mission: Mission) -> str:
+    """La page où le client suit sa demande, puis ouvre son livrable (19 octobre 2026)."""
+    sceau = sceller(mission.identifiant, secret=_secret_du_suivi(), usage=_USAGE_SUIVI)
+    base = configuration().adresse_publique_vitrine.rstrip("/")
+    return f"{base}/fr/ma-mission/{mission.identifiant}?s={sceau}"
+
+
 def _prevenir_le_client(mission: Mission, code: str) -> None:
     """Le client apprend que sa demande est prise en charge, puis livrée. ⚠️ Ne lève
     jamais : le geste du cabinet est fait, l'avis n'a pas à l'annuler."""
@@ -270,12 +288,81 @@ def _prevenir_le_client(mission: Mission, code: str) -> None:
                 "client": mission.client,
                 "objet_de_la_demande": mission.objet,
                 "reference": mission.reference_commerciale or mission.identifiant,
+                # 19 octobre 2026 (point 22) : le suivi, puis le livrable, par ce lien.
+                "lien": lien_de_suivi(mission),
             },
         )
     except Exception:  # noqa: BLE001
         import logging
 
         logging.getLogger(__name__).exception("avis %s de %s non envoyé", code, mission.identifiant)
+
+
+# ══ Ce que le client voit, sans compte (19 octobre 2026, point 22) ═══════════
+
+
+class SuiviDeMaMission(BaseModel):
+    """Ce que le client lit de sa demande : l'étape, et rien du travail interne.
+
+    ⚠️ Ni les propositions, ni le cahier, ni le nom du juriste : le client sait que le
+    cabinet instruit, puis qu'un second relit, puis que c'est livré.
+    """
+
+    objet: str
+    prestation: str
+    etat: EtatMission
+    ouverte_le: datetime
+    livree_le: datetime | None
+    livrable: bool
+
+
+def _mission_scellee(identifiant: str, s: str) -> Mission:
+    """La mission derrière un lien signé, ou 404 : le même refus pour un sceau faux et
+    une mission inconnue, sans quoi les identifiants s'énuméreraient."""
+    try:
+        exiger_le_sceau(identifiant, s, secret=_secret_du_suivi(), usage=_USAGE_SUIVI)
+        return _mission(identifiant)
+    except (SceauInvalide, HTTPException) as refus:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Ce lien ne s'ouvre pas. Vérifiez que vous l'avez copié en entier, "
+                "ou écrivez au cabinet."
+            ),
+        ) from refus
+
+
+@routeur.get("/{identifiant}/suivi", summary="Le suivi d'une demande, par le lien reçu (public)")
+def suivre_ma_mission(identifiant: str, s: str = "") -> SuiviDeMaMission:
+    mission = _mission_scellee(identifiant, s)
+    return SuiviDeMaMission(
+        objet=mission.objet,
+        prestation=LIBELLES_TYPE.get(mission.type, "Prestation ponctuelle"),
+        etat=mission.etat,
+        ouverte_le=mission.ouverte_le,
+        livree_le=mission.validee_le if mission.etat is EtatMission.LIVREE else None,
+        livrable=mission.etat is EtatMission.LIVREE,
+    )
+
+
+@routeur.get(
+    "/{identifiant}/suivi/livrable",
+    summary="Le livrable, par le lien reçu (public), une fois validé",
+    responses={409: {"description": "Pas encore livré"}},
+)
+def mon_livrable(identifiant: str, s: str = "") -> Response:
+    """⚠️ Seulement une fois la mission LIVRÉE, c'est-à-dire validée par un second : un
+    livrable en cours de relecture n'est pas un avis du cabinet."""
+    mission = _mission_scellee(identifiant, s)
+    if mission.etat is not EtatMission.LIVREE:
+        raise HTTPException(status_code=409, detail="Le livrable n'est pas encore validé.")
+    return Response(
+        content=rendre_le_livrable(mission),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": disposition_en_ligne(f"livrable-{mission.identifiant}.pdf")
+        },
+    )
 
 
 @routeur.get("/{identifiant}", summary="Une mission, avec ses propositions")

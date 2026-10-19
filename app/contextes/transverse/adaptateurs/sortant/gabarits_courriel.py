@@ -973,6 +973,12 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Un juriste du cabinet l'instruit ; un second relit avant que rien ne vous "
                 "soit remis. Vous serez prévenu dès que le livrable sera prêt.",
             ),
+            # 19 octobre 2026 (point 22) : où en est la demande, sans appeler.
+            action=("Suivre ma demande", "{lien}"),
+            avertissement=(
+                "Ce bouton vous est personnel et reste valable pour cette demande : ne le "
+                "transférez pas. Le cabinet ne vous demandera jamais de mot de passe."
+            ),
         ),
         Gabarit(
             code="mission.livree",
@@ -983,6 +989,11 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Le travail sur votre demande <strong>{objet_de_la_demande}</strong> est "
                 "terminé et validé par le cabinet.",
                 "Votre interlocuteur vous le remet et reste disponible pour en parler.",
+            ),
+            action=("Ouvrir mon livrable", "{lien}"),
+            avertissement=(
+                "Ce bouton vous est personnel et reste valable pour cette demande : ne le "
+                "transférez pas. Le cabinet ne vous demandera jamais de mot de passe."
             ),
         ),
         # 19 octobre 2026 (point 25) : le candidat savait sa candidature reçue à l'écran,
