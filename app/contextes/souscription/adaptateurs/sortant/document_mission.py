@@ -32,6 +32,7 @@ from app.contextes.souscription.domaine.missions import (
     TypeMission,
 )
 from app.partage.horloge import a_douala
+from app.partage.marque.papier import HAUTEUR_DU_BANDEAU, bandeau_de_la_maison
 
 __all__ = ["rendre_le_livrable"]
 
@@ -103,7 +104,7 @@ def rendre_le_livrable(mission: Mission) -> bytes:
         pagesize=A4,
         leftMargin=marge,
         rightMargin=marge,
-        topMargin=28 * mm,
+        topMargin=28 * mm + HAUTEUR_DU_BANDEAU,
         bottomMargin=20 * mm,
         title=f"{LIBELLES_TYPE[mission.type]} · {mission.client} · {mission.identifiant}",
         author="CGA Broad Range Consulting Group",
@@ -113,7 +114,8 @@ def rendre_le_livrable(mission: Mission) -> bytes:
 
     def habiller(toile, doc) -> None:
         toile.saveState()
-        haut = A4[1] - 13 * mm
+        # 19 octobre 2026 (points 19-20) : le papier à en-tête du cabinet, puis le titre.
+        haut = bandeau_de_la_maison(toile, largeur=A4[0], hauteur=A4[1], marge=marge) - 6 * mm
         toile.setFillColor(_INDIGO)
         toile.setFont("Helvetica-Bold", 12)
         toile.drawString(marge, haut, f"{LIBELLES_TYPE[mission.type]} · {mission.client}")

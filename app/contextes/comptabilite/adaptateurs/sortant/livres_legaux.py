@@ -39,6 +39,7 @@ from app.contextes.comptabilite.domaine.projections import balance, grand_livre
 from app.partage.formats import ESPACE_FINE
 from app.partage.formats import montant as _montant_ecran
 from app.partage.horloge import a_douala
+from app.partage.marque.papier import HAUTEUR_DU_BANDEAU, bandeau_de_la_maison
 
 __all__ = ["Livre", "EnteteDuLivre", "rendre_le_livre"]
 
@@ -353,7 +354,7 @@ def rendre_le_livre(
         pagesize=taille,
         leftMargin=marge,
         rightMargin=marge,
-        topMargin=26 * mm,
+        topMargin=26 * mm + HAUTEUR_DU_BANDEAU,
         bottomMargin=16 * mm,
         title=f"{TITRES[livre]} · {entete.denomination} · {entete.exercice}",
         author="CGA Broad Range Consulting Group",
@@ -363,7 +364,9 @@ def rendre_le_livre(
 
     def habiller(toile, doc) -> None:
         toile.saveState()
-        haut = taille[1] - 12 * mm
+        # 19 octobre 2026 (points 19-20) : le papier à en-tête du cabinet, puis le titre.
+        bas = bandeau_de_la_maison(toile, largeur=taille[0], hauteur=taille[1], marge=marge)
+        haut = bas - 6 * mm
         toile.setFillColor(_INDIGO)
         toile.setFont("Helvetica-Bold", 12)
         toile.drawString(marge, haut, TITRES[livre])

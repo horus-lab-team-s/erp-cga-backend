@@ -22,6 +22,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from app.contextes.social.domaine.entites import Bulletin
 from app.partage.formats import ESPACE_FINE, MOIS
 from app.partage.formats import montant as _montant_ecran
+from app.partage.marque.papier import HAUTEUR_DU_BANDEAU, bandeau_de_la_maison
 
 __all__ = ["rendre_le_bulletin"]
 
@@ -96,7 +97,7 @@ def rendre_le_bulletin(
         pagesize=A4,
         leftMargin=marge,
         rightMargin=marge,
-        topMargin=15 * mm,
+        topMargin=15 * mm + HAUTEUR_DU_BANDEAU,
         bottomMargin=18 * mm,
         title=f"Bulletin de paie · {salarie} · {periode}",
         author="CGA Broad Range Consulting Group",
@@ -196,5 +197,9 @@ def rendre_le_bulletin(
             _PETIT,
         ),
     ]
-    document.build(contenu)
+    def habiller(toile, doc) -> None:
+        # 19 octobre 2026 (points 19-20) : le papier à en-tête du cabinet, sur chaque page.
+        bandeau_de_la_maison(toile, largeur=A4[0], hauteur=A4[1], marge=marge)
+
+    document.build(contenu, onFirstPage=habiller, onLaterPages=habiller)
     return tampon.getvalue()

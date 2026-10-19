@@ -38,6 +38,7 @@ from app.contextes.cloture.domaine.declaration_dsf import DeclarationDSF, EtatDS
 from app.partage.formats import ESPACE_FINE
 from app.partage.formats import montant as _montant_ecran
 from app.partage.horloge import a_douala
+from app.partage.marque.papier import HAUTEUR_DU_BANDEAU, bandeau_de_la_maison
 
 __all__ = ["rendre_la_dsf"]
 
@@ -151,7 +152,7 @@ def rendre_la_dsf(
         pagesize=A4,
         leftMargin=marge,
         rightMargin=marge,
-        topMargin=30 * mm,
+        topMargin=30 * mm + HAUTEUR_DU_BANDEAU,
         bottomMargin=22 * mm,
         title=f"DSF {dsf.exercice} · {dsf.denomination} · version {dsf.version}",
         author="CGA Broad Range Consulting Group",
@@ -161,7 +162,8 @@ def rendre_la_dsf(
 
     def habiller(toile, doc) -> None:
         toile.saveState()
-        haut = A4[1] - 13 * mm
+        # 19 octobre 2026 (points 19-20) : le papier à en-tête du cabinet, puis le titre.
+        haut = bandeau_de_la_maison(toile, largeur=A4[0], hauteur=A4[1], marge=marge) - 6 * mm
         toile.setFillColor(_INDIGO)
         toile.setFont("Helvetica-Bold", 12)
         toile.drawString(
