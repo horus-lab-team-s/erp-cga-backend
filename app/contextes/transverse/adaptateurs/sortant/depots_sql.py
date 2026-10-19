@@ -111,6 +111,7 @@ def _vers_compte(ligne: TableCompte, coffre: Coffre) -> Compte:
         telephone=ligne.telephone,
         empreinte_mot_de_passe=ligne.empreinte_mot_de_passe,
         secret_totp=coffre.ouvrir(ligne.secret_totp),
+        secret_totp_en_attente=coffre.ouvrir(ligne.secret_totp_en_attente),
         etat=ligne.etat,
         cree_le=ligne.cree_le,
         tentatives_echouees=ligne.tentatives_echouees,
@@ -255,6 +256,7 @@ class DepotComptesSql:
         ligne.telephone = compte.telephone
         ligne.empreinte_mot_de_passe = compte.empreinte_mot_de_passe
         ligne.secret_totp = self._coffre.sceller(compte.secret_totp)
+        ligne.secret_totp_en_attente = self._coffre.sceller(compte.secret_totp_en_attente)
         ligne.etat = compte.etat.value
         ligne.cree_le = compte.cree_le
         ligne.tentatives_echouees = compte.tentatives_echouees

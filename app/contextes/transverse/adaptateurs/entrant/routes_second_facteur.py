@@ -29,6 +29,7 @@ from app.contextes.transverse.api import (
     ReinitialisationRefusee,
     SecondFacteurAbsent,
     SecondFacteurDejaActif,
+    activer_second_facteur,
     confirmer_enrolement,
     emettre_jeton,
     engendrer_secret_totp,
@@ -127,20 +128,15 @@ def enroler(acces: AccesRequis) -> Enrolement:
         )
     except SecondFacteurDejaActif as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
-    # Le titulaire est prévenu : un enrôlement fait par un tiers qui connaît le mot
-    # de passe se voit ainsi le jour même, et non au premier dépôt suspect.
-    boutique.notifications.envoyer(
-        "compte.second_facteur_enrole",
-        destinataire=compte.courriel,
-        contexte={"prenom": compte.appellation},
-    )
+    # Le titulaire est prévenu à l'ACTIVATION (19 octobre 2026) : c'est elle qui change
+    # le facteur. Voir `activer`.
     return Enrolement(
         secret=secret,
         uri=uri_provisionnement(secret, compte=compte.courriel, emetteur="CGA Broad Range"),
         consigne=(
-            "Scanner ce code dans une application d'authentification, puis vérifier "
-            "que l'heure du téléphone est à l'heure : un décalage de plus d'une "
-            "minute invalide tous les codes."
+            "Scanner ce code dans une application d'authentification, puis saisir le "
+            "premier code qu'elle affiche : la clé ne sert qu'une fois ce code accepté. "
+            "Vérifier aussi que l'heure du téléphone est à l'heure."
         ),
     )
 
@@ -187,19 +183,70 @@ def confirmer_l_enrolement(
         ) from refus
     except (SecondFacteurDejaActif, PreuveDeBoiteRequise) as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
-    boutique.notifications.envoyer(
-        "compte.second_facteur_enrole",
-        destinataire=compte.courriel,
-        contexte={"prenom": compte.appellation},
-    )
     return Enrolement(
         secret=secret,
         uri=uri_provisionnement(secret, compte=compte.courriel, emetteur="CGA Broad Range"),
         consigne=(
-            "Scanner ce code dans une application d'authentification, puis vérifier que "
-            "l'heure du téléphone est à l'heure : un décalage de plus d'une minute "
-            "invalide tous les codes."
+            "Scanner ce code dans une application d'authentification, puis saisir le "
+            "premier code qu'elle affiche : la clé ne sert qu'une fois ce code accepté. "
+            "Vérifier aussi que l'heure du téléphone est à l'heure."
         ),
+    )
+
+
+class DemandeActivation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=6, max_length=8)
+
+
+@routeur.post(
+    "/second-facteur/activation",
+    summary="Activer la clé affichée par un premier code",
+    description=(
+        "La clé rendue par l'enrôlement **attend** : elle ne protège ni ne bloque rien "
+        "tant qu'un premier code juste ne l'a pas prouvée. Ce code active le second "
+        "facteur, remplace l'ancien s'il y en avait un, et renforce la session."
+    ),
+    responses={
+        400: {"description": "Aucune clé en attente"},
+        401: {"description": "Code refusé"},
+    },
+)
+def activer(acces: AccesRequis, demande: DemandeActivation) -> Acces:
+    boutique = atelier()
+    instant = maintenant()
+    compte = boutique.comptes.lire(acces.compte)
+    session = boutique.sessions.lire(acces.session)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Session introuvable.")
+    try:
+        actif, renforcee = activer_second_facteur(
+            session,
+            compte,
+            demande.code.replace(" ", ""),
+            sessions=boutique.sessions,
+            comptes=boutique.comptes,
+            journal=boutique.journal,
+            a_l_instant=instant,
+        )
+    except SecondFacteurAbsent as absence:
+        raise HTTPException(status_code=400, detail=str(absence)) from absence
+    except CodeInvalide as refus:
+        raise HTTPException(status_code=401, detail=str(refus)) from refus
+    # Le titulaire est prévenu : un enrôlement fait par un tiers se voit le jour même,
+    # et non au premier dépôt suspect.
+    boutique.notifications.envoyer(
+        "compte.second_facteur_enrole",
+        destinataire=actif.courriel,
+        contexte={"prenom": actif.appellation},
+    )
+    return resoudre_acces(
+        actif,
+        renforcee,
+        boutique.habilitations.pour_compte(actif.identifiant),
+        jour_a_douala(instant),
+        instant,
     )
 
 

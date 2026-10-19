@@ -121,6 +121,9 @@ class TableCompte(Cloisonne, Base):
     #: compris, soit 83 caractères aujourd'hui. La marge couvre un changement
     #: d'algorithme sans migration. Voir `coffre.py`.
     secret_totp: Mapped[str | None] = mapped_column(String(255))
+    #: La clé montrée, pas encore prouvée par un premier code (19 octobre 2026). Scellée
+    #: comme `secret_totp`.
+    secret_totp_en_attente: Mapped[str | None] = mapped_column(String(255))
 
     etat: Mapped[str] = mapped_column(String(32), nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)

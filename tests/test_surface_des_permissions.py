@@ -113,6 +113,10 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "le jeton reçu à l'adresse du compte est la preuve : il est refusé s'il "
         "appartient à un autre compte (pas 62)."
     ),
+    ("POST", "/transverse/second-facteur/activation"): (
+        "Activer sa propre clé en attente : la session désigne le titulaire, et le code "
+        "prouve que la clé est dans son téléphone."
+    ),
     ("POST", "/transverse/mot-de-passe/oubli"): (
         "Demandée par quelqu'un qui, par définition, ne peut pas se connecter."
     ),

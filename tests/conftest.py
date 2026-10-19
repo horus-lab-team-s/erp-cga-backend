@@ -412,7 +412,16 @@ def enroler_par_le_courriel(client) -> str:
     jeton = dernier.contexte["lien"].split("jeton=", 1)[1]
     confirmation = client.post("/transverse/second-facteur/confirmation", json={"jeton": jeton})
     assert confirmation.status_code == 200, confirmation.text
-    return confirmation.json()["secret"]
+    secret = confirmation.json()["secret"]
+    # ⚠️ 19 octobre 2026 : la clé attend son premier code. Le titulaire le saisit.
+    from app.contextes.transverse.api import code_attendu
+    from app.partage.horloge import maintenant
+
+    activation = client.post(
+        "/transverse/second-facteur/activation", json={"code": code_attendu(secret, maintenant())}
+    )
+    assert activation.status_code == 200, activation.text
+    return secret
 
 
 @pytest.fixture

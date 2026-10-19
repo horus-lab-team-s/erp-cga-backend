@@ -217,6 +217,16 @@ class Compte(BaseModel):
     #: l'entité.
     secret_totp: str | None = Field(default=None, exclude=True)
 
+    #: La clé montrée au titulaire mais pas encore prouvée (19 octobre 2026).
+    #:
+    #: ⚠️ Une clé affichée n'était pas une clé enregistrée sur le téléphone. Le compte
+    #: s'enrôlait dès l'affichage : une page fermée trop tôt, et le titulaire se
+    #: retrouvait avec un second facteur que personne ne connaissait, bloqué jusqu'à
+    #: la réinitialisation par un administrateur. La clé attend donc ici, sans rien
+    #: protéger ni rien bloquer, jusqu'au premier code juste. Mêmes précautions que
+    #: `secret_totp` : exclue, scellée en base.
+    secret_totp_en_attente: str | None = Field(default=None, exclude=True)
+
     tentatives_echouees: int = Field(default=0, ge=0)
     verrouille_jusqu_a: datetime | None = None
     derniere_connexion: datetime | None = None
@@ -333,9 +343,21 @@ class Compte(BaseModel):
         """
         return self.model_copy(update={"secret_totp": secret})
 
+    def avec_secret_en_attente(self, secret: str) -> Compte:
+        """Pose une clé à prouver, sans toucher au facteur actuel (19 octobre 2026)."""
+        return self.model_copy(update={"secret_totp_en_attente": secret})
+
+    def activer_le_secret_en_attente(self) -> Compte:
+        """La clé en attente devient le second facteur ; l'ancien, s'il y en avait un, tombe."""
+        if self.secret_totp_en_attente is None:
+            raise ValueError("aucune clé en attente")
+        return self.model_copy(
+            update={"secret_totp": self.secret_totp_en_attente, "secret_totp_en_attente": None}
+        )
+
     def sans_second_facteur(self) -> Compte:
         """Retire le second facteur. Réservé à la réinitialisation par un tiers (pas 60)."""
-        return self.model_copy(update={"secret_totp": None})
+        return self.model_copy(update={"secret_totp": None, "secret_totp_en_attente": None})
 
     def suspendre(self) -> Compte:
         return self.model_copy(update={"etat": EtatCompte.SUSPENDU})
