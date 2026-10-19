@@ -155,6 +155,40 @@ class TestParLesRoutes:
             next(o for o in liste if o["offre"]["identifiant"] == identifiant)["candidatures"] == 1
         )
 
+    def test_le_candidat_recoit_un_accuse_de_reception(self, plateforme):
+        """⚠️ 19 octobre 2026 (point 25) : rien ne partait avant la réponse du cabinet."""
+        from app.contextes.transverse.adaptateurs.entrant.dependances import (
+            service_de_notification,
+        )
+
+        client = plateforme
+        identifiant = self._publiee(client)
+        reponse = client.post(
+            f"/vitrine/offres/{identifiant}/candidatures",
+            data={
+                "nom": "Ngo Biyong Claire",
+                "telephone": "699112233",
+                "courriel": "claire.ngo@exemple.cm",
+                "message": "Motivée.",
+            },
+            files={"cv": ("cv-claire.pdf", PDF, "application/pdf")},
+        )
+        assert reponse.status_code == 201, reponse.text
+        assert "accusé" in reponse.json()["message"]
+        (accuse, *_) = service_de_notification().derniers("recrutement.accuse")
+        assert accuse.destinataire == "claire.ngo@exemple.cm"
+        assert accuse.contexte["poste"] == "Comptable confirmé"
+
+    def test_sans_adresse_aucun_accuse_ne_part(self, plateforme):
+        from app.contextes.transverse.adaptateurs.entrant.dependances import (
+            service_de_notification,
+        )
+
+        client = plateforme
+        avant = len(service_de_notification().derniers("recrutement.accuse"))
+        assert self._postuler(client, self._publiee(client)).status_code == 201
+        assert len(service_de_notification().derniers("recrutement.accuse")) == avant
+
     def test_close_elle_quitte_le_site_et_ne_recoit_plus_rien(self, plateforme):
         client = plateforme
         identifiant = self._publiee(client)

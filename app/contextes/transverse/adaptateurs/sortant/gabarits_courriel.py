@@ -985,6 +985,22 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Votre interlocuteur vous le remet et reste disponible pour en parler.",
             ),
         ),
+        # 19 octobre 2026 (point 25) : le candidat savait sa candidature reçue à l'écran,
+        # puis n'avait plus rien jusqu'à la réponse. L'accusé part au dépôt.
+        Gabarit(
+            code="recrutement.accuse",
+            objet="Votre candidature : {poste}",
+            titre="Candidature bien reçue",
+            paragraphes=(
+                "Bonjour {nom},",
+                "Le cabinet a bien reçu votre candidature au poste de "
+                "<strong>{poste}</strong>, avec votre CV.",
+                "Elle sera lue par la personne chargée du recrutement. Le cabinet vous "
+                "répond, que votre profil soit retenu ou non.",
+                "Vous n'avez rien à renvoyer : un second dépôt pour la même offre n'est "
+                "pas nécessaire.",
+            ),
+        ),
         Gabarit(
             code="recrutement.reponse",
             objet="{objet}",

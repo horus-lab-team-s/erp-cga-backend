@@ -131,6 +131,8 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "objet_de_la_demande": "Analyse du bail commercial",
         "reference": "DC-2026-0042",
     },
+    # Site d'appel : `vitrine/.../routes_recrutement._postuler` (19 octobre 2026).
+    "recrutement.accuse": {"nom": "Ngo Biyong Claire", "poste": "Comptable confirmé"},
     "recrutement.reponse": {
         # Recopié de `routes_recrutement.repondre` : le texte relu, en paragraphes.
         "objet": "Entretien pour le poste de Comptable confirmé",

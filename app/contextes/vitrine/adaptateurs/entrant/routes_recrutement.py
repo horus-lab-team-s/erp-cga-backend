@@ -173,8 +173,22 @@ def _postuler(identifiant, nom, telephone, courriel, message, contenu, nom_du_fi
         raise HTTPException(status_code=422, detail=invalide.errors()[0]["msg"]) from invalide
     _magasin().deposer(empreinte, contenu, type_mime="application/pdf")
     candidatures.enregistrer(candidature)
+    # 19 octobre 2026 (point 25) : l'accusé de réception part de lui-même, si le
+    # candidat a laissé une adresse. Un échec d'envoi ne défait pas la candidature.
+    if candidature.courriel:
+        atelier().notifications.envoyer(
+            "recrutement.accuse",
+            destinataire=candidature.courriel,
+            contexte={"nom": candidature.nom, "poste": offre.intitule},
+        )
     return AccuseDeCandidature(
-        recue=True, message="Candidature reçue : le cabinet vous recontactera."
+        recue=True,
+        message=(
+            "Candidature reçue : un accusé vous est envoyé par courriel, et le cabinet "
+            "vous recontactera."
+            if candidature.courriel
+            else "Candidature reçue : le cabinet vous recontactera."
+        ),
     )
 
 
