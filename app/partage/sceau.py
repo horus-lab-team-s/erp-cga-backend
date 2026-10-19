@@ -35,11 +35,25 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-__all__ = ["SceauInvalide", "exiger_le_sceau", "sceller", "valide"]
+__all__ = ["SceauInvalide", "cle_d_usage", "exiger_le_sceau", "sceller", "valide"]
 
 
 class SceauInvalide(ValueError):
     """Le sceau présenté ne correspond pas à la référence."""
+
+
+def cle_d_usage(maitresse: str, usage: str) -> bytes:
+    """La clé d'un seul usage, dérivée de la clé du cabinet (19 octobre 2026).
+
+    ⚠️ La même clé servait à CHIFFRER les secrets du second facteur (le coffre) et à
+    SIGNER les liens de suivi et d'acceptation. Une clé n'a qu'un emploi : un défaut
+    dans l'un, ou une valeur qu'il laisse fuiter, ne doit rien apprendre de l'autre.
+    Chaque usage reçoit donc sa propre clé, dérivée par HMAC-SHA256 sur un libellé
+    fixe (l'étape « expand » de HKDF, la clé du cabinet étant déjà uniforme).
+
+    ⚠️ Le libellé ne change jamais : le changer invaliderait tous les liens émis.
+    """
+    return hmac.new(maitresse.encode(), f"cga/sceau/{usage}".encode(), hashlib.sha256).digest()
 
 
 def sceller(reference: str, *, secret: str) -> str:
@@ -51,7 +65,8 @@ def sceller(reference: str, *, secret: str) -> str:
     lien à chaque jalon franchi, c'est-à-dire précisément quand son porteur a une
     raison de revenir.
     """
-    return hmac.new(secret.encode(), reference.encode(), hashlib.sha256).hexdigest()
+    cle = cle_d_usage(secret, "lien-de-suivi")
+    return hmac.new(cle, reference.encode(), hashlib.sha256).hexdigest()
 
 
 def valide(reference: str, sceau: str, *, secret: str) -> bool:

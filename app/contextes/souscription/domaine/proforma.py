@@ -60,6 +60,7 @@ from app.contextes.souscription.domaine.composition_proforma import Rubrique
 from app.contextes.souscription.domaine.tarification import Debours, LigneTarifaire
 from app.partage.copie import transiter
 from app.partage.horloge import jour_a_douala
+from app.partage.sceau import cle_d_usage
 
 __all__ = [
     "Acceptation",
@@ -534,7 +535,9 @@ def _sceller(numero: str, version: int, expire_le: datetime, secret: str) -> str
     chose que ce qu'il annonce.
     """
     charge = f"{numero}\x1f{version}\x1f{expire_le.isoformat()}"
-    return hmac.new(secret.encode(), charge.encode(), hashlib.sha256).hexdigest()
+    # 19 octobre 2026 : une clé propre à cet usage. Voir `partage/sceau.cle_d_usage`.
+    cle = cle_d_usage(secret, "acceptation-proforma")
+    return hmac.new(cle, charge.encode(), hashlib.sha256).hexdigest()
 
 
 def lien_pour(

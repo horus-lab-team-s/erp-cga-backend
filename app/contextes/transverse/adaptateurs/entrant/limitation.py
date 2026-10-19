@@ -187,6 +187,18 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
         fenetre=3600,
         motif="acceptation ou transmission de proforma",
     ),
+    # 19 octobre 2026 (audit) : l'adresse de notification ne demande ni session ni
+    # signature (Tara ne signe pas). Sans limite, un tiers qui la connaît pouvait la
+    # marteler et remplir les notifications non rattachées. Tara notifie un
+    # encaissement à la fois : trois cents en cinq minutes depuis une même adresse,
+    # c'est déjà une journée de guichet.
+    Regle(
+        chemin="/souscription/notification/tara",
+        methode="POST",
+        maximum=300,
+        fenetre=300,
+        motif="notification du prestataire de paiement",
+    ),
     Regle(
         chemin="/souscription/devis",
         methode="POST",

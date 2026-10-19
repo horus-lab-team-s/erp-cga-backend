@@ -227,6 +227,11 @@ class Compte(BaseModel):
     #: `secret_totp` : exclue, scellée en base.
     secret_totp_en_attente: str | None = Field(default=None, exclude=True)
 
+    #: La dernière tranche de trente secondes dont un code a renforcé une session
+    #: (19 octobre 2026). Un code de cette tranche ou d'une antérieure est refusé :
+    #: c'est la protection contre le rejeu. Voir `tranche_du_code`.
+    derniere_tranche_totp: int | None = Field(default=None, exclude=True)
+
     tentatives_echouees: int = Field(default=0, ge=0)
     verrouille_jusqu_a: datetime | None = None
     derniere_connexion: datetime | None = None
@@ -352,12 +357,22 @@ class Compte(BaseModel):
         if self.secret_totp_en_attente is None:
             raise ValueError("aucune clé en attente")
         return self.model_copy(
-            update={"secret_totp": self.secret_totp_en_attente, "secret_totp_en_attente": None}
+            update={
+                "secret_totp": self.secret_totp_en_attente,
+                "secret_totp_en_attente": None,
+                "derniere_tranche_totp": None,
+            }
         )
 
     def sans_second_facteur(self) -> Compte:
         """Retire le second facteur. Réservé à la réinitialisation par un tiers (pas 60)."""
-        return self.model_copy(update={"secret_totp": None, "secret_totp_en_attente": None})
+        return self.model_copy(
+            update={
+                "secret_totp": None,
+                "secret_totp_en_attente": None,
+                "derniere_tranche_totp": None,
+            }
+        )
 
     def suspendre(self) -> Compte:
         return self.model_copy(update={"etat": EtatCompte.SUSPENDU})

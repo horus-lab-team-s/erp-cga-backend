@@ -71,6 +71,7 @@ __all__ = [
     "CodeInvalide",
     "code_attendu",
     "engendrer_secret_totp",
+    "tranche_du_code",
     "uri_provisionnement",
     "verifier_code",
 ]
@@ -163,6 +164,23 @@ def verifier_code(secret: str, code: str, a_l_instant: datetime) -> bool:
         hmac.compare_digest(presente, code_attendu(secret, a_l_instant, decalage))
         for decalage in range(-TOLERANCE_TRANCHES, TOLERANCE_TRANCHES + 1)
     )
+
+
+def tranche_du_code(secret: str, code: str, a_l_instant: datetime) -> int | None:
+    """La tranche de trente secondes dont ce code est le code, ou `None` s'il ne vaut pas.
+
+    ⚠️ 19 octobre 2026 : sert à refuser le REJEU. Un code accepté restait valable
+    quatre-vingt-dix secondes (sa tranche et ses deux voisines) : lu par-dessus une
+    épaule, ou intercepté, il renforçait une seconde session. La tranche acceptée est
+    retenue sur le compte, et toute tranche égale ou antérieure est refusée ensuite.
+    """
+    presente = (code or "").strip().replace(" ", "")
+    if len(presente) != CHIFFRES or not presente.isdigit():
+        return None
+    for decalage in range(-TOLERANCE_TRANCHES, TOLERANCE_TRANCHES + 1):
+        if hmac.compare_digest(presente, code_attendu(secret, a_l_instant, decalage)):
+            return _tranche(a_l_instant) + decalage
+    return None
 
 
 def uri_provisionnement(secret: str, *, compte: str, emetteur: str) -> str:

@@ -53,9 +53,12 @@ def _enroler(client):
     return client.post("/transverse/second-facteur")
 
 
-def _renforcer(client, secret):
+def _renforcer(client, secret, decalage=0):
+    """`decalage` : le code de la tranche suivante, pour qui renforce deux fois dans les
+    mêmes trente secondes (un même code ne sert qu'une fois)."""
     return client.post(
-        "/transverse/session/renforcement", json={"code": code_attendu(secret, maintenant())}
+        "/transverse/session/renforcement",
+        json={"code": code_attendu(secret, maintenant(), decalage)},
     )
 
 
@@ -213,12 +216,28 @@ class TestLeTitulaire:
 
         # ⚠️ 19 octobre 2026 : tant que la nouvelle clé n'est pas prouvée, l'ancienne vaut.
         autre = _session(application, REVISEUR[1])
-        assert _renforcer(autre, ancien).json()["facteur_fort"] is True
+        assert _renforcer(autre, ancien, decalage=1).json()["facteur_fort"] is True
 
         assert _activer(client, nouveau).status_code == 200
         autre = _session(application, REVISEUR[1])
         assert _renforcer(autre, ancien).status_code == 401, "l'ancien appareil ne vaut plus"
         assert _renforcer(autre, nouveau).json()["facteur_fort"] is True
+
+
+class TestUnCodeNeSertQuUneFois:
+    """⚠️ 19 octobre 2026 : un code accepté restait valable quatre-vingt-dix secondes."""
+
+    def test_le_meme_code_ne_renforce_pas_une_seconde_session(self, application):
+        titulaire = _session(application, REVISEUR[1])
+        secret = enroler_par_le_courriel(titulaire)
+        assert _renforcer(titulaire, secret, decalage=1).json()["facteur_fort"] is True
+
+        intrus = _session(application, REVISEUR[1])
+        rejeu = _renforcer(intrus, secret, decalage=1)
+        assert rejeu.status_code == 401, rejeu.text
+        assert "déjà de servir" in rejeu.text
+        # Un code plus ancien encore ne passe pas davantage.
+        assert _renforcer(intrus, secret).status_code == 401
 
 
 class TestLaCleAttendSonPremierCode:

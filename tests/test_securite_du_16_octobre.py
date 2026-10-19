@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from app.contextes.transverse.adaptateurs.sortant.depots_memoire import DepotComptesMemoire
 from app.contextes.transverse.api import (
     Compte,
     DepotSessionsMemoire,
@@ -64,6 +65,7 @@ class TestLeSecondFacteurSeSuspend:
                     compte,
                     "000000" if code_attendu(secret, INSTANT) != "000000" else "111111",
                     sessions=sessions,
+            comptes=DepotComptesMemoire(),
                     journal=journal,
                     a_l_instant=INSTANT + timedelta(minutes=minute),
                 )
@@ -74,6 +76,7 @@ class TestLeSecondFacteurSeSuspend:
                 compte,
                 code_attendu(secret, juste),
                 sessions=sessions,
+            comptes=DepotComptesMemoire(),
                 journal=journal,
                 a_l_instant=juste,
             )
@@ -84,6 +87,7 @@ class TestLeSecondFacteurSeSuspend:
             compte,
             code_attendu(secret, apres),
             sessions=sessions,
+            comptes=DepotComptesMemoire(),
             journal=journal,
             a_l_instant=apres,
         )

@@ -581,8 +581,10 @@ def _dossier_scelle(reference: str, sceau: str):
 
     try:
         exiger_le_sceau(reference, sceau, secret=_secret_du_suivi())
-        return _lire(reference, depot())
-    except (LienDeSuiviInvalide, DossierCreationIntrouvable) as refus:
+        dossier = _lire(reference, depot())
+        _refuser_un_lien_echu(dossier)
+        return dossier
+    except (LienDeSuiviInvalide, DossierCreationIntrouvable, LienDeSuiviEchu) as refus:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -590,6 +592,31 @@ def _dossier_scelle(reference: str, sceau: str):
                 "entier, ou demandez-en un nouveau au cabinet."
             ),
         ) from refus
+
+
+#: Combien de temps le lien de suivi s'ouvre encore une fois le dossier clos.
+VIE_DU_LIEN_APRES_CLOTURE = timedelta(days=90)
+
+
+def _refuser_un_lien_echu(dossier) -> None:
+    """Un lien de suivi ne vit pas toujours (19 octobre 2026).
+
+    ⚠️ Le sceau ne porte pas de date, et c'est voulu : la création dure des semaines,
+    et un lien qui expirerait en route tomberait quand la fondatrice en a besoin.
+    Mais une fois le dossier clos (société remise, ou abandon), le lien n'a plus rien
+    à faire : trois mois plus tard, il ne s'ouvre plus. Il ouvrait sinon, pour
+    toujours, les pièces d'identité d'une fondatrice à qui retrouverait un vieux
+    courriel. Le refus est le même que pour un lien faux : rien ne s'énumère.
+    """
+    if not dossier.clos:
+        return
+    clos_le = dossier.depuis_le(dossier.etape)
+    if clos_le is not None and aujourd_hui() - clos_le > VIE_DU_LIEN_APRES_CLOTURE:
+        raise LienDeSuiviEchu(dossier.reference)
+
+
+class LienDeSuiviEchu(Exception):
+    """Le dossier est clos depuis plus longtemps que la vie du lien."""
 
 
 def _secret_du_suivi() -> str:

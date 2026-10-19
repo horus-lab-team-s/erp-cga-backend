@@ -55,6 +55,7 @@ from app.contextes.transverse.domaine.ports import (
 from app.contextes.transverse.domaine.second_facteur import (
     DUREE_RENFORCEMENT,
     CodeInvalide,
+    tranche_du_code,
     verifier_code,
 )
 from app.contextes.transverse.domaine.sessions import (
@@ -553,6 +554,7 @@ def renforcer_session(
     code: str,
     *,
     sessions: DepotSessions,
+    comptes: DepotComptes,
     journal: JournalAudit,
     a_l_instant: datetime,
     duree: timedelta = DUREE_RENFORCEMENT,
@@ -573,7 +575,27 @@ def renforcer_session(
     # adresse se change. Cinq codes refusés en quinze minutes suspendent les essais du
     # compte, d'où qu'ils viennent : six chiffres ne résistent pas à un essai continu.
     _refuser_si_trop_de_codes(compte, journal, a_l_instant)
-    if not verifier_code(compte.secret_totp, code, a_l_instant):
+    tranche = tranche_du_code(compte.secret_totp, code, a_l_instant)
+    if (
+        tranche is not None
+        and compte.derniere_tranche_totp is not None
+        and tranche <= compte.derniere_tranche_totp
+    ):
+        # ⚠️ Un code déjà servi. Journalisé comme les autres refus : il compte dans
+        # les cinq qui suspendent, car c'est exactement ce que tente un rejeu.
+        journal.ajouter(
+            horodatage=a_l_instant,
+            acteur=compte.identifiant,
+            action="session.renforcement_refuse",
+            objet_type="session",
+            objet_id=session.reference,
+            apres={"motif": "code déjà employé"},
+        )
+        raise CodeInvalide(
+            "Ce code vient déjà de servir. Attendez le suivant dans l'application "
+            "(il change toutes les trente secondes)."
+        )
+    if tranche is None:
         journal.ajouter(
             horodatage=a_l_instant,
             acteur=compte.identifiant,
@@ -586,6 +608,7 @@ def renforcer_session(
             "décalage de plus d'une minute suffit à invalider tous les codes."
         )
 
+    comptes.enregistrer(compte.model_copy(update={"derniere_tranche_totp": tranche}))
     renforcee = session.renforcer(a_l_instant, duree)
     sessions.enregistrer(renforcee)
     journal.ajouter(

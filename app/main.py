@@ -173,6 +173,7 @@ from app.infrastructure.base_de_donnees import moteur
 from app.infrastructure.charge import IntergicielMesureDeCharge
 from app.infrastructure.config import configuration
 from app.infrastructure.entetes import IntergicielEntetesDeSecurite
+from app.infrastructure.origine import IntergicielOrigine
 from app.infrastructure.roles import DiagnosticDuRole, diagnostiquer
 
 _journal = logging.getLogger("cga.sante")
@@ -690,6 +691,9 @@ def creer_application() -> FastAPI:
     # ouvrir de transaction, ni atteindre la vérification Argon2 dont elle
     # cherche justement à saturer le processeur. Voir `limitation.py`.
     application.add_middleware(IntergicielLimitationDebit)
+    # 19 octobre 2026 : une modification portant la session et venue d'une origine
+    # étrangère est refusée avant même d'être comptée. Voir `infrastructure/origine.py`.
+    application.add_middleware(IntergicielOrigine)
     # ⚠️ Les en-têtes de sécurité en DERNIER déclarés, donc posés en premier sur
     # le chemin de la réponse : ils doivent accompagner TOUTE réponse, y compris
     # le refus de la limitation de débit et les erreurs. Voir `entetes.py`.

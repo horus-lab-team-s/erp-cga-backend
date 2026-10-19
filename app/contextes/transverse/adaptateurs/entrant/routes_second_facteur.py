@@ -339,6 +339,7 @@ def renforcer(acces: AccesRequis, demande: DemandeRenforcement) -> Acces:
             compte,
             demande.code,
             sessions=boutique.sessions,
+            comptes=boutique.comptes,
             journal=boutique.journal,
             a_l_instant=instant,
         )

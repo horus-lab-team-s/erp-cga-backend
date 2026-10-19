@@ -124,6 +124,8 @@ class TableCompte(Cloisonne, Base):
     #: La clé montrée, pas encore prouvée par un premier code (19 octobre 2026). Scellée
     #: comme `secret_totp`.
     secret_totp_en_attente: Mapped[str | None] = mapped_column(String(255))
+    #: La dernière tranche TOTP acceptée, contre le rejeu d'un code (19 octobre 2026).
+    derniere_tranche_totp: Mapped[int | None] = mapped_column(BigInteger)
 
     etat: Mapped[str] = mapped_column(String(32), nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
