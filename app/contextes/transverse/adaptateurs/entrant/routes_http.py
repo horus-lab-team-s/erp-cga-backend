@@ -503,9 +503,26 @@ def courriels_retenus(
     if not hasattr(service, "derniers"):
         raise HTTPException(status_code=404, detail="Not Found")
     return [
-        MessageDeRecette(code=m.code, destinataire=m.destinataire, contexte=m.contexte)
+        MessageDeRecette(code=m.code, destinataire=m.destinataire, contexte=_lisible(m.contexte))
         for m in service.derniers(code)
     ]
+
+
+def _lisible(valeur: object) -> object:
+    """Le contexte d'un courriel, sans ses octets bruts.
+
+    ⚠️ 19 octobre 2026 : la proposition détaillée joint son PDF au contexte. Ses octets
+    ne se sérialisent pas en JSON, et la boîte entière rendait 500 dès qu'un tel
+    courriel était retenu. On montre la pièce jointe par son poids ; le lien, lui,
+    reste lisible.
+    """
+    if isinstance(valeur, bytes | bytearray):
+        return f"<pièce jointe, {len(valeur)} octets>"
+    if isinstance(valeur, dict):
+        return {cle: _lisible(v) for cle, v in valeur.items()}
+    if isinstance(valeur, list | tuple):
+        return [_lisible(v) for v in valeur]
+    return valeur
 
 
 # ── La recherche globale (pas 93) ────────────────────────────────────────────

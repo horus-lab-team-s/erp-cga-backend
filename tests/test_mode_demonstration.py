@@ -339,3 +339,23 @@ class TestParcoursComplet:
 
         assert client.get("/transverse/courriels", params={"code": "compte.activation"}).json()
         assert client.get("/transverse/courriels", params={"code": "compte.suspendu"}).json() == []
+
+    def test_une_piece_jointe_ne_fait_pas_tomber_la_boite(self, client: TestClient):
+        """⚠️ 19 octobre 2026 : la proposition détaillée joint son PDF au contexte, et
+        la boîte entière rendait 500 dès qu'un tel courriel était retenu."""
+        from app.contextes.transverse.adaptateurs.entrant.dependances import atelier
+
+        atelier().notifications.envoyer(
+            "proforma.envoi.detaillee",
+            destinataire="awa@exemple.cm",
+            contexte={
+                "lien": "http://x/proforma/P?s=1",
+                "pieces_jointes": [{"pdf": b"%PDF-\xff\xfe"}],
+            },
+        )
+
+        reponse = client.get("/transverse/courriels")
+        assert reponse.status_code == 200
+        contexte = reponse.json()[0]["contexte"]
+        assert contexte["lien"] == "http://x/proforma/P?s=1"
+        assert contexte["pieces_jointes"][0]["pdf"] == "<pièce jointe, 7 octets>"
