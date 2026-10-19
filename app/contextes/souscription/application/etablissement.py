@@ -144,7 +144,10 @@ def _chiffrer(
         precision=(
             service.unite
             if tarif.montant is not None
-            else "Sur devis : au-delà de ce seuil, l'entreprise sort du régime du "
+            # 19 octobre 2026 : un tarif sans montant dit lui-même pourquoi, s'il le peut.
+            # La phrase du seuil ne vaut que pour le régime du réel.
+            else tarif.motif
+            or "Sur devis : au-delà de ce seuil, l'entreprise sort du régime du "
             "centre agréé et la prestation change de nature."
         ),
     )

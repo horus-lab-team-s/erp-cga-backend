@@ -177,7 +177,7 @@ def demandes_a_ouvrir(acces: AccesRequis) -> list[DemandeAOuvrir]:
     from app.contextes.souscription.adaptateurs.entrant.sources import depot_dossiers
 
     prises = {m.reference_commerciale for m in _depot().lister() if m.reference_commerciale}
-    return [
+    demandes = [
         DemandeAOuvrir(
             reference=d.reference,
             client=d.demande.nom,
@@ -190,6 +190,42 @@ def demandes_a_ouvrir(acces: AccesRequis) -> list[DemandeAOuvrir]:
         for d in depot_dossiers().payes()
         if d.service == "PONCTUEL" and d.reference not in prises
     ]
+    # 19 octobre 2026 (point 24) : la DSF achetée en ligne attend ici sa mission.
+    commandes = [
+        DemandeAOuvrir(
+            reference=s.reference,
+            client=_client_de_la_commande(s),
+            courriel=s.prospect.courriel,
+            telephone=s.prospect.telephone,
+            message=(
+                f"DSF achetée en ligne ({s.libelle}"
+                f"{f', formule {s.formule}' if s.formule else ''})"
+                f"{f' · NIU {s.niu or s.prospect.niu}' if (s.niu or s.prospect.niu) else ''}."
+            ),
+            payee_le=s.payee_le,
+            responsable=None,
+        )
+        for s in _dsf_payees()
+        if s.reference not in prises
+    ]
+    return demandes + commandes
+
+
+def _dsf_payees():
+    """Les commandes de DSF réglées en ligne (point 24)."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.domaine.souscriptions import EtatSouscription
+
+    return [
+        s
+        for s in comptoir().souscriptions.lister()
+        if s.service == "DSF" and s.etat in (EtatSouscription.PAYEE, EtatSouscription.ACTIVEE)
+    ]
+
+
+def _client_de_la_commande(souscription) -> str:
+    p = souscription.prospect
+    return p.denomination or f"{p.prenom} {p.nom}"
 
 
 class ModeleLu(BaseModel):
@@ -425,13 +461,40 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
             dossier = depot_dossiers().lire(demande.reference_commerciale)
         except DossierIntrouvable:
             dossier = None
-        if dossier is None:
+        # 19 octobre 2026 (point 24) : la référence peut être celle d'une DSF achetée en
+        # ligne. Elle ouvre une DSF ciblée, et rien d'autre.
+        commande = next(
+            (s for s in _dsf_payees() if s.reference == demande.reference_commerciale), None
+        )
+        if dossier is None and commande is not None:
+            if demande.type is not TypeMission.DSF_CIBLEE:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"la commande {commande.reference} est une DSF : ouvrez une DSF ciblée.",
+                )
+            deja = next(
+                (m for m in _depot().lister() if m.reference_commerciale == commande.reference),
+                None,
+            )
+            if deja is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"la commande {commande.reference} a déjà sa mission : "
+                        f"{deja.identifiant}."
+                    ),
+                )
+            client = client or _client_de_la_commande(commande)
+            courriel = courriel or commande.prospect.courriel
+        elif dossier is None:
             raise HTTPException(
                 status_code=404, detail=f"dossier {demande.reference_commerciale} introuvable."
             )
         # ⚠️ On ne livre que ce qui est payé : une mission ouverte sur une proforma
         # non réglée ferait travailler le cabinet pour rien, ou gratuitement.
-        if dossier.etat is not EtatDossier.PAYEE or dossier.service != "PONCTUEL":
+        if dossier is not None and (
+            dossier.etat is not EtatDossier.PAYEE or dossier.service != "PONCTUEL"
+        ):
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -442,16 +505,20 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
             )
         # 18 octobre 2026 (point 22) : une demande, une mission. Une seconde ouverture
         # ferait travailler deux juristes sur la même prestation payée une fois.
-        deja = next(
-            (m for m in _depot().lister() if m.reference_commerciale == dossier.reference), None
-        )
-        if deja is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=f"la demande {dossier.reference} a déjà sa mission : {deja.identifiant}.",
+        if dossier is not None:
+            deja = next(
+                (m for m in _depot().lister() if m.reference_commerciale == dossier.reference),
+                None,
             )
-        client = client or dossier.demande.nom
-        courriel = courriel or dossier.demande.courriel
+            if deja is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"la demande {dossier.reference} a déjà sa mission : {deja.identifiant}."
+                    ),
+                )
+            client = client or dossier.demande.nom
+            courriel = courriel or dossier.demande.courriel
     if not client:
         raise HTTPException(status_code=422, detail="le client de la mission est obligatoire.")
     if demande.type is TypeMission.DSF_CIBLEE and not (demande.dossier_niu and demande.exercice):
