@@ -35,13 +35,16 @@ sortie dans `routes_proforma.py`, sous les mêmes chemins ; ce fichier dépassai
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -95,6 +98,8 @@ from app.contextes.souscription.api import (
     EtatDossier,
     NaturePaiement,
     Paiement,
+    PieceJointe,
+    PieceRefusee,
     Proposition,
     Question,
     ReponseInvalide,
@@ -141,9 +146,11 @@ from app.contextes.transverse.api import (
 from app.infrastructure.config import configuration
 from app.infrastructure.depots_orchestration import DepotExecutionsSql
 from app.orchestration.saga import EtatSaga
+from app.partage.en_tetes import disposition_en_piece_jointe
 from app.partage.erreurs import message_lisible
 from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
+from app.partage.magasin_de_fichiers import MagasinFichiersLocal, detecter_le_type
 from app.partage.recherche import (
     ReponseDeRecherche,
     RequeteTropCourte,
@@ -157,6 +164,7 @@ from app.partage.recherche import (
     # demande sans suite), et l'homonyme importée l'avait masquée. Même nom partout.
     classer as classer_les_resultats,
 )
+from app.partage.sceau import SceauInvalide, dechiffrer_la_reference, jeton_opaque
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
 
 routeur = APIRouter(prefix="/acquisition", tags=["Acquisition"])
@@ -317,6 +325,25 @@ class AccuseDeDemande(BaseModel):
     #: Le canal sur lequel on le rappellera réellement, après repli.
     canal_de_rappel: Canal
     message: str
+    #: 19 octobre 2026 (point 22) : de quoi joindre des pièces à la demande, depuis le
+    #: formulaire, juste après l'envoi. ⚠️ OPAQUE : il porte la référence du dossier
+    #: chiffrée, et la référence elle-même ne circule toujours pas.
+    jeton_de_pieces: str | None = None
+
+
+#: L'usage du sceau qui ouvre l'ajout de pièces à une demande. Voir `partage/sceau`.
+_USAGE_PIECES = "pieces-de-demande"
+#: Ce qu'une pièce jointe à une demande peut peser, et ce qu'elle peut être.
+_TAILLE_MAXIMALE_PIECE = 10 * 1024 * 1024
+_TYPES_DE_PIECE = frozenset({"application/pdf", "image/jpeg", "image/png"})
+
+
+def _secret_des_pieces() -> str:
+    return configuration().cle_chiffrement or "secret-de-developpement"
+
+
+def _magasin_des_pieces() -> MagasinFichiersLocal:
+    return MagasinFichiersLocal(Path(configuration().dossier_fichiers), courant())
 
 
 @routeur.post(
@@ -373,7 +400,80 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
     return AccuseDeDemande(
         canal_de_rappel=repli.canal,
         message="Votre demande est enregistrée. Un responsable vous recontacte.",
+        jeton_de_pieces=jeton_opaque(
+            depot.dossier.reference, secret=_secret_des_pieces(), usage=_USAGE_PIECES
+        ),
     )
+
+
+class PieceAccueillie(BaseModel):
+    nom: str
+    taille: int
+    pieces: int
+
+
+@routeur.post(
+    "/demandes/pieces",
+    status_code=201,
+    summary="Joindre une pièce à sa demande (publique, par le jeton de l'accusé)",
+    responses={
+        404: {"description": "Demande inconnue, ou jeton faux : le même refus"},
+        409: {"description": "La demande n'accepte plus de pièce"},
+        413: {"description": "Pièce trop lourde"},
+        415: {"description": "Ni PDF, ni image"},
+    },
+)
+async def joindre_une_piece(
+    jeton: str = Form(..., max_length=256),
+    fichier: UploadFile = File(...),
+) -> PieceAccueillie:
+    """Publique, comme le dépôt de la demande qu'elle complète (point 22).
+
+    ⚠️ La porte ne s'ouvre qu'avec le jeton rendu dans l'accusé, propre à cette demande
+    et à cet usage : il ne vaut ni pour une autre demande, ni pour le suivi d'une
+    création. Taille bornée à la lecture, type lu dans le contenu et non dans le nom.
+    """
+    # ⚠️ Seule la LECTURE du corps attend sur la boucle ; déchiffrer, hacher, écrire sur
+    # disque et en base part dans un fil, sans quoi un envoi de 10 Mo bloquerait le
+    # serveur entier (voir `tests/test_boucle_non_bloquee.py`).
+    contenu = await fichier.read(_TAILLE_MAXIMALE_PIECE + 1)
+    return await run_in_threadpool(_joindre_une_piece, jeton, contenu, fichier.filename)
+
+
+def _joindre_une_piece(jeton: str, contenu: bytes, nom_du_fichier: str | None) -> PieceAccueillie:
+    try:
+        reference = dechiffrer_la_reference(
+            jeton, secret=_secret_des_pieces(), usage=_USAGE_PIECES
+        )
+        dossier = depot_dossiers().lire(reference)
+    except (SceauInvalide, DossierIntrouvable) as refus:
+        raise HTTPException(
+            status_code=404,
+            detail="Ce lien ne s'ouvre pas : rechargez le formulaire, ou écrivez au cabinet.",
+        ) from refus
+    if len(contenu) > _TAILLE_MAXIMALE_PIECE:
+        raise HTTPException(status_code=413, detail="Une pièce pèse au plus 10 Mo.")
+    type_mime = detecter_le_type(contenu)
+    if type_mime not in _TYPES_DE_PIECE:
+        raise HTTPException(status_code=415, detail="Joignez un PDF ou une image (JPEG, PNG).")
+    empreinte = hashlib.sha256(contenu).hexdigest()
+    nom = "".join(c for c in (nom_du_fichier or "piece") if c.isprintable())[:200].strip()
+    try:
+        complete = dossier.joindre(
+            PieceJointe(
+                empreinte=empreinte,
+                nom=nom or "piece",
+                type_mime=type_mime,
+                taille=len(contenu),
+                recue_le=maintenant(),
+            )
+        )
+    except PieceRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    _magasin_des_pieces().deposer(empreinte, contenu, type_mime=type_mime)
+    if complete is not dossier:
+        depot_dossiers().enregistrer(complete)
+    return PieceAccueillie(nom=nom, taille=len(contenu), pieces=len(complete.pieces_jointes))
 
 
 @routeur.post(
@@ -763,6 +863,27 @@ def lire_le_dossier(acces: AccesRequis, reference: str) -> FicheDuDossier:
             "proformas": proformas,
             "responsable_nom": noms.get(dossier.responsable or ""),
         }
+    )
+
+
+@routeur.get(
+    "/dossiers/{reference}/pieces/{empreinte}",
+    summary="Une pièce jointe par le visiteur à sa demande",
+    responses={404: {"description": "Dossier ou pièce inconnus"}},
+)
+def lire_une_piece_jointe(acces: AccesRequis, reference: str, empreinte: str) -> Response:
+    exiger(acces, Permission.LIRE_PROSPECT)
+    try:
+        dossier = depot_dossiers().lire(reference)
+    except DossierIntrouvable as echec:
+        raise HTTPException(status_code=404, detail=str(echec)) from echec
+    piece = next((p for p in dossier.pieces_jointes if p.empreinte == empreinte), None)
+    if piece is None:
+        raise HTTPException(status_code=404, detail="Pièce inconnue pour ce dossier.")
+    return Response(
+        content=_magasin_des_pieces().lire(empreinte),
+        media_type=piece.type_mime,
+        headers={"Content-Disposition": disposition_en_piece_jointe(piece.nom)},
     )
 
 

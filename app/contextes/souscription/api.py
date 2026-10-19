@@ -194,6 +194,8 @@ from app.contextes.souscription.domaine.demande_de_contact import (
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
+    PieceJointe,
+    PieceRefusee,
     TransitionDossierRefusee,
     ouvrir_un_dossier,
 )
@@ -313,6 +315,8 @@ __all__ = [
     "DevisIntrouvable",
     "Direction",
     "DossierCommercial",
+    "PieceJointe",
+    "PieceRefusee",
     "DossierIntrouvable",
     "EcartAuBareme",
     "EcheanceAbonnement",

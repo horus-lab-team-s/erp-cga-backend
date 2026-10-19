@@ -167,6 +167,15 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
         fenetre=3600,
         motif="dépôt de demande de contact",
     ),
+    # 19 octobre 2026 (point 22) : les pièces jointes à une demande. Cinq par demande
+    # au plus, et chacune pèse jusqu'à 10 Mo : la limite borne aussi le disque.
+    Regle(
+        chemin="/acquisition/demandes/pieces",
+        methode="POST",
+        maximum=30,
+        fenetre=3600,
+        motif="pièce jointe à une demande",
+    ),
     Regle(
         chemin="/acquisition/devis/*",
         methode="POST",

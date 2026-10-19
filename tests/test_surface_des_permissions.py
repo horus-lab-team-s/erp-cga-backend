@@ -75,6 +75,10 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Le seul point d'entrée du parcours. Un visiteur n'a pas de compte, et "
         "c'est justement ce que cette route existe pour changer."
     ),
+    ("POST", "/acquisition/demandes/pieces"): (
+        "Le visiteur joint ses pièces à la demande qu'il vient de déposer : pas de "
+        "compte non plus, mais le jeton de l'accusé, propre à cette demande (point 22)."
+    ),
     ("POST", "/acquisition/devis/{reference}/rappel"): (
         "Le prospect d'un devis au prix à confirmer demande qu'on l'appelle : il "
         "n'a pas de compte. La référence du devis, longue et non devinable, le "

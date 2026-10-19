@@ -190,6 +190,9 @@ ROUTES_ASYNCHRONES = {
     "postuler": "await cv.read()",
     # 18 octobre 2026 : l'image d'une offre, lue bornée ; le dépôt part dans un fil.
     "joindre_une_image": "await image.read()",
+    # 19 octobre 2026, point 22 : la pièce jointe à une demande, lue bornée ; le reste
+    # dans un fil.
+    "joindre_une_piece": "await fichier.read()",
 }
 
 #: Ce qui n'est pas une route mais traverse la boucle à chaque requête.
