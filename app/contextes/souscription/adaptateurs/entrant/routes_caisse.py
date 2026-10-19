@@ -46,6 +46,7 @@ from app.contextes.souscription.domaine.proforma import EtatProforma
 from app.contextes.transverse.api import AccesRequis, Permission, atelier, exiger
 from app.partage.formats import MOIS
 from app.partage.horloge import aujourd_hui, jour_a_douala
+from app.partage.tableur import forcer_le_texte
 
 __all__ = ["routeur"]
 
@@ -249,6 +250,8 @@ def exporter_le_journal(
                 float(ligne.montant),
             ]
         )
+        # ⚠️ Le client vient d'un formulaire public : jamais une formule.
+        forcer_le_texte(feuille, feuille.max_row, range(2, 8))
     totaux = classeur.create_sheet("Totaux par axe")
     totaux.append(["Axe", "Versements", "Montant", "dont mobile money", "dont guichet"])
     for cellule in totaux[1]:

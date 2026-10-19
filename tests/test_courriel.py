@@ -208,7 +208,6 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
     "compte.acces_renvoye": {
         "prenom": "Émile",
         "denomination": "ETS TCHOUMBA & FILS",
-        "par": "Patricia MOUKOURI",
         "geste": "définir votre mot de passe et ouvrir votre espace",
         "validite": "7 jours",
         "lien": "/activation?jeton=xyz",

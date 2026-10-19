@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: Racine du dépôt : app/infrastructure/config.py → deux niveaux au-dessus.
@@ -19,6 +19,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: de niveau dans ce calcul ne se voit donc pas au démarrage : elle se voit sur un
 #: taux d'imposition.
 RACINE_DEPOT = Path(__file__).resolve().parents[2]
+
+#: Les postes de travail : ici seulement, les garde-fous de production sont levés.
+ENVIRONNEMENTS_DE_POSTE: frozenset[str] = frozenset({"developpement", "test", "local"})
+
+#: Tout ce qui est exposé, recette et préproduction comprises.
+ENVIRONNEMENTS_EXPOSES: frozenset[str] = frozenset(
+    {"recette", "preproduction", "preprod", "production", "prod"}
+)
 
 
 class Configuration(BaseSettings):
@@ -359,9 +367,29 @@ class Configuration(BaseSettings):
         """
         return self.persistance == "postgresql"
 
+    @field_validator("environnement")
+    @classmethod
+    def _environnement_connu(cls, valeur: str) -> str:
+        """⚠️ 19 octobre 2026 (audit de sécurité) : la valeur était libre, et seules
+        « production » et « prod » armaient les garde-fous. Une préproduction exposée,
+        ou une faute de frappe, ouvrait en silence la simulation de paiement, la
+        démonstration et la persistance en mémoire. La liste est désormais fermée : une
+        valeur inconnue empêche le démarrage."""
+        normalisee = valeur.strip().lower()
+        if normalisee not in ENVIRONNEMENTS_DE_POSTE | ENVIRONNEMENTS_EXPOSES:
+            raise ValueError(
+                f"CGA_ENVIRONNEMENT={valeur!r} est inconnu. Valeurs admises : "
+                f"{', '.join(sorted(ENVIRONNEMENTS_DE_POSTE | ENVIRONNEMENTS_EXPOSES))}."
+            )
+        return normalisee
+
     @property
     def en_production(self) -> bool:
-        return self.environnement.lower() in {"production", "prod"}
+        """Vrai pour tout environnement exposé, recette et préproduction comprises.
+
+        Les garde-fous ne se lèvent que sur un poste de travail : ce qui est joignable
+        de l'extérieur se défend comme la production."""
+        return self.environnement not in ENVIRONNEMENTS_DE_POSTE
 
     @model_validator(mode="after")
     def _exigences_production(self) -> Configuration:
@@ -427,6 +455,17 @@ class Configuration(BaseSettings):
             fautes.append(
                 "CGA_ORIGINES_CORS contient une origine en clair ; le témoin de "
                 "session serait exposé."
+            )
+        # 19 octobre 2026 (audit de sécurité) : deux réglages que rien ne refusait.
+        if "*" in self.origines_cors:
+            fautes.append(
+                "CGA_ORIGINES_CORS contient « * » : avec les témoins, toute origine "
+                "pourrait appeler l'API au nom d'un collaborateur connecté."
+            )
+        if self.tracer_le_sql:
+            fautes.append(
+                "CGA_TRACER_LE_SQL=true écrirait au journal les paramètres des requêtes : "
+                "noms, NIU, montants, empreintes."
             )
         if fautes:
             raise ValueError("Configuration de production refusée :\n  · " + "\n  · ".join(fautes))

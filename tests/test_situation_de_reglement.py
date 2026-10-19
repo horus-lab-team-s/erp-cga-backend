@@ -274,6 +274,15 @@ class TestParLesRoutes:
         )
         assert sur_le_passe.status_code == 409, sur_le_passe.text
 
+        # 19 octobre 2026 : refaire le contrat effaçait les révisions et repricait le passé.
+        refait = client.put(
+            f"/souscription/honoraires/{BATIMENT}/contrat",
+            json={"montant": "10000", "periodicite": "MENSUELLE", "debut": "2026-01-01"},
+        )
+        assert refait.status_code == 409, refait.text
+        apres = client.get(f"/souscription/honoraires/{BATIMENT}").json()
+        assert len(apres["contrat"]["revisions"]) == 1
+
     def test_le_mandat_de_paiement_s_accorde_par_le_super_administrateur(self, plateforme):
         client = plateforme
         colombe = NIU_DEMO["COLOMBE"]

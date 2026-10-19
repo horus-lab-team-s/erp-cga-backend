@@ -48,11 +48,19 @@ ENV VIRTUAL_ENV=/opt/venv \
 RUN python -m venv "$VIRTUAL_ENV"
 
 WORKDIR /construction
-COPY pyproject.toml README.md ./
-# Le paquet doit exister pour que `pip install .` aboutisse. On ne copie ici
-# qu'un squelette : copier le vrai code invaliderait le cache d'installation au
-# premier changement d'une ligne.
-RUN mkdir -p app && touch app/__init__.py && pip install .
+COPY pyproject.toml README.md uv.lock ./
+# ⚠️ 19 octobre 2026 (audit de sécurité) : `pip install .` résolvait les bornes « >= »
+# du pyproject au moment de la construction. La production recevait donc d'autres
+# versions que celles testées et auditées (`pip-audit` sur `uv.lock`). Les versions
+# viennent désormais du verrou, empreintes vérifiées : un paquet modifié en chemin
+# fait échouer la construction.
+#
+# Le code n'est pas installé comme paquet : il est copié dans l'étage final, et
+# lancé depuis son dossier (`uvicorn app.main:app`, `prepend_sys_path` d'alembic).
+RUN pip install uv==0.11.8 \
+    && uv export --frozen --no-dev --no-emit-project --format requirements-txt -o exigences.txt \
+    && pip install --require-hashes -r exigences.txt \
+    && pip uninstall -y uv
 
 # ── Étage 2 · exécution ─────────────────────────────────────────────────────
 FROM python:3.12-slim-bookworm AS execution

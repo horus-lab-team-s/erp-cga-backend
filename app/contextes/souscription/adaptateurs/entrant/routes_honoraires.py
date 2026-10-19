@@ -236,6 +236,16 @@ def fixer_le_contrat(acces: AccesRequis, niu: str, corps: ContratAFixer) -> MesH
     """⚠️ Le nouveau contrat REMPLACE l'ancien pour l'avenir comme pour le passé :
     l'échéancier se recalcule. Les règlements déjà constatés restent en base."""
     exiger(acces, Permission.FIXER_LES_TARIFS)
+    # ⚠️ 19 octobre 2026 : un contrat qui porte des révisions datées ne se réécrit plus.
+    # Le refaire effaçait l'historique des tarifs et repricait le passé, en silence ;
+    # un changement de tarif passe par une révision à partir d'une date.
+    actuel = _comptoir().contrats_honoraires.lire(niu)
+    if actuel is not None and actuel.revisions:
+        raise HTTPException(
+            status_code=409,
+            detail="Ce contrat porte des révisions de tarif datées : le refaire réécrirait "
+            "le passé. Révisez le tarif à partir d'une date.",
+        )
     contrat = ContratDHonoraires(
         niu=niu,
         denomination=_denomination(niu),

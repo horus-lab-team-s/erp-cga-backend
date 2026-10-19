@@ -48,7 +48,13 @@ from app.contextes.transverse.domaine.ports import (
     DepotSessions,
     JournalAudit,
 )
-from app.contextes.transverse.domaine.roles import Permission, Role, matrice_en_vigueur
+from app.contextes.transverse.domaine.roles import (
+    PERMISSIONS_RESERVEES,
+    Permission,
+    Role,
+    matrice_en_vigueur,
+    permissions_de,
+)
 from app.contextes.transverse.domaine.sessions import MotifRevocation
 from app.partage.horloge import jour_a_douala
 
@@ -810,12 +816,33 @@ def reaffecter_dossier(
     return source_active, cible_active
 
 
+def _exiger_le_droit_sur_le_compte(
+    par: Acces,
+    identifiant: str,
+    habilitations: DepotHabilitations,
+    a_l_instant: datetime,
+    geste: str,
+) -> None:
+    """Un compte qui tient les droits réservés ne se touche que par celui qui les tient.
+
+    ⚠️ 19 octobre 2026 (audit de sécurité) : `GERER_COMPTES` suffisait pour suspendre le
+    super administrateur ou retirer son second facteur, sans session renforcée. Un
+    administrateur dont le mot de passe a fui désarmait ainsi celui qui règle la matrice.
+    Ces gestes, sur ce compte-là, exigent désormais `GERER_ROLES`, donc le second facteur.
+    """
+    jour = jour_a_douala(a_l_instant)
+    tenus = [h.role for h in habilitations.pour_compte(identifiant) if h.couvre(jour)]
+    if permissions_de(tenus) & PERMISSIONS_RESERVEES:
+        par.exiger(Permission.GERER_ROLES, motif=geste)
+
+
 def suspendre_compte(
     *,
     par: Acces,
     identifiant: str,
     motif: str,
     comptes: DepotComptes,
+    habilitations: DepotHabilitations,
     sessions: DepotSessions,
     journal: JournalAudit,
     a_l_instant: datetime,
@@ -837,6 +864,9 @@ def suspendre_compte(
             "administrateur seul laisserait le cabinet sans personne pour gérer les comptes. "
             "Demander à un autre administrateur."
         )
+    _exiger_le_droit_sur_le_compte(
+        par, identifiant, habilitations, a_l_instant, "suspension d'un super administrateur"
+    )
     avant = comptes.lire(identifiant)
     apres = avant.suspendre()
     comptes.enregistrer(apres)
@@ -951,6 +981,7 @@ def reinitialiser_second_facteur(
     identifiant: str,
     motif: str,
     comptes: DepotComptes,
+    habilitations: DepotHabilitations,
     sessions: DepotSessions,
     journal: JournalAudit,
     a_l_instant: datetime,
@@ -983,6 +1014,13 @@ def reinitialiser_second_facteur(
             "on ne réinitialise pas son propre second facteur : un mot de passe qui a fui "
             "suffirait alors à le retirer. Demander à un autre administrateur."
         )
+    _exiger_le_droit_sur_le_compte(
+        par,
+        identifiant,
+        habilitations,
+        a_l_instant,
+        "réinitialisation du second facteur d'un super administrateur",
+    )
     avant = comptes.lire(identifiant)
     if not avant.second_facteur_actif:
         raise ReinitialisationRefusee(

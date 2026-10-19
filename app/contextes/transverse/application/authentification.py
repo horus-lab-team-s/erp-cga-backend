@@ -62,6 +62,7 @@ from app.contextes.transverse.domaine.sessions import (
     MotifRevocation,
     Session,
     SessionInvalide,
+    reference_de_session,
 )
 
 __all__ = [
@@ -162,6 +163,10 @@ def ouvrir_session(
     try:
         compte.exiger_ouverture(a_l_instant)
     except CompteInactif as empechement:
+        # ⚠️ 19 octobre 2026 (audit de sécurité) : un compte verrouillé répondait en
+        # 3 ms, un compte inconnu en 20 ms (le leurre Argon2). L'écart disait lequel
+        # existe. Le même calcul, quoi qu'il arrive.
+        empreintes.verifier(mot_de_passe, _empreinte_leurre(empreintes))
         journal.ajouter(
             horodatage=a_l_instant,
             acteur=compte.identifiant,
@@ -219,7 +224,7 @@ def ouvrir_session(
         acteur=compte.identifiant,
         action="session.ouverte",
         objet_type="session",
-        objet_id=session.identifiant,
+        objet_id=session.reference,
         apres={"expire_le": session.expire_le},
         adresse_ip=adresse_ip,
     )
@@ -243,7 +248,7 @@ def verifier_session(
     """
     session = sessions.lire(identifiant_session)
     if session is None:
-        raise SessionInvalide(f"session {identifiant_session} inconnue")
+        raise SessionInvalide(f"session {reference_de_session(identifiant_session)} inconnue")
     session.exiger_active(a_l_instant)
 
     compte = comptes.lire(session.compte)
@@ -251,7 +256,8 @@ def verifier_session(
         compte.exiger_ouverture(a_l_instant)
     except CompteInactif as empechement:
         raise SessionInvalide(
-            f"session {identifiant_session} valide mais compte indisponible : {empechement}"
+            f"session {reference_de_session(identifiant_session)} valide mais compte "
+            f"indisponible : {empechement}"
         ) from empechement
 
     return session, compte, habilitations.pour_compte(compte.identifiant)
@@ -281,7 +287,7 @@ def fermer_session(
         acteur=par or session.compte,
         action="session.fermee",
         objet_type="session",
-        objet_id=session.identifiant,
+        objet_id=session.reference,
         apres={"motif": motif},
     )
 
@@ -495,7 +501,7 @@ def renforcer_session(
             acteur=compte.identifiant,
             action="session.renforcement_refuse",
             objet_type="session",
-            objet_id=session.identifiant,
+            objet_id=session.reference,
         )
         raise CodeInvalide(
             "Code refusé. Vérifier que l'heure du téléphone est à l'heure : un "
@@ -509,7 +515,7 @@ def renforcer_session(
         acteur=compte.identifiant,
         action="session.renforcee",
         objet_type="session",
-        objet_id=session.identifiant,
+        objet_id=session.reference,
         apres={"renforcee_jusqu_a": renforcee.renforcee_jusqu_a},
     )
     return renforcee

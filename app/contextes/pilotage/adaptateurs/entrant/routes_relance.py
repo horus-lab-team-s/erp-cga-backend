@@ -389,7 +389,6 @@ def _vue(acces: Acces, niu: str, mois: str, codes: list[str] | None, modele: str
         attentes=retenues,
         du=du,
         date_limite=limite,
-        signataire=acces.nom_complet,
         cabinet=reglages.cabinet,
     )
     historique = _historique(niu)

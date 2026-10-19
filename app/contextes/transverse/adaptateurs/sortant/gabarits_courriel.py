@@ -759,7 +759,8 @@ CATALOGUE: dict[str, Gabarit] = {
             objet="Votre lien d'accès à l'espace de {denomination}",
             titre="Bonjour {prenom}",
             paragraphes=(
-                "À votre demande, {par}, du cabinet, vous envoie un lien pour {geste}.",
+                # 19 octobre 2026 : le cabinet, jamais le nom du collaborateur.
+                "À votre demande, le cabinet vous envoie un lien pour {geste}.",
                 "Ce lien est valable <strong>{validite}</strong> et ne sert qu'une fois.",
             ),
             action=("Ouvrir mon espace", "{lien}"),

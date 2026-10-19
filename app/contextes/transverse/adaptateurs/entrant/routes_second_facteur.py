@@ -19,6 +19,7 @@ from app.contextes.transverse.adaptateurs.entrant.routes_http import (
 )
 from app.contextes.transverse.api import (
     Acces,
+    AccesRefuse,
     CodeInvalide,
     Compte,
     CompteIntrouvable,
@@ -233,12 +234,21 @@ def reinitialiser_le_second_facteur(
             identifiant=identifiant,
             motif=demande.motif,
             comptes=boutique.comptes,
+            habilitations=boutique.habilitations,
             sessions=boutique.sessions,
             journal=boutique.journal,
             a_l_instant=maintenant(),
         )
     except CompteIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
+    except AccesRefuse as refus:
+        # 19 octobre 2026 : le compte visé tient les droits réservés. Seul le super
+        # administrateur, session renforcée, peut le faire.
+        raise HTTPException(
+            status_code=403,
+            detail="Ce compte tient les droits réservés : seul le super administrateur, "
+            "second facteur présenté, peut faire ce geste.",
+        ) from refus
     except ReinitialisationRefusee as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     boutique.notifications.envoyer(

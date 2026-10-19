@@ -480,14 +480,17 @@ def rendre_la_relance(
     attentes: list[AttenteDePiece],
     du: date,
     date_limite: date,
-    signataire: str,
     cabinet: str,
 ) -> RelanceRendue:
-    """Le message tel qu'il part : **un seul rendu**, pour l'aperçu comme pour l'envoi."""
+    """Le message tel qu'il part : **un seul rendu**, pour l'aperçu comme pour l'envoi.
+
+    ⚠️ 19 octobre 2026 : signé du cabinet, jamais du collaborateur. Ce qui part chez
+    le client ne nomme pas qui, au cabinet, a fait le geste ; le journal, lui, le sait.
+    """
     valeurs = {"mois": nom_du_mois(du), "date_limite": f"{date_limite:%d/%m/%Y}"}
     return RelanceRendue(
         introduction=modele.introduction.format(**valeurs),
         liste=[a.libelle for a in attentes],
         conclusion=modele.conclusion.format(**valeurs),
-        signature=f"{signataire}, {cabinet}",
+        signature=f"L'équipe de {cabinet}",
     )

@@ -196,7 +196,6 @@ def renvoyer_un_lien(
         contexte={
             "prenom": titulaire.appellation,
             "denomination": dossier.denomination,
-            "par": acces.nom_complet,
             "geste": geste,
             "validite": validite,
             "lien": f"{chemin}?jeton={secret}",

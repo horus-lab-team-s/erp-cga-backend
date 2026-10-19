@@ -969,7 +969,7 @@ class TestAdministration:
         )
         suspendre_compte(
             par=_administrateur_distinct(), identifiant="C-1",
-            motif="fin de contrat", comptes=comptes, sessions=sessions,
+            motif="fin de contrat", comptes=comptes, habilitations=depots[1], sessions=sessions,
             journal=journal, a_l_instant=INSTANT,
         )
         assert sessions.lire("S-1").revoquee
@@ -980,7 +980,8 @@ class TestAdministration:
         comptes.enregistrer(_compte())
         suspendre_compte(
             par=_administrateur_distinct(), identifiant="C-1",
-            motif="départ du 30 avril", comptes=comptes, sessions=sessions,
+            motif="départ du 30 avril", comptes=comptes, habilitations=depots[1],
+            sessions=sessions,
             journal=journal, a_l_instant=INSTANT,
         )
         assert journal.lister()[-1].motif == "départ du 30 avril"
@@ -1511,6 +1512,64 @@ class TestApi:
         verification = client.get("/transverse/audit/verification").json()
         assert verification["intacte"] is True
         assert verification["entrees"] == len(entrees)
+
+    def test_le_journal_ne_livre_aucune_session_a_rejouer(self, client: TestClient):
+        """19 octobre 2026 (audit de sécurité) : l'identifiant de session est le secret
+        porteur. Écrit au journal, il laissait la direction, qui lit le journal, rejouer
+        la session du super administrateur."""
+        from app.contextes.transverse.api import MOT_DE_PASSE_DEMO
+
+        ouverte = client.post(
+            "/transverse/session",
+            json={"courriel": "h.kamga@cga-brcg.cm", "mot_de_passe": MOT_DE_PASSE_DEMO},
+        )
+        assert ouverte.status_code == 200
+        secret = ouverte.json()["session"]
+        assert len(secret) >= 40, "un secret porteur de 48 bits se devine"
+
+        client.cookies.clear()
+        _connecter(client, "b.mballa@cga-brcg.cm")
+        journal = client.get("/transverse/audit", params={"acteur": "C-010"})
+        assert journal.status_code == 200
+        assert secret not in journal.text
+        references = [e["objet_id"] for e in journal.json() if e["objet_type"] == "session"]
+        assert references and all(r.startswith("S#") for r in references)
+
+        client.cookies.clear()
+        for reference in references:
+            rejouee = client.get(
+                "/transverse/moi", headers={"Authorization": f"Bearer {reference}"}
+            )
+            assert rejouee.status_code == 401
+
+    def test_l_administrateur_ne_desarme_pas_le_super_administrateur(
+        self, client: TestClient
+    ):
+        """19 octobre 2026 (audit de sécurité) : `GERER_COMPTES` suffisait pour
+        suspendre le super administrateur ou retirer son second facteur.
+
+        ⚠️ Après le 18 octobre 2026 : C-010 n'est super administrateur que depuis ce
+        jour-là dans le jeu de démonstration."""
+        from app.partage.horloge import horloge_figee
+
+        with horloge_figee(datetime(2026, 10, 19, 9, 0)):
+            _connecter(client, "s.onana@cga-brcg.cm")
+            suspension = client.post(
+                "/transverse/comptes/C-010/suspension", json={"motif": "essai de suspension"}
+            )
+            assert suspension.status_code == 403, suspension.text
+            reinitialisation = client.post(
+                "/transverse/comptes/C-010/second-facteur/reinitialisation",
+                json={"motif": "téléphone déclaré perdu par appel au cabinet ce matin"},
+            )
+            assert reinitialisation.status_code == 403, reinitialisation.text
+            # Un compte de métier reste à sa portée.
+            assert (
+                client.post(
+                    "/transverse/comptes/C-005/suspension", json={"motif": "fin de mission"}
+                ).status_code
+                == 200
+            )
 
     def test_le_comptable_ne_lit_pas_le_journal(self, client: TestClient):
         _connecter(client, "l.fotso@cga-brcg.cm")

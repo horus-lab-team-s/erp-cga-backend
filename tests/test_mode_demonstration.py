@@ -127,6 +127,18 @@ class TestVerrous:
     def test_la_production_demarre_sans_ce_mode(self):
         assert Configuration(**self._production()).mode_demonstration is False
 
+    def test_un_environnement_inconnu_est_refuse(self):
+        """19 octobre 2026 (audit) : une faute de frappe ouvrait la simulation de paiement."""
+        with pytest.raises(ValueError, match="CGA_ENVIRONNEMENT"):
+            Configuration(environnement="prodution")
+
+    def test_la_recette_exposee_se_defend_comme_la_production(self):
+        """Une recette joignable de l'extérieur n'est pas un poste de travail."""
+        with pytest.raises(ValueError, match="Configuration de production refusée"):
+            Configuration(**self._production(environnement="recette", mode_demonstration=True))
+        assert Configuration(**self._production(environnement="preprod")).en_production
+        assert not Configuration(environnement="local").en_production
+
     def test_le_mode_est_faux_par_defaut(self):
         """Il se déclare. Il ne se déduit d'aucune autre absence de réglage."""
         assert Configuration().mode_demonstration is False

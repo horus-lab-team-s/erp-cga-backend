@@ -839,9 +839,13 @@ def telecharger_par_empreinte(acces: AccesRequis, empreinte: str) -> Response:
     `nosniff` empêchent qu'un fichier déposé s'exécute dans le domaine du
     cabinet, et `no-store` qu'un justificatif nominatif dorme dans un cache
     partagé.
+
+    ⚠️ 19 OCTOBRE 2026 (AUDIT DE SÉCURITÉ) : `LIRE_PIECE` laissait un adhérent lire un
+    fichier déposé sur un autre dossier, pour peu qu'il en connût l'empreinte. Faute de
+    périmètre à vérifier, la porte est réservée à ceux qui suivent les formalités.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.LIRE_PIECE)
+    exiger(acces, Permission.SUIVRE_FORMALITE)
     from app.contextes.collecte.adaptateurs.sortant.magasin_local import CleInvalide
 
     magasin = magasin_fichiers()

@@ -665,11 +665,18 @@ def _inscrire_les_travaux_periodiques() -> None:
 
 def creer_application() -> FastAPI:
     config = configuration()
+    # ⚠️ 19 octobre 2026 (audit de sécurité) : la documentation interactive livrait la
+    # carte complète des routes (un Mo de schéma) à qui la demandait. En production,
+    # elle n'est pas servie ; elle se lit sur un poste ou en recette interne.
+    documentation = not config.en_production
     application = FastAPI(
         title=config.nom_application,
         description=DESCRIPTION,
         version="0.1.0",
         lifespan=_cycle_de_vie,
+        docs_url="/docs" if documentation else None,
+        redoc_url="/redoc" if documentation else None,
+        openapi_url="/openapi.json" if documentation else None,
     )
     # L'unité de travail avant CORS : les intergiciels s'appliquent dans l'ordre
     # inverse de leur déclaration, et l'on veut que la transaction enveloppe le
@@ -851,11 +858,10 @@ def creer_application() -> FastAPI:
         la production refuse de démarrer. Hors production, l'état se lit ici.
         ─────────────────────────────────────────────────────────────────────
         """
-        etat: dict[str, object] = {
-            "etat": "operationnel",
-            "environnement": config.environnement,
-            "persistance": config.persistance,
-        }
+        etat: dict[str, object] = {"etat": "operationnel"}
+        # ⚠️ 19 octobre 2026 (audit) : en production, la sonde ne décrit pas l'installation.
+        if not config.en_production:
+            etat |= {"environnement": config.environnement, "persistance": config.persistance}
         # ⚠️ Annoncé, et non tu. Un serveur qui fabrique des encaissements sans
         # argent et retient les courriels ne doit jamais être pris pour une
         # production. Trois façons de s'en apercevoir : ce champ, le bandeau

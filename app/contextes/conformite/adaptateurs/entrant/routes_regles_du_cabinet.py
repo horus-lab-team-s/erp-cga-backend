@@ -59,6 +59,7 @@ from app.contextes.transverse.api import (
 )
 from app.partage.erreurs import message_lisible
 from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
+from app.partage.tableur import ligne_sure
 
 routeur = APIRouter(prefix="/conformite", tags=["Conformité"])
 
@@ -438,7 +439,7 @@ def exporter_les_derogations(
         acces, regle=regle, auteur=auteur, dossier=dossier, statut=statut
     ):
         ecrivain.writerow(
-            [
+            ligne_sure([
                 jour_a_douala(e.propose_le).isoformat(),
                 e.dossier, e.reference_document, e.code_regle,
                 e.severite.value, "" if e.enjeu is None else str(e.enjeu), e.statut.value, e.motif,
@@ -446,7 +447,7 @@ def exporter_les_derogations(
                 noms.get(e.tranche_par or "", e.tranche_par or ""),
                 e.motif_du_second_regard or "", noms.get(e.leve_par or "", e.leve_par or ""),
                 e.motif_de_levee or "",
-            ]
+            ])
         )
     return Response(
         content="﻿" + tampon.getvalue(),

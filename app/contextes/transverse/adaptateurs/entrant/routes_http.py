@@ -27,10 +27,11 @@ sous les mêmes chemins.
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.transverse.adaptateurs.entrant.dependances import (
@@ -158,7 +159,9 @@ def connexion(demande: DemandeConnexion, requete: Request, reponse: Response) ->
         session, compte = ouvrir_session(
             demande.courriel,
             demande.mot_de_passe,
-            identifiant_session=nouvel_identifiant("S"),
+            # ⚠️ 19 octobre 2026 (audit) : 256 bits d'aléa, comme les jetons. L'ancien
+            # `uuid4().hex[:12]` n'en portait que 48 pour le secret qui ouvre tout.
+            identifiant_session=f"S-{secrets.token_urlsafe(32)}",
             comptes=boutique.comptes,
             sessions=boutique.sessions,
             empreintes=boutique.empreintes,
@@ -319,7 +322,7 @@ class AccuseDOubli(BaseModel):
         "liste, on note ce qui répond, et l'on obtient les clients du cabinet."
     ),
 )
-def oubli(demande: DemandeOubli) -> AccuseDOubli:
+def oubli(demande: DemandeOubli, taches: BackgroundTasks) -> AccuseDOubli:
     boutique = atelier()
     compte = boutique.comptes.par_courriel(demande.courriel)
     if compte is not None and compte.etat.value != "SUSPENDU":
@@ -332,7 +335,11 @@ def oubli(demande: DemandeOubli) -> AccuseDOubli:
             a_l_instant=maintenant(),
             emis_par="systeme",
         )
-        boutique.notifications.envoyer(
+        # ⚠️ 19 octobre 2026 (audit de sécurité) : l'envoi SMTP, synchrone, ne partait
+        # que pour une adresse connue ; la durée de la réponse disait donc si le compte
+        # existe. Il part après la réponse.
+        taches.add_task(
+            boutique.notifications.envoyer,
             "compte.reinitialisation",
             destinataire=compte.courriel,
             contexte={
