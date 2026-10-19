@@ -15,6 +15,7 @@ from app.contextes.transverse.adaptateurs.entrant.dependances import (
     AccesRequis,
     atelier,
     exiger,
+    exiger_un_geste_fort,
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_http import (
     nouvel_identifiant,
@@ -133,7 +134,7 @@ class Invitation(BaseModel):
     responses={409: {"description": "L'adresse est déjà celle d'un compte"}},
 )
 def inviter(acces: AccesRequis, demande: DemandeInvitation) -> Invitation:
-    exiger(acces, Permission.GERER_COMPTES)
+    exiger_un_geste_fort(acces, Permission.GERER_COMPTES)
     if str(demande.role) not in matrice_en_vigueur():
         raise HTTPException(status_code=422, detail=f"le cabinet n'a pas de rôle {demande.role}.")
     boutique = atelier()
@@ -191,7 +192,7 @@ class DemandeSuspension(BaseModel):
     ),
 )
 def suspendre(acces: AccesRequis, identifiant: str, demande: DemandeSuspension) -> Compte:
-    exiger(acces, Permission.GERER_COMPTES)
+    exiger_un_geste_fort(acces, Permission.GERER_COMPTES)
     boutique = atelier()
     try:
         compte = suspendre_compte(
@@ -248,7 +249,7 @@ class DemandeRetablissement(BaseModel):
     },
 )
 def retablir(acces: AccesRequis, identifiant: str, demande: DemandeRetablissement) -> Compte:
-    exiger(acces, Permission.GERER_COMPTES)
+    exiger_un_geste_fort(acces, Permission.GERER_COMPTES)
     boutique = atelier()
     try:
         compte = retablir_compte(
@@ -398,7 +399,7 @@ class DemandeFermeture(BaseModel):
     ),
 )
 def fermer(acces: AccesRequis, identifiant: str, demande: DemandeFermeture) -> Habilitation:
-    exiger(acces, Permission.GERER_COMPTES)
+    exiger_un_geste_fort(acces, Permission.GERER_COMPTES)
     boutique = atelier()
     try:
         return fermer_habilitation(

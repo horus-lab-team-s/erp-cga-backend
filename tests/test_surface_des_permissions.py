@@ -255,6 +255,9 @@ def _sans_controle():
             "exiger_dossier(",
             "exiger_dossier_pour_l_un_de(",
             "restreindre(",
+            # 19 octobre 2026 : la permission ET la session renforcée, pour les gestes
+            # qui modifient les comptes.
+            "exiger_un_geste_fort(",
         )
         if any(appel in source for appel in gardes):
             continue

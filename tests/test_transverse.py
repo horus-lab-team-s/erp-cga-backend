@@ -83,6 +83,7 @@ from app.contextes.transverse.api import (
 from app.contextes.transverse.domaine.jetons import engendrer_secret
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
+from tests.conftest import renforcer_la_session
 
 INSTANT = datetime(2026, 8, 15, 9, 30)
 AUJOURD_HUI = INSTANT.date()
@@ -1274,9 +1275,30 @@ class TestApi:
         parti = next(x for x in lignes if x["compte"]["identifiant"] == "C-008")
         assert parti["roles"] == ["COMPTABLE"]
 
+    def test_sans_second_facteur_l_administrateur_n_invite_personne(self, client: TestClient):
+        """⚠️ 19 octobre 2026 : le mot de passe d'un administrateur, seul, ouvrait un
+        compte au nom et à l'adresse de qui le voulait. La liste se lit toujours."""
+        _connecter(client, "s.onana@cga-brcg.cm")
+        liste = client.get("/transverse/comptes", params={"a_la_date": "2026-09-14"})
+        assert liste.status_code == 200
+        refus = client.post(
+            "/transverse/comptes/invitation",
+            json={
+                "courriel": "intrus@exemple.cm",
+                "nom": "INTRUS",
+                "prenom": "Ivan",
+                "role": "COMPTABLE",
+                "portee": [NIU_DEMO["CLINIQUE"]],
+                "depuis": "2026-01-05",
+            },
+        )
+        assert refus.status_code == 403, refus.text
+        assert "second facteur" in refus.text
+
     def test_inviter_puis_activer_puis_se_connecter(self, client: TestClient):
         """Le parcours complet d'une prise de poste, en quatre requêtes."""
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         invitation = client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1332,6 +1354,7 @@ class TestApi:
 
     def test_l_invitation_prepare_un_courriel(self, client: TestClient):
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1349,6 +1372,7 @@ class TestApi:
 
     def test_l_adresse_deja_prise_rend_409(self, client: TestClient):
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         reponse = client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1364,6 +1388,7 @@ class TestApi:
 
     def test_inviter_un_adherent_sans_portee_rend_422(self, client: TestClient):
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         reponse = client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1398,6 +1423,8 @@ class TestApi:
         assert autre.get("/transverse/moi").status_code == 200
 
         _connecter(client, "s.onana@cga-brcg.cm")
+
+        renforcer_la_session(client)
         assert (
             client.post(
                 "/transverse/comptes/C-004/suspension",
@@ -1418,6 +1445,8 @@ class TestApi:
         )
 
         _connecter(client, "s.onana@cga-brcg.cm")  # C-002, administrateur
+
+        renforcer_la_session(client)
         soi = client.post("/transverse/comptes/C-002/suspension", json={"motif": "essai"})
         assert soi.status_code == 409, soi.text
         assert client.get("/transverse/moi").status_code == 200, "la session tient"
@@ -1474,6 +1503,7 @@ class TestApi:
     def test_une_habilitation_a_venir_ne_donne_rien_aujourd_hui(self, client: TestClient):
         """Un contrat signé pour septembre n'ouvre pas les dossiers en août."""
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1554,6 +1584,7 @@ class TestApi:
 
         with horloge_figee(datetime(2026, 10, 19, 9, 0)):
             _connecter(client, "s.onana@cga-brcg.cm")
+            renforcer_la_session(client)
             suspension = client.post(
                 "/transverse/comptes/C-010/suspension", json={"motif": "essai de suspension"}
             )

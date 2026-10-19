@@ -424,6 +424,20 @@ def enroler_par_le_courriel(client) -> str:
     return secret
 
 
+def renforcer_la_session(client) -> None:
+    """Renforce la session du compte connecté, comme son titulaire le ferait.
+
+    ⚠️ 19 octobre 2026 : les gestes qui modifient les comptes exigent le second facteur.
+    Un compte jamais enrôlé s'enrôle (le premier code active la clé et renforce la
+    session) ; un compte déjà renforcé n'a rien à faire.
+    """
+    moi = client.get("/transverse/moi").json()
+    if moi["facteur_fort"]:
+        return
+    assert not moi["second_facteur_enrole"], "compte déjà enrôlé : renforcer avec son secret"
+    enroler_par_le_courriel(client)
+
+
 @pytest.fixture
 def depot_tva_sans_revue_exigee(monkeypatch):
     """Le dépôt de TVA sans l'exigence d'un mois transmis au réviseur (pas 109).

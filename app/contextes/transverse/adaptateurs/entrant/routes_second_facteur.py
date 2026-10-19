@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.contextes.transverse.adaptateurs.entrant.dependances import (
     AccesRequis,
     atelier,
-    exiger,
+    exiger_un_geste_fort,
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_http import (
     nouvel_identifiant,
@@ -273,7 +273,7 @@ class DemandeReinitialisation(BaseModel):
 def reinitialiser_le_second_facteur(
     acces: AccesRequis, identifiant: str, demande: DemandeReinitialisation
 ) -> Compte:
-    exiger(acces, Permission.GERER_COMPTES)
+    exiger_un_geste_fort(acces, Permission.GERER_COMPTES)
     boutique = atelier()
     try:
         compte = reinitialiser_second_facteur(

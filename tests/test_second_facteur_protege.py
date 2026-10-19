@@ -26,7 +26,12 @@ from app.contextes.transverse.api import (
 )
 from app.main import creer_application
 from app.partage.horloge import maintenant
-from tests.conftest import enroler_par_le_courriel, exige_postgresql, ouvrir_une_session
+from tests.conftest import (
+    enroler_par_le_courriel,
+    exige_postgresql,
+    ouvrir_une_session,
+    renforcer_la_session,
+)
 
 REVISEUR = ("C-003", "a.bouba@cga-brcg.cm")
 ADMINISTRATEUR = ("C-002", "s.onana@cga-brcg.cm")
@@ -46,6 +51,13 @@ def _session(application, courriel):
         "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
     )
     assert reponse.status_code == 200, reponse.text
+    return client
+
+
+def _session_forte(application, courriel):
+    """19 octobre 2026 : retirer le second facteur d'un collègue exige le sien."""
+    client = _session(application, courriel)
+    renforcer_la_session(client)
     return client
 
 
@@ -302,7 +314,7 @@ class TestLaReinitialisation:
         titulaire = _session(application, REVISEUR[1])
         _renforcer(titulaire, enroler_par_le_courriel(titulaire))
 
-        reponse = self._reinitialiser(_session(application, ADMINISTRATEUR[1]))
+        reponse = self._reinitialiser(_session_forte(application, ADMINISTRATEUR[1]))
         assert reponse.status_code == 200, reponse.text
         assert reponse.json()["second_facteur_actif"] is False
         assert _courriels("compte.second_facteur_reinitialise") == [REVISEUR[1]]
@@ -321,7 +333,7 @@ class TestLaReinitialisation:
         assert "propre" in reponse.text
 
     def test_rien_a_reinitialiser(self, application):
-        reponse = self._reinitialiser(_session(application, ADMINISTRATEUR[1]))
+        reponse = self._reinitialiser(_session_forte(application, ADMINISTRATEUR[1]))
         assert reponse.status_code == 409, reponse.text
 
     def test_le_reviseur_ne_reinitialise_pas(self, application):
@@ -354,6 +366,7 @@ class TestSurPostgresql:
         ouvrir_une_session(client, REVISEUR[1])
         enroler_par_le_courriel(client)
         ouvrir_une_session(client, ADMINISTRATEUR[1])
+        renforcer_la_session(client)
         reponse = client.post(
             f"/transverse/comptes/{REVISEUR[0]}/second-facteur/reinitialisation",
             json={"motif": MOTIF},

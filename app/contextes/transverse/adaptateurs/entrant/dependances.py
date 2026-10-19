@@ -123,6 +123,7 @@ from app.partage.locataire import courant, etabli, poser_le_mandat
 
 __all__ = [
     "NOM_TEMOIN",
+    "exiger_un_geste_fort",
     "AccesRequis",
     "Atelier",
     "AtelierMemoire",
@@ -754,6 +755,26 @@ def exiger(
             status_code=403,
             detail=f"Action non permise : {permission} est requise. ({type(refus).__name__})",
         ) from refus
+
+
+def exiger_un_geste_fort(acces: Acces, permission: Permission) -> None:
+    """La permission, ET une session renforcée par le second facteur (19 octobre 2026).
+
+    ⚠️ Pour les gestes qui MODIFIENT les comptes : inviter, suspendre, rétablir, fermer
+    une habilitation, retirer le second facteur d'un collègue. `GERER_COMPTES` n'entre
+    pas dans `EXIGE_MFA`, qui garderait aussi la simple lecture de la liste ; c'est le
+    geste qui exige le code. Le mot de passe d'un administrateur, seul, ouvrait sinon
+    un compte au nom de qui le voulait, avec l'adresse de son choix.
+    """
+    exiger(acces, permission)
+    if not acces.facteur_fort:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Action non permise : {permission} est requise. (SecondFacteurRequis) "
+                "Ce geste exige le second facteur : renforcez la session."
+            ),
+        )
 
 
 AccesRequis = Annotated[Acces, Depends(acces_courant)]
