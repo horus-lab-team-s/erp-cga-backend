@@ -159,3 +159,69 @@ class TestLeCabinetJuge:
 
         assert adherent.post(VERDICT, json={**QUITTANCE, "verdict": "VALIDEE"}).status_code == 403
         assert adherent.get(A_VERIFIER).status_code == 403
+
+
+class TestLaQuittanceSeCompareALAccuse:
+    """⚠️ 19 octobre 2026 (point 7) : le montant relevé ne se comparait à rien. L'échéance
+    porte désormais la référence de son accusé : la comparaison est sûre, et un écart ne
+    passe pas sans un mot de celui qui valide."""
+
+    @staticmethod
+    def _accuse_cnps_de_juillet(montant: str):
+        from tests.conftest import enroler_par_le_courriel
+
+        reviseur = echeances._client(echeances.REVISEUR)
+        enroler_par_le_courriel(reviseur)
+        consigne = reviseur.post(
+            f"/obligations/dossiers/{echeances.BATIMENT}/depots",
+            json={
+                **echeances.CNPS_JUILLET,
+                "numero": "CNPS-2026-07-000417",
+                "depose_le": "2026-08-12T09:00:00",
+                "montant_constate": montant,
+            },
+        )
+        assert consigne.status_code == 200, consigne.text
+        return reviseur
+
+    def test_la_liste_montre_ce_que_porte_l_accuse(self):
+        _quittance_envoyee()
+        reviseur = self._accuse_cnps_de_juillet("110618")
+        (attente,) = [q for q in reviseur.get(A_VERIFIER).json() if q["piece"] == "PJ-2026-0013"]
+        assert attente["montant_attendu"] == "110618"
+
+    def test_un_ecart_se_justifie_ou_ne_se_valide_pas(self):
+        from app.contextes.transverse.api import atelier
+
+        _quittance_envoyee()
+        reviseur = self._accuse_cnps_de_juillet("110618")
+        sans_mot = reviseur.post(
+            VERDICT, json={**QUITTANCE, "verdict": "VALIDEE", "montant_quittance": "108000"}
+        )
+        assert sans_mot.status_code == 422, sans_mot.text
+        assert "écart" in sans_mot.json()["detail"]
+        assert "110" in sans_mot.json()["detail"] and "108" in sans_mot.json()["detail"]
+
+        justifie = reviseur.post(
+            VERDICT,
+            json={
+                **QUITTANCE,
+                "verdict": "VALIDEE",
+                "montant_quittance": "108000",
+                "motif": "Paiement partiel, le solde suit le 30 août.",
+            },
+        )
+        assert justifie.status_code == 200, justifie.text
+        (entree,) = [
+            e for e in atelier().journal.lister(objet_type="preuve_de_paiement")
+            if e.action == "preuve.jugee" or e.apres.get("verdict") == "VALIDEE"
+        ][-1:]
+        assert entree.apres["ecart"] == "-2618"
+
+    def test_le_bon_montant_se_valide_sans_rien_dire(self):
+        _quittance_envoyee()
+        reviseur = self._accuse_cnps_de_juillet("110618")
+        verdict = reviseur.post(
+            VERDICT, json={**QUITTANCE, "verdict": "VALIDEE", "montant_quittance": "110618"}
+        )
+        assert verdict.status_code == 200, verdict.text

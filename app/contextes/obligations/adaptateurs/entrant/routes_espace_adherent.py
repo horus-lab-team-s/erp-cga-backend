@@ -364,6 +364,45 @@ def envoyer_une_preuve(
 # personne n'avait d'écran pour dire « cette quittance ne va pas ».
 
 
+def _francs(montant: Decimal, *, signe: bool = False) -> str:
+    """« 110 618 », ou « +2 000 » : le montant lu comme sur une quittance."""
+    texte = f"{abs(montant):,.0f}".replace(",", "\u202f")
+    return (("+" if montant >= 0 else "−") if signe else ("−" if montant < 0 else "")) + texte
+
+
+#: L'écart toléré entre la quittance et l'accusé : un franc, pour l'arrondi d'un guichet.
+ECART_TOLERE = Decimal("1")
+
+
+def montant_attendu(entreprise: str, code_obligation: str, periode_debut: date) -> Decimal | None:
+    """Le montant que porte l'accusé de dépôt de cette échéance, ou `None` (19 octobre 2026).
+
+    ⚠️ SEULEMENT L'ACCUSÉ, JAMAIS L'ESTIMATION. Le rapprochement était resté manuel parce que
+    la correspondance entre une échéance et son accusé n'était pas sûre : elle l'est par la
+    référence de dépôt que l'échéancier pose lui-même sur l'instance. Sans accusé, rien ne se
+    compare, et la quittance se juge comme avant.
+    """
+    try:
+        dossier = entreprise_du_portefeuille(entreprise)
+    except Exception:  # noqa: BLE001 — un dossier illisible ne doit pas empêcher le verdict
+        return None
+    reglages = reglages_des_echeances()
+    instance = next(
+        (
+            o
+            for o in instances_de_l_echeancier(dossier, aujourd_hui(), reglages.horizon_jours)
+            if o.code_obligation == code_obligation and o.periode_debut == periode_debut
+        ),
+        None,
+    )
+    if instance is None or not instance.reference_depot:
+        return None
+    accuse = next(
+        (a for a in atelier().portail.tous() if a.numero == instance.reference_depot), None
+    )
+    return accuse.montant_constate if accuse else None
+
+
 class QuittanceAVerifier(BaseModel):
     dossier: str
     obligation: str
@@ -373,6 +412,8 @@ class QuittanceAVerifier(BaseModel):
     piece: str
     envoyee_le: datetime
     par: str
+    #: 19 octobre 2026 (point 7) : ce que porte l'accusé de dépôt, pour comparer.
+    montant_attendu: Decimal | None = None
 
 
 @routeur.get(
@@ -398,6 +439,9 @@ def quittances_a_verifier(acces: AccesRequis) -> list[QuittanceAVerifier]:
             piece=e.apres["piece"],
             envoyee_le=e.horodatage,
             par=e.apres.get("par", e.acteur),
+            montant_attendu=montant_attendu(
+                e.objet_id, e.apres["obligation"], date.fromisoformat(e.apres["periode_debut"])
+            ),
         )
         for e in entrees
         if e.action == ACTION_RECUE
@@ -503,6 +547,29 @@ def juger_une_quittance(
             detail=f"Cette quittance est déjà {preuve.verdict.value.lower()} "
             f"depuis le {preuve.verifiee_le:%d/%m/%Y}.",
         )
+    # ⚠️ 19 octobre 2026 (point 7) : la quittance se compare à l'accusé. Un écart ne bloque
+    # pas la validation (paiement partiel, pénalités, régularisation), mais il ne passe pas
+    # sans un mot : celui qui valide dit pourquoi, et l'écart reste au journal.
+    attendu = montant_attendu(entreprise, demande.code_obligation, demande.periode_debut)
+    ecart = (
+        demande.montant_quittance - attendu
+        if attendu is not None and demande.montant_quittance is not None
+        else None
+    )
+    if (
+        demande.verdict is VerdictDeLaPreuve.VALIDEE
+        and ecart is not None
+        and abs(ecart) > ECART_TOLERE
+        and len(motif) < 5
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"La quittance porte {_francs(demande.montant_quittance)} FCFA, l'accusé de "
+                f"dépôt {_francs(attendu)} FCFA : écart de {_francs(ecart, signe=True)} FCFA. "
+                "Dites pourquoi vous la validez (paiement partiel, pénalités…), ou refusez-la."
+            ),
+        )
     horodatage = maintenant()
     atelier().journal.ajouter(
         horodatage=horodatage,
@@ -521,6 +588,8 @@ def juger_une_quittance(
                 if demande.montant_quittance
                 else {}
             ),
+            **({"montant_attendu": str(attendu)} if attendu is not None else {}),
+            **({"ecart": str(ecart)} if ecart is not None else {}),
         },
     )
     try:
