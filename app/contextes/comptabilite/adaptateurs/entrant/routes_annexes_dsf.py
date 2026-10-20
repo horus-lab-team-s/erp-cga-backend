@@ -113,9 +113,9 @@ def _noms_des_emetteurs(entreprise: str) -> dict[str, str]:
     except Exception:  # noqa: BLE001 — un nom manquant ne bloque pas une balance
         journal.warning("Noms des émetteurs : pièces de %s illisibles.", entreprise)
     try:
-        from app.contextes.conformite.api import FACTURES_DEMO
+        from app.contextes.conformite.api import factures_a_controler
 
-        for facture in FACTURES_DEMO.values():
+        for facture in factures_a_controler():
             e = facture.emetteur
             if facture.destinataire.niu == entreprise and e.niu and e.denomination:
                 noms.setdefault(e.niu, e.denomination)

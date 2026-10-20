@@ -732,6 +732,14 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_portefeuille)
     application.include_router(routeur_collecte)
     application.include_router(routeur_facture_lue)
+    # 20 octobre 2026 : la conformité contrôle les factures réelles, lues et confirmées,
+    # que la collecte lui branche ici. Voir `conformite/.../factures_a_controler.py`.
+    from app.contextes.collecte.adaptateurs.entrant.factures_pour_la_conformite import (
+        factures_des_pieces_lues,
+    )
+    from app.contextes.conformite.api import brancher_la_source_des_factures
+
+    brancher_la_source_des_factures(factures_des_pieces_lues)
     application.include_router(routeur_lecture_au_depot)
     application.include_router(routeur_conformite)
     application.include_router(routeur_regles_du_cabinet)
@@ -903,4 +911,22 @@ def creer_application() -> FastAPI:
     return application
 
 
+def configurer_les_journaux() -> None:
+    """Les journaux de l'application, horodatés, sur la sortie d'erreur (20 octobre 2026).
+
+    ⚠️ Constaté à l'audit avant la production : rien ne configurait la racine. Uvicorn ne
+    règle que ses propres journaux ; les `info` de l'application (le verdict du
+    cloisonnement au démarrage, entre autres) étaient jetés, et les erreurs sortaient
+    sans date ni origine. Une racine déjà configurée (pytest, un hôte) n'est pas touchée.
+    """
+    racine = logging.getLogger()
+    if racine.handlers:
+        return
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s : %(message)s",
+    )
+
+
+configurer_les_journaux()
 app = creer_application()

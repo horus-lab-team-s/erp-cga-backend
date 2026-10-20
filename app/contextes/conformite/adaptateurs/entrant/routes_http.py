@@ -17,7 +17,10 @@ from app.contextes.conformite.adaptateurs.entrant.presentateur_verdict import (
     Verdict,
     composer_verdict,
 )
-from app.contextes.conformite.adaptateurs.sortant.donnees_demo import FACTURES_DEMO
+from app.contextes.conformite.adaptateurs.sortant.factures_a_controler import (
+    facture_par_reference,
+    factures_a_controler,
+)
 from app.contextes.conformite.api import (
     EcartDeConstat,
     EcartIntrouvable,
@@ -92,6 +95,13 @@ class ReponseControle(BaseModel):
     #: Les écarts de la pièce et ce qu'ils produisent aujourd'hui. **Vide pour qui
     #: n'est pas du cabinet** : le motif d'un réviseur est une note interne.
     ecarts: list[EtatDUnEcart] = []
+
+
+def _voit(acces: Acces | None):
+    """Le dossier est-il dans le périmètre ? Sans accès connu, tous se valent."""
+    if acces is None:
+        return lambda _niu: True
+    return lambda niu: niu is not None and acces.voit(niu)
 
 
 def _destinataire(facture: FactureAControler) -> str | None:
@@ -217,7 +227,7 @@ def lister_demonstration(acces: AccesRequis) -> list[str]:
     combien de pièces portent les dossiers de ses voisins.
     """
     exiger(acces, Permission.LIRE_PIECE)
-    visibles = restreindre(acces, FACTURES_DEMO.values(), _destinataire)
+    visibles = restreindre(acces, factures_a_controler(), _destinataire)
     return sorted(facture.document.reference for facture in visibles)
 
 
@@ -249,7 +259,7 @@ def controler_tout(acces: AccesRequis) -> list[ReponseControle]:
     exiger(acces, Permission.LIRE_PIECE)
     moteur_ = moteur()
     rapports = []
-    for facture in restreindre(acces, FACTURES_DEMO.values(), _destinataire):
+    for facture in restreindre(acces, factures_a_controler(), _destinataire):
         rapports.append(_reponse(acces, facture, moteur_.controler(facture)))
     return rapports
 
@@ -266,7 +276,7 @@ def controler_demonstration(acces: AccesRequis, reference: str) -> ReponseContro
     réponse — c'est ce qui empêche de sonder l'existence d'un dossier.
     """
     exiger(acces, Permission.LIRE_PIECE)
-    facture = FACTURES_DEMO.get(reference)
+    facture = facture_par_reference(reference, voit=_voit(acces))
     if facture is None:
         raise HTTPException(status_code=404, detail=f"facture « {reference} » inconnue.")
     dossier = _destinataire(facture)
@@ -299,15 +309,14 @@ def reserver_au_cabinet(acces: Acces) -> None:
 #   est écartable, ce qui exige un second regard, et qui peut le donner ;
 # * le **journal d'audit**, qui nomme l'auteur de chaque décision.
 #
-# Les pièces sont aujourd'hui celles du jeu de démonstration, comme pour
-# `/demonstration/{reference}`. Le jour où les pièces réelles porteront leur facture,
-# seule `_facture_de_la_piece` changera.
+# Les pièces sont celles de `factures_a_controler` (20 octobre 2026) : les factures
+# réelles lues et confirmées, et le jeu de démonstration hors production.
 
 _INTROUVABLE = "pièce « {reference} » inconnue."
 
 
-def _facture_de_la_piece(reference: str) -> FactureAControler:
-    facture = FACTURES_DEMO.get(reference)
+def _facture_de_la_piece(reference: str, acces: Acces | None = None) -> FactureAControler:
+    facture = facture_par_reference(reference, voit=_voit(acces))
     if facture is None:
         raise HTTPException(status_code=404, detail=_INTROUVABLE.format(reference=reference))
     return facture
@@ -472,7 +481,7 @@ def ecarter_un_constat(
     le moteur produit maintenant qui est écarté, avec son enjeu de maintenant.
     """
     exiger(acces, Permission.ECARTER_CONSTAT, motif=demande.motif)
-    facture = _facture_de_la_piece(reference)
+    facture = _facture_de_la_piece(reference, acces)
     dossier = _dossier_de_la_facture(facture, reference)
     exiger_dossier(
         acces, Permission.ECARTER_CONSTAT, dossier, motif=demande.motif,
@@ -540,7 +549,7 @@ def joindre_la_piece_d_appui(
     # équivalent au pas 118), et c'est la convention du projet : un contrôle caché est un contrôle
     # qu'on oublie de porter sur la route suivante.
     exiger(acces, Permission.ECARTER_CONSTAT, motif=f"pièce d'appui {demande.piece}")
-    facture = _facture_de_la_piece(reference)
+    facture = _facture_de_la_piece(reference, acces)
     dossier = _dossier_de_la_facture(facture, reference)
     exiger_dossier(
         acces, Permission.ECARTER_CONSTAT, dossier, motif=f"pièce d'appui {demande.piece}",
@@ -577,7 +586,7 @@ def donner_le_second_regard(
 ) -> EtatDUnEcart:
     politique = politique_d_ecart()
     permission = _permission_du_second_regard(acces, politique)
-    facture = _facture_de_la_piece(reference)
+    facture = _facture_de_la_piece(reference, acces)
     # ⚠️ Le motif est transmis : `ECARTER_CONSTAT` figure dans `EXIGE_MOTIF`, et sans
     # lui le réviseur désigné par la politique recevait un 403 au lieu de trancher.
     dossier = _dossier_de_la_facture(facture, reference)
@@ -621,7 +630,7 @@ def lever_l_ecart(
     acces: AccesRequis, reference: str, identifiant: str, demande: DemandeDeLevee
 ) -> EtatDUnEcart:
     exiger(acces, Permission.ECARTER_CONSTAT, motif=demande.motif)
-    facture = _facture_de_la_piece(reference)
+    facture = _facture_de_la_piece(reference, acces)
     dossier = _dossier_de_la_facture(facture, reference)
     exiger_dossier(
         acces, Permission.ECARTER_CONSTAT, dossier, motif=demande.motif,
@@ -734,7 +743,7 @@ def constats_de_la_regle(
     depot = depot_des_ecarts()
     lignes: list[LigneDeConstat] = []
     controles = []
-    for facture in restreindre(acces, FACTURES_DEMO.values(), _destinataire):
+    for facture in restreindre(acces, factures_a_controler(), _destinataire):
         dossier = _destinataire(facture)
         if dossier is None or not (debut <= facture.document.date_emission <= fin):
             continue
@@ -838,7 +847,7 @@ def ecarter_des_constats_en_masse(
         raise HTTPException(status_code=404, detail=f"règle « {code} » inconnue.")
     pieces = []
     for reference in demande.pieces:
-        facture = _facture_de_la_piece(reference)
+        facture = _facture_de_la_piece(reference, acces)
         dossier = _dossier_de_la_facture(facture, reference)
         # ⚠️ Toute pièce hors périmètre fait échouer la demande entière, en 404 : on ne
         # dit pas laquelle existe ailleurs.

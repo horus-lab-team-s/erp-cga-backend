@@ -9,6 +9,9 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+#: La base d'un poste de travail : la production doit en poser une autre.
+_URL_DE_DEVELOPPEMENT = "postgresql+psycopg://cga:cga@localhost:5432/cga_dev"
+
 #: Racine du dépôt : app/infrastructure/config.py → deux niveaux au-dessus.
 #:
 #: ⚠️ C'était **trois** niveaux avant la scission, parce que le serveur vivait dans
@@ -246,7 +249,7 @@ class Configuration(BaseSettings):
     #: L'adresse de la base. ⚠️ Le mot de passe n'a rien à faire en dépôt : la
     #: valeur par défaut vise une base de développement locale, et la production
     #: la surcharge par `CGA_URL_BASE_DE_DONNEES`.
-    url_base_de_donnees: str = "postgresql+psycopg://cga:cga@localhost:5432/cga_dev"
+    url_base_de_donnees: str = _URL_DE_DEVELOPPEMENT
 
     #: Trace le SQL émis. Lire les requêtes est le premier geste de diagnostic,
     #: et il ne doit pas demander un changement de code.
@@ -467,9 +470,31 @@ class Configuration(BaseSettings):
                 "CGA_TRACER_LE_SQL=true écrirait au journal les paramètres des requêtes : "
                 "noms, NIU, montants, empreintes."
             )
+        # 20 octobre 2026 (audit avant la production) : deux réglages que seul le premier
+        # usage révélait, bien après le démarrage.
+        if self.cle_chiffrement and not _cle_aes_256(self.cle_chiffrement):
+            fautes.append(
+                "CGA_CLE_CHIFFREMENT doit être 32 octets en base64 (AES-256). En produire "
+                'une : python -c "import base64,os; '
+                'print(base64.b64encode(os.urandom(32)).decode())"'
+            )
+        if self.url_base_de_donnees == _URL_DE_DEVELOPPEMENT:
+            fautes.append(
+                "CGA_URL_BASE_DE_DONNEES n'est pas posée : la base de développement locale "
+                "(cga/cga) n'est pas celle de la production."
+            )
         if fautes:
             raise ValueError("Configuration de production refusée :\n  · " + "\n  · ".join(fautes))
         return self
+
+
+def _cle_aes_256(cle_base64: str) -> bool:
+    import base64
+
+    try:
+        return len(base64.b64decode(cle_base64, validate=True)) == 32
+    except ValueError:
+        return False
 
 
 @lru_cache

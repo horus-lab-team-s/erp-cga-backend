@@ -105,6 +105,8 @@ class TestVerrous:
             "adresse_publique_site": "https://www.cga-brcg.cm",
             "adresse_publique_vitrine": "https://www.cga-brcgroup.com",
             "origines_cors": ["https://www.cga-brcg.cm"],
+            # 20 octobre 2026 : la base de développement locale est refusée.
+            "url_base_de_donnees": "postgresql+psycopg://cga_app@db.interne:5432/cga",
             "cle_chiffrement": base64.b64encode(bytes(32)).decode("ascii"),
         } | surcharges
 

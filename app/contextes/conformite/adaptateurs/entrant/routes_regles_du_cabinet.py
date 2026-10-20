@@ -18,7 +18,7 @@ from app.contextes.conformite.adaptateurs.entrant.routes_http import (
 from app.contextes.conformite.adaptateurs.sortant.depots_regles_du_cabinet import (
     depot_des_regles_du_cabinet,
 )
-from app.contextes.conformite.adaptateurs.sortant.donnees_demo import FACTURES_DEMO
+from app.contextes.conformite.adaptateurs.sortant.factures_a_controler import factures_a_controler
 from app.contextes.conformite.api import (
     JournalDesDerogations,
     QualiteDesRegles,
@@ -180,7 +180,7 @@ def eprouver_une_construction(
     except (ConstructionRefusee, ValueError) as refus:
         # `construire` valide une `Regle` : une ValidationError pydantic rendrait sa trace brute.
         raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
-    essai = eprouver(regle, FACTURES_DEMO.values(), _controler_avec)
+    essai = eprouver(regle, factures_a_controler(), _controler_avec)
     return EssaiDeConstruction(
         phrase=decrire(construction.conditions, construction.combinaison, SCHEMA_FACTURE),
         predicat=regle.predicat,
@@ -250,7 +250,7 @@ def proposer_une_regle_construite(
             designees=circuit.regles.proposer,
             motif_minimum=circuit.motif_minimum,
             unite_du_parametre=_unites_des_parametres(),
-            factures=FACTURES_DEMO.values(),
+            factures=factures_a_controler(),
             controler=_controler_avec,
             depot=depot_des_regles_du_cabinet(),
         )

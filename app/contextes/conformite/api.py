@@ -47,6 +47,12 @@ from app.contextes.conformite.adaptateurs.sortant.donnees_demo import (
     FACTURES_DEMO,
     REFERENCES_CANONIQUES,
 )
+from app.contextes.conformite.adaptateurs.sortant.factures_a_controler import (
+    SourceDesFactures,
+    brancher_la_source_des_factures,
+    facture_par_reference,
+    factures_a_controler,
+)
 from app.contextes.conformite.adaptateurs.sortant.politique_ecarts_yaml import (
     charger_la_politique_d_ecart,
 )
@@ -114,6 +120,12 @@ __all__ = [
     # leurs propres jeux, et qu'ils ne doivent pas fouiller les adaptateurs.
     "FACTURES_DEMO",
     "REFERENCES_CANONIQUES",
+    # Les factures que les écrans contrôlent : les réelles, branchées par la collecte,
+    # et le jeu de démonstration hors production (20 octobre 2026).
+    "SourceDesFactures",
+    "brancher_la_source_des_factures",
+    "facture_par_reference",
+    "factures_a_controler",
     # Entrée
     "ContexteControle",
     "Document",
@@ -404,7 +416,7 @@ def mesurer_la_qualite_des_regles(acces, du: _date, au: _date) -> QualiteDesRegl
     def destinataire(facture):
         return facture.destinataire.niu if facture.destinataire is not None else None
 
-    for facture in restreindre(acces, FACTURES_DEMO.values(), destinataire):
+    for facture in restreindre(acces, factures_a_controler(), destinataire):
         if not (du <= facture.document.date_emission <= au):
             continue
         brut = moteur_.controler(facture)

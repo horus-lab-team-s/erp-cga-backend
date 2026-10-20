@@ -77,6 +77,12 @@ __all__ = [
 
 journal = logging.getLogger(__name__)
 
+
+def _environnement_expose() -> bool:
+    from app.infrastructure.config import configuration
+
+    return configuration().en_production
+
 #: Voir l'en-tête : `dklo.co`, et non `taramoney.com`.
 ADRESSE_TARA = "https://www.dklo.co"
 
@@ -154,6 +160,21 @@ class FournisseurTara:
         cle_idempotence: str,
         libelle: str,
     ) -> Initiation:
+        if self.simule and _environnement_expose():
+            # ⚠️ 20 octobre 2026 (audit avant la production) : sans clés, la simulation
+            # rendait « accepté » avec une référence factice, et le paiement restait
+            # « en attente » sans que personne ne sache pourquoi. Exposé, on refuse et on
+            # dit quoi faire : le guichet du cabinet reste ouvert.
+            journal.error("Tara sans clés dans un environnement exposé : paiement refusé.")
+            return Initiation(
+                accepte=False,
+                reference_externe=None,
+                message=(
+                    "Le paiement mobile money n'est pas encore ouvert. Réglez au guichet "
+                    "du cabinet, ou réessayez plus tard."
+                ),
+                brut={"refus": "tara-non-configure"},
+            )
         if self.simule:
             journal.warning(
                 "Tara en mode simulé (aucune clé configurée) — aucun appel réseau, "

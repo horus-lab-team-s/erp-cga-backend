@@ -1248,14 +1248,16 @@ def _lien_de_la_piece(piece) -> str:
     """L'écran qui ouvre la pièce.
 
     ⚠️ L'écran de détail (E02) est désigné par la **référence de la facture**, et ne
-    sait aujourd'hui contrôler que les factures du jeu de démonstration. Un lien vers
-    une référence qu'il ne connaît pas ouvrirait « Pièce introuvable » : on renvoie alors
-    à la boîte de réception, qui liste toutes les pièces. Le jour où E02 lira les pièces
-    réelles, cette fonction seule changera.
+    contrôle que les factures que la conformité connaît : celles qui sont lues et
+    confirmées (20 octobre 2026), et le jeu de démonstration hors production. Un lien
+    vers une autre référence ouvrirait « Pièce introuvable » : on renvoie alors à la
+    boîte de réception, qui liste toutes les pièces.
     """
-    from app.contextes.conformite.api import FACTURES_DEMO
+    from app.contextes.conformite.api import facture_par_reference
 
-    if piece.reference_document and piece.reference_document in FACTURES_DEMO:
+    if piece.reference_document and (
+        piece.facture is not None or facture_par_reference(piece.reference_document)
+    ):
         return f"/pieces/{piece.reference_document}"
     return "/pieces"
 

@@ -88,6 +88,17 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
     eux-mêmes créée. Il n'a pas d'équivalent en ligne de commande, et c'est
     délibéré : la seule façon de réamorcer une base est de la recréer.
     """
+    from app.infrastructure.config import configuration
+
+    # ⚠️ 20 octobre 2026 (audit avant la production) : sur une base de production neuve,
+    # rien ne l'arrêtait, et elle aurait posé les comptes de la démonstration avec leur
+    # mot de passe publié. Le premier compte réel se crée par `app.premier_administrateur`.
+    if configuration().en_production:
+        raise AmorcageRefuse(
+            f"environnement {configuration().environnement} : le jeu de démonstration n'a "
+            "rien à faire ici. Créer le premier compte par `python -m "
+            "app.premier_administrateur`."
+        )
     with unite_de_travail(locataire) as boutique:
         if not forcer and boutique.comptes.lister():
             raise AmorcageRefuse(

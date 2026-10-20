@@ -59,6 +59,7 @@ from app.contextes.transverse.domaine.sessions import MotifRevocation
 from app.partage.horloge import jour_a_douala
 
 __all__ = [
+    "accorder_a_l_ouverture",
     "CourrielDejaPris",
     "ReinitialisationRefusee",
     "RetablissementRefuse",
@@ -305,6 +306,22 @@ def creer_l_administrateur_d_un_tenant(
         emis_par=ACTEUR_OUVERTURE,
     )
     return compte, jeton, secret
+
+
+def accorder_a_l_ouverture(
+    habilitation: Habilitation,
+    *,
+    habilitations: DepotHabilitations,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+) -> None:
+    """Une habilitation de plus pour le premier compte d'une base neuve (20 octobre 2026).
+
+    Même enregistrement, même journal que toute habilitation, au nom de l'ouverture : sur
+    une base neuve, personne ne porte encore `GERER_COMPTES`. Voir
+    `app/premier_administrateur.py`.
+    """
+    _enregistrer_habilitation(habilitation, habilitations, journal, ACTEUR_OUVERTURE, a_l_instant)
 
 
 def ouvrir_acces_adherent(

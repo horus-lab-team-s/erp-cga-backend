@@ -28,7 +28,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.contextes.conformite.api import (
-    FACTURES_DEMO,
+    factures_a_controler,
     moteur_par_defaut,
     rapport_arbitre,
 )
@@ -92,8 +92,9 @@ def lire_la_file(
 
     # La pièce de la collecte, par référence de document : le déposant et la date réelle.
     pieces = {}
+    factures = factures_a_controler()
     for dossier_niu in {
-        f.destinataire.niu for f in FACTURES_DEMO.values() if f.destinataire and f.destinataire.niu
+        f.destinataire.niu for f in factures if f.destinataire and f.destinataire.niu
     }:
         for piece in sans_echouer(lambda niu=dossier_niu: depot_pieces().du_dossier(niu), []):
             if piece.reference_document:
@@ -103,7 +104,7 @@ def lire_la_file(
     lignes: list[LigneDAnomalie] = []
     for facture in restreindre(
         acces,
-        FACTURES_DEMO.values(),
+        factures,
         lambda f: f.destinataire.niu if f.destinataire is not None else None,
     ):
         dossier = facture.destinataire.niu if facture.destinataire is not None else None

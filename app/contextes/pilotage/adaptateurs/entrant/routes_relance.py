@@ -184,14 +184,16 @@ def relever_les_attentes(dossier, du: date, au: date, reglages) -> list[AttenteD
     anomalies = []
     try:
         from app.contextes.conformite.api import (
-            FACTURES_DEMO,
+            facture_par_reference,
             moteur_par_defaut,
             rapport_arbitre,
         )
 
         moteur = moteur_par_defaut()
         for p in pieces_brutes:
-            facture = FACTURES_DEMO.get(p.reference_document or "")
+            facture = facture_par_reference(
+                p.reference_document or "", voit=lambda dossier: dossier == niu
+            )
             if facture is None or not p.en_attente_de_traitement:
                 continue
             date_piece = p.date_document or jour_a_douala(p.recue_le)
