@@ -632,7 +632,8 @@ class TestUnSeulChoixDuDepotDesEntreprises:
     sans qu'aucun écran ne le montre (c'est arrivé aux obligations). Le choix vit dans
     `portefeuille.api.depot_entreprises`, et nulle part ailleurs hors du portefeuille."""
 
-    PERMIS = {"app/amorcage.py"}  # l'amorçage nomme son locataire, hors requête
+    # L'amorçage et le jeu de présentation (20 octobre 2026) nomment leur locataire, hors requête.
+    PERMIS = {"app/amorcage.py", "app/jeu_de_presentation.py"}
 
     def test_personne_ne_construit_le_depot_sql_hors_du_portefeuille(self):
         import pathlib
