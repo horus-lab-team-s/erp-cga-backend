@@ -56,6 +56,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contextes.obligations.domaine.obligations import ObligationInstance
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "FondsRecusParLeCabinet",
@@ -275,6 +276,22 @@ def echeances_de_l_adherent(
         prouvees = [
             (r, o) for r, o in a_regler if prouvee(code, o) or (code, o.periode_debut) in fonds
         ]
+        # ⚠️ 20 octobre 2026, constaté au tournage : DÉPOSÉE, UNE QUITTANCE GARDE SA CARTE.
+        # Le dépôt consigné retirait l'échéance des cartes à régler, et sa quittance avec elle,
+        # au moment même où l'accusé permet de la comparer : le cabinet ne la voyait plus à
+        # juger, l'adhérent ne lisait jamais « Payée ». Elle reste tant qu'elle n'est pas
+        # jugée, puis une semaine une fois validée.
+        prouvees += [
+            (r, o)
+            for r, o in enumerate(suite)
+            if o.deposee
+            and prouvee(code, o)
+            and (
+                (preuve := derniere_preuve[(code, o.periode_debut)]).verdict is None
+                or preuve.verifiee_le is None
+                or jour_a_douala(preuve.verifiee_le) >= jour - timedelta(days=7)
+            )
+        ]
         # ⚠️ UNE QUITTANCE REFUSÉE GARDE SA CARTE, comme une quittance envoyée. Remise dans le lot
         # des retards, sa période disparaissait derrière la plus ancienne en retard, et le motif
         # du refus avec elle : l'adhérent ne savait pas qu'on attendait une autre quittance, ni
@@ -323,7 +340,9 @@ def echeances_de_l_adherent(
         ]
         if deposees:
             dernier = max(deposees, key=lambda ro: (ro[1].declaree_le, ro[1].periode_debut))
-            choisies.append((dernier[0], EtatPourLAdherent.DEPOSEE, 0))
+            # Une échéance déjà montrée par sa quittance ne se montre pas deux fois.
+            if dernier[0] not in {r for r, _ in prouvees}:
+                choisies.append((dernier[0], EtatPourLAdherent.DEPOSEE, 0))
 
         for rang, etat, autres in choisies:
             o = suite[rang]

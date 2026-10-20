@@ -233,7 +233,8 @@ class TestLeTitulaire:
         assert _activer(client, nouveau).status_code == 200
         autre = _session(application, REVISEUR[1])
         assert _renforcer(autre, ancien).status_code == 401, "l'ancien appareil ne vaut plus"
-        assert _renforcer(autre, nouveau).json()["facteur_fort"] is True
+        # Au code suivant : celui de l'activation de la nouvelle clé a servi.
+        assert _renforcer(autre, nouveau, decalage=1).json()["facteur_fort"] is True
 
 
 class TestUnCodeNeSertQuUneFois:
@@ -250,6 +251,16 @@ class TestUnCodeNeSertQuUneFois:
         assert "déjà de servir" in rejeu.text
         # Un code plus ancien encore ne passe pas davantage.
         assert _renforcer(intrus, secret).status_code == 401
+
+    def test_le_code_qui_active_ne_renforce_pas_une_seconde_session(self, application):
+        """⚠️ 20 octobre 2026, constaté au tournage : l'activation ne retenait pas sa tranche."""
+        titulaire = _session(application, REVISEUR[1])
+        secret = TestLaCleAttendSonPremierCode._cle_affichee(titulaire)
+        assert _activer(titulaire, secret).json()["facteur_fort"] is True
+
+        rejeu = _renforcer(_session(application, REVISEUR[1]), secret)
+        assert rejeu.status_code == 401, rejeu.text
+        assert "déjà de servir" in rejeu.text
 
 
 class TestLaCleAttendSonPremierCode:

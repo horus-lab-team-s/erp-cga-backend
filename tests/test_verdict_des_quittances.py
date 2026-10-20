@@ -225,3 +225,28 @@ class TestLaQuittanceSeCompareALAccuse:
             VERDICT, json={**QUITTANCE, "verdict": "VALIDEE", "montant_quittance": "110618"}
         )
         assert verdict.status_code == 200, verdict.text
+
+    def test_deposee_la_quittance_reste_a_juger_puis_se_lit_payee(self):
+        """⚠️ 20 octobre 2026, constaté au tournage : le dépôt consigné retirait la carte, et
+        sa quittance avec elle. Le cabinet ne la voyait plus à juger, au moment même où
+        l'accusé permettait de la comparer ; l'adhérent ne lisait jamais « Payée »."""
+        adherent = _quittance_envoyee()
+        reviseur = self._accuse_cnps_de_juillet("110618")
+
+        def juillet():
+            vue = adherent.get(f"/obligations/dossiers/{echeances.BATIMENT}/mes-echeances").json()
+            return [
+                e
+                for e in vue["echeances"]
+                if e["code_obligation"] == "CNPS" and e["periode_debut"] == "2026-07-01"
+            ]
+
+        (carte,) = juillet()
+        assert carte["etat"] == "PREUVE_ENVOYEE"
+        assert carte["montant_constate"] == "110618"
+        verdict = reviseur.post(
+            VERDICT, json={**QUITTANCE, "verdict": "VALIDEE", "montant_quittance": "110618"}
+        )
+        assert verdict.status_code == 200, verdict.text
+        (carte,) = juillet()
+        assert carte["etat"] == "PAYEE"

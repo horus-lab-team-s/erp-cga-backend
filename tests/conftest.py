@@ -417,8 +417,12 @@ def enroler_par_le_courriel(client) -> str:
     from app.contextes.transverse.api import code_attendu
     from app.partage.horloge import maintenant
 
+    # ⚠️ 20 octobre 2026 : le code d'activation est retenu, et ne sert plus ensuite. Le
+    # titulaire saisit celui qu'il lisait il y a un instant (la tranche précédente) : les
+    # cas qui renforcent aussitôt au code du moment restent ce qu'un titulaire ferait.
     activation = client.post(
-        "/transverse/second-facteur/activation", json={"code": code_attendu(secret, maintenant())}
+        "/transverse/second-facteur/activation",
+        json={"code": code_attendu(secret, maintenant(), -1)},
     )
     assert activation.status_code == 200, activation.text
     return secret

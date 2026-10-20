@@ -56,7 +56,6 @@ from app.contextes.transverse.domaine.second_facteur import (
     DUREE_RENFORCEMENT,
     CodeInvalide,
     tranche_du_code,
-    verifier_code,
 )
 from app.contextes.transverse.domaine.sessions import (
     DUREE_SESSION,
@@ -428,7 +427,8 @@ def activer_second_facteur(
             "Aucune clé n'attend d'être activée. Demandez l'association depuis l'écran."
         )
     _refuser_si_trop_de_codes(compte, journal, a_l_instant)
-    if not verifier_code(compte.secret_totp_en_attente, code, a_l_instant):
+    tranche = tranche_du_code(compte.secret_totp_en_attente, code, a_l_instant)
+    if tranche is None:
         journal.ajouter(
             horodatage=a_l_instant,
             acteur=compte.identifiant,
@@ -441,7 +441,12 @@ def activer_second_facteur(
             "l'heure du téléphone est à l'heure."
         )
     remplacement = compte.second_facteur_actif
-    actif = compte.activer_le_secret_en_attente()
+    # ⚠️ 20 octobre 2026 : la tranche du premier code est retenue, comme au renforcement.
+    # Constaté au tournage : la clé activée, le même code renforçait encore une seconde
+    # session dans les quatre-vingt-dix secondes.
+    actif = compte.activer_le_secret_en_attente().model_copy(
+        update={"derniere_tranche_totp": tranche}
+    )
     comptes.enregistrer(actif)
     journal.ajouter(
         horodatage=a_l_instant,
