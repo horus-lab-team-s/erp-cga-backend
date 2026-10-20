@@ -57,6 +57,12 @@ from app.contextes.souscription.domaine.offre import (
 )
 from app.contextes.souscription.domaine.ports import DepotTarifsFixes
 
+#: Ce que lit le visiteur tant que la direction n'a pas arrêté le prix de la DSF seule.
+_PRIX_DSF_A_ARRETER = (
+    "Prix en cours d'arrêt par le cabinet : il vous confirme le montant avant tout "
+    "règlement."
+)
+
 __all__ = [
     "CATALOGUE",
     "CatalogueArrete",
@@ -184,6 +190,52 @@ CATALOGUE: list[Service] = [
                 motif="⚠️ Tarif reconstitué — voir l'en-tête du module",
             ),
             Tarif(montant=Decimal(60_000), du=_DEPUIS_2026),
+        ],
+    ),
+    # ─────────────────────────────────────────────────────────────────────────
+    # 19 octobre 2026 (point 24) : la DSF achetée en ligne, par qui n'est pas adhérent.
+    #
+    # ⚠️ SANS MONTANT, ET C'EST VOULU. Le cabinet n'a jamais arrêté le prix d'une DSF
+    # seule ; l'écrire ici serait inventer un tarif. Le service paraît donc « à fixer »
+    # dans « Tarifs de l'offre », et ne se vend en ligne qu'une fois que la direction a
+    # saisi son prix (`appliquer_les_fixations`), tranche par tranche.
+    #
+    # Payée, la commande se présente dans la file « à ouvrir » des missions, où le
+    # juriste ouvre la DSF ciblée sur le NIU et l'exercice du client.
+    # ─────────────────────────────────────────────────────────────────────────
+    Service(
+        code="DSF",
+        libelle="Déclaration statistique et fiscale (DSF) de l'exercice",
+        nature=NatureService.PONCTUEL,
+        periodicite=Periodicite.UNIQUE,
+        unite="FCFA pour un exercice",
+        resume=(
+            "Votre DSF établie par le cabinet à partir de vos pièces, relue par un "
+            "second, puis déposée sur le portail de la DGI."
+        ),
+        ouvre_un_dossier=False,
+        formules=[
+            Formule(
+                code="DSF_LIBERATOIRE",
+                libelle="Entreprise à l'impôt libératoire",
+                plancher=Decimal(0),
+                plafond=Decimal(50_000_000),
+                inclus=["Collecte des pièces en ligne", "DSF établie et relue", "Dépôt à la DGI"],
+                tarifs=[Tarif(montant=None, du=_DEPUIS_2026, motif=_PRIX_DSF_A_ARRETER)],
+            ),
+            Formule(
+                code="DSF_REEL_SIMPLIFIE",
+                libelle="Entreprise au réel simplifié",
+                plancher=Decimal(50_000_000),
+                plafond=Decimal(100_000_000),
+                inclus=[
+                    "Collecte des pièces en ligne",
+                    "États financiers et liasse",
+                    "DSF établie et relue",
+                    "Dépôt à la DGI",
+                ],
+                tarifs=[Tarif(montant=None, du=_DEPUIS_2026, motif=_PRIX_DSF_A_ARRETER)],
+            ),
         ],
     ),
     Service(

@@ -38,6 +38,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.contextes.portefeuille.domaine.fiche_signaletique import FicheSignaletique
 from app.contextes.portefeuille.domaine.temporel import (
     MotifChangement,
     Periode,
@@ -67,6 +68,7 @@ __all__ = [
 DUREE_MAXIMALE_EXERCICE = timedelta(days=730)
 
 
+
 class StatutIntrouvable(LookupError):
     """Aucun statut ne couvre la date demandée.
 
@@ -75,6 +77,36 @@ class StatutIntrouvable(LookupError):
     en silence. C'est la même discipline que `AucuneVersionApplicable` au
     référentiel normatif.
     """
+
+
+class NatureActivite(StrEnum):
+    """La nature d'activité au sens du CGI 2026, art. 93 quater (15 octobre 2026).
+
+    Elle fixe le seuil entre l'IGS et le régime du réel : 50 M FCFA pour une activité
+    commerciale, industrielle, artisanale ou agropastorale, 30 M pour une profession
+    libérale. `activite`, en texte libre, ne le dit pas.
+    """
+
+    COMMERCIALE = "COMMERCIALE"
+    LIBERALE = "LIBERALE"
+
+
+class SecteurReelDOffice(StrEnum):
+    """Les contribuables relevant du réel « sans considération de leur chiffre
+    d'affaires » (CGI 2026, art. 93 quater (2) b) — 15 octobre 2026."""
+
+    PETROLIER = "PETROLIER"
+    MINIER = "MINIER"
+    GAZIER = "GAZIER"
+    CREDIT = "CREDIT"
+    MICROFINANCE = "MICROFINANCE"
+    ASSURANCE = "ASSURANCE"
+    TELEPHONIE_MOBILE = "TELEPHONIE_MOBILE"
+    #: Agrément à l'un des régimes de l'ordonnance n° 2025/002 du 18 juillet 2025.
+    AGREMENT_INVESTISSEMENT = "AGREMENT_INVESTISSEMENT"
+    CHARGE_NOTARIALE = "CHARGE_NOTARIALE"
+    #: Dérogation expresse du Directeur général des impôts.
+    DEROGATION_DGI = "DEROGATION_DGI"
 
 
 class FormeJuridique(StrEnum):
@@ -188,6 +220,34 @@ class MandatDeclaratif(Periode):
 
     #: Codes des obligations couvertes. Un mandat peut être partiel : la TVA sans
     #: la paie, par exemple.
+    obligations: list[str] = Field(min_length=1)
+    signe_le: date
+    signe_par: str = Field(min_length=1)
+
+    def couvre_obligation(self, code: str, a_la_date: date) -> bool:
+        return self.couvre(a_la_date) and code in self.obligations
+
+
+class MandatDePaiement(Periode):
+    """Ce que le Centre PAIE au nom de l'adhérent, avec les fonds qu'il lui remet.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ DISTINCT DU MANDAT DÉCLARATIF, ET CE N'EST PAS UN DOUBLON (14 octobre 2026).
+
+    Déclarer à la place de l'entreprise et payer à sa place sont deux actes. Le
+    second fait **détenir au cabinet des fonds de tiers** : l'argent de l'adhérent,
+    dû à l'administration, transite par le cabinet. Il exige son propre accord
+    écrit, et il peut couvrir d'autres obligations que le premier (la CNPS sans la
+    TVA, par exemple).
+
+    Décision du cabinet du 14 octobre 2026 : pour la TVA et la CNPS, l'adhérent
+    paie lui-même l'administration, OU, s'il a signé ce mandat, confie les fonds
+    au cabinet (par mobile money ou au guichet), qui reverse et porte la quittance.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    model_config = ConfigDict(frozen=True)
+
     obligations: list[str] = Field(min_length=1)
     signe_le: date
     signe_par: str = Field(min_length=1)
@@ -319,6 +379,13 @@ class Tiers(BaseModel):
     rccm: str | None = None
     regime: RegimeFiscal | None = None
     etranger: bool = False
+    #: Les colonnes « SIGLE », « TELEPHONE », « PAYS DE RESIDENCE » et « VILLE » des
+    #: modèles Fournisseurs et Tiers de la DGI (16 octobre 2026). `pays` ne se lit que pour
+    #: un tiers étranger : les autres résident au Cameroun.
+    sigle: str | None = None
+    telephone: str | None = None
+    ville: str | None = None
+    pays: str | None = None
 
 
 # ── L'entreprise ─────────────────────────────────────────────────────────────────
@@ -341,6 +408,24 @@ class Entreprise(BaseModel):
     rccm: str | None = None
     capital: Decimal | None = Field(default=None, ge=0)
     activite: str | None = None
+    #: Inconnue : le seuil des activités commerciales (50 M) s'applique, et la revue
+    #: des régimes le signale.
+    nature_activite: NatureActivite | None = None
+    #: Au réel quel que soit son chiffre d'affaires (art. 93 quater (2) b), s'il y a lieu.
+    reel_d_office: SecteurReelDOffice | None = None
+    #: La fiche signalétique de la DSF (fiches R1 à R3), renseignée par le client et
+    #: validée par le cabinet. Voir `fiche_signaletique.py`.
+    fiche_dsf: FicheSignaletique | None = None
+    #: Le groupe de tarification du risque professionnel que la CNPS a notifié à
+    #: l'employeur (A, B ou C), et la date de la notification (16 octobre 2026). Il ne se
+    #: déduit pas de l'activité. Inconnu : la paie suppose le groupe A et le dit.
+    groupe_risque_cnps: str | None = Field(default=None, pattern="^[ABC]$")
+    groupe_risque_notifie_le: date | None = None
+    #: Le jour où le cabinet a pris en charge une entreprise qui existait déjà (16 octobre
+    #: 2026). Les obligations échues avant ne sont pas les siennes : l'échéancier ne les
+    #: compte pas en retard. `None` : suivie depuis sa création (le cabinet l'a créée, ou
+    #: le dossier précède cette distinction).
+    suivi_depuis: date | None = None
     siege: str | None = None
     etablissements: list[str] = Field(default_factory=list)
 
@@ -353,6 +438,8 @@ class Entreprise(BaseModel):
     #: adhéré, résilié, puis ré-adhéré.
     adhesions: list[Adhesion] = Field(default_factory=list)
     mandats: list[MandatDeclaratif] = Field(default_factory=list)
+    #: 14 octobre 2026 : ce que le Centre paie pour l'adhérent. Voir `MandatDePaiement`.
+    mandats_de_paiement: list[MandatDePaiement] = Field(default_factory=list)
 
     exercices: list[Exercice] = Field(default_factory=list)
     dirigeants: list[Dirigeant] = Field(default_factory=list)
@@ -369,6 +456,9 @@ class Entreprise(BaseModel):
         )
         verifier_succession(self.adhesions, quoi=f"{self.niu} · adhésions", continue_=False)
         verifier_succession(self.mandats, quoi=f"{self.niu} · mandats", continue_=False)
+        verifier_succession(
+            self.mandats_de_paiement, quoi=f"{self.niu} · mandats de paiement", continue_=False
+        )
         return self
 
     @model_validator(mode="after")
@@ -477,6 +567,13 @@ class Entreprise(BaseModel):
     def mandatee_pour(self, code_obligation: str, a_la_date: date) -> bool:
         """Le Centre a-t-il qualité pour déposer cette déclaration ce jour-là ?"""
         return any(m.couvre_obligation(code_obligation, a_la_date) for m in self.mandats)
+
+    def paiement_mandate(self, code_obligation: str, a_la_date: date) -> bool:
+        """Le Centre a-t-il qualité pour PAYER cette obligation ce jour-là, avec les fonds
+        de l'adhérent ? Sans ce mandat, il ne lui appelle aucun fonds."""
+        return any(
+            m.couvre_obligation(code_obligation, a_la_date) for m in self.mandats_de_paiement
+        )
 
     def exercice_couvrant(self, jour: date) -> Exercice:
         for exercice in self.exercices:

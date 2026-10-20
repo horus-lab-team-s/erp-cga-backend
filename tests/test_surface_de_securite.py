@@ -71,6 +71,8 @@ def test_le_temoin_devient_chiffre_quand_l_api_est_en_https(monkeypatch):
         ("POST", "/acquisition/demandes"),
         ("POST", "/acquisition/devis/DV-quelconque/rappel"),
         ("POST", "/acquisition/proformas/PRO-2026-0001/acceptation"),
+        # 19 octobre 2026 : ni session ni signature, donc une limite.
+        ("POST", "/souscription/notification/tara"),
     ],
 )
 def test_les_portes_publiques_du_parcours_sont_bornees(methode, chemin):

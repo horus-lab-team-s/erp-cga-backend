@@ -37,6 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.contextes.collecte.domaine.demandes import DemandePiece
 from app.contextes.collecte.domaine.pieces import PieceJustificative
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["CompletudeDossier", "evaluer_completude"]
 
@@ -124,7 +125,7 @@ def evaluer_completude(
     """
     du_dossier = [p for p in pieces if p.entreprise == entreprise]
     de_la_periode = [
-        p for p in du_dossier if periode_debut <= p.recue_le.date() <= periode_fin
+        p for p in du_dossier if periode_debut <= jour_a_douala(p.recue_le) <= periode_fin
     ]
     en_souffrance = [p for p in de_la_periode if p.en_attente_de_traitement]
 

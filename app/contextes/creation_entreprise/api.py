@@ -51,6 +51,7 @@ from app.contextes.creation_entreprise.domaine.checklist import (
 )
 from app.contextes.creation_entreprise.domaine.entites import (
     ETATS_TERMINAUX,
+    CanalDeLaPiece,
     DossierCreation,
     EtapeCreation,
     Fondateur,
@@ -81,6 +82,7 @@ __all__ = [
     "Fondateur",
     "Immatriculation",
     "Jalon",
+    "CanalDeLaPiece",
     "PieceConstitution",
     "TransitionInterdite",
     "abandonner",

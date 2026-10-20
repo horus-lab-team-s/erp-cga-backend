@@ -83,6 +83,7 @@ from app.contextes.transverse.api import (
 from app.contextes.transverse.domaine.jetons import engendrer_secret
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
+from tests.conftest import renforcer_la_session
 
 INSTANT = datetime(2026, 8, 15, 9, 30)
 AUJOURD_HUI = INSTANT.date()
@@ -237,8 +238,12 @@ class TestRoles:
         assert Permission.VALIDER_ECRITURE in cumul
         assert Permission.RELANCER_ADHERENT in cumul
 
-    def test_les_deux_roles_externes_exigent_une_portee(self):
-        assert ROLES_A_PORTEE_OBLIGATOIRE == frozenset({Role.ADHERENT, Role.INSPECTEUR})
+    def test_les_roles_externes_exigent_une_portee(self):
+        """⚠️ Le client en création (14 octobre 2026) aussi : sans portée, il
+        suivrait toutes les créations du cabinet."""
+        assert ROLES_A_PORTEE_OBLIGATOIRE == frozenset(
+            {Role.ADHERENT, Role.INSPECTEUR, Role.CLIENT_CREATION}
+        )
 
 
 # ── Le compte ────────────────────────────────────────────────────────────────
@@ -577,6 +582,27 @@ class TestAutorisation:
             Role.COMPTABLE
         ]
         assert resoudre_acces(compte, session, habilitations, date(2026, 6, 1)).roles == []
+
+    def test_le_second_facteur_se_perime_a_la_minute_et_non_a_minuit(self):
+        """16 octobre 2026, revue de sécurité : sans instant, la session renforcée à
+        14 h restait renforcée jusqu'à minuit (minuit < 14 h 15)."""
+        renforcee = Session(
+            identifiant="S-1",
+            compte="C-1",
+            locataire="CGA-BRCG",
+            ouverte_le=datetime(2026, 3, 12, 13, 0),
+            expire_le=datetime(2026, 3, 12, 23, 0),
+            renforcee_jusqu_a=datetime(2026, 3, 12, 14, 15),
+        )
+        compte, habilitations, jour = _compte(), [_hab()], date(2026, 3, 12)
+        assert resoudre_acces(compte, renforcee, habilitations, jour).facteur_fort is False
+        quatorze_heures, quatorze_heures_trente = (
+            datetime(2026, 3, 12, 14, 0),
+            datetime(2026, 3, 12, 14, 30),
+        )
+        avant = resoudre_acces(compte, renforcee, habilitations, jour, quatorze_heures)
+        apres = resoudre_acces(compte, renforcee, habilitations, jour, quatorze_heures_trente)
+        assert (avant.facteur_fort, apres.facteur_fort) == (True, False)
 
 
 # ── L'authentification ───────────────────────────────────────────────────────
@@ -944,7 +970,7 @@ class TestAdministration:
         )
         suspendre_compte(
             par=_administrateur_distinct(), identifiant="C-1",
-            motif="fin de contrat", comptes=comptes, sessions=sessions,
+            motif="fin de contrat", comptes=comptes, habilitations=depots[1], sessions=sessions,
             journal=journal, a_l_instant=INSTANT,
         )
         assert sessions.lire("S-1").revoquee
@@ -955,7 +981,8 @@ class TestAdministration:
         comptes.enregistrer(_compte())
         suspendre_compte(
             par=_administrateur_distinct(), identifiant="C-1",
-            motif="départ du 30 avril", comptes=comptes, sessions=sessions,
+            motif="départ du 30 avril", comptes=comptes, habilitations=depots[1],
+            sessions=sessions,
             journal=journal, a_l_instant=INSTANT,
         )
         assert journal.lister()[-1].motif == "départ du 30 avril"
@@ -1248,9 +1275,30 @@ class TestApi:
         parti = next(x for x in lignes if x["compte"]["identifiant"] == "C-008")
         assert parti["roles"] == ["COMPTABLE"]
 
+    def test_sans_second_facteur_l_administrateur_n_invite_personne(self, client: TestClient):
+        """⚠️ 19 octobre 2026 : le mot de passe d'un administrateur, seul, ouvrait un
+        compte au nom et à l'adresse de qui le voulait. La liste se lit toujours."""
+        _connecter(client, "s.onana@cga-brcg.cm")
+        liste = client.get("/transverse/comptes", params={"a_la_date": "2026-09-14"})
+        assert liste.status_code == 200
+        refus = client.post(
+            "/transverse/comptes/invitation",
+            json={
+                "courriel": "intrus@exemple.cm",
+                "nom": "INTRUS",
+                "prenom": "Ivan",
+                "role": "COMPTABLE",
+                "portee": [NIU_DEMO["CLINIQUE"]],
+                "depuis": "2026-01-05",
+            },
+        )
+        assert refus.status_code == 403, refus.text
+        assert "second facteur" in refus.text
+
     def test_inviter_puis_activer_puis_se_connecter(self, client: TestClient):
         """Le parcours complet d'une prise de poste, en quatre requêtes."""
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         invitation = client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1306,6 +1354,7 @@ class TestApi:
 
     def test_l_invitation_prepare_un_courriel(self, client: TestClient):
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1323,6 +1372,7 @@ class TestApi:
 
     def test_l_adresse_deja_prise_rend_409(self, client: TestClient):
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         reponse = client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1338,6 +1388,7 @@ class TestApi:
 
     def test_inviter_un_adherent_sans_portee_rend_422(self, client: TestClient):
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         reponse = client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1372,6 +1423,8 @@ class TestApi:
         assert autre.get("/transverse/moi").status_code == 200
 
         _connecter(client, "s.onana@cga-brcg.cm")
+
+        renforcer_la_session(client)
         assert (
             client.post(
                 "/transverse/comptes/C-004/suspension",
@@ -1392,6 +1445,8 @@ class TestApi:
         )
 
         _connecter(client, "s.onana@cga-brcg.cm")  # C-002, administrateur
+
+        renforcer_la_session(client)
         soi = client.post("/transverse/comptes/C-002/suspension", json={"motif": "essai"})
         assert soi.status_code == 409, soi.text
         assert client.get("/transverse/moi").status_code == 200, "la session tient"
@@ -1448,6 +1503,7 @@ class TestApi:
     def test_une_habilitation_a_venir_ne_donne_rien_aujourd_hui(self, client: TestClient):
         """Un contrat signé pour septembre n'ouvre pas les dossiers en août."""
         _connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         client.post(
             "/transverse/comptes/invitation",
             json={
@@ -1486,6 +1542,65 @@ class TestApi:
         verification = client.get("/transverse/audit/verification").json()
         assert verification["intacte"] is True
         assert verification["entrees"] == len(entrees)
+
+    def test_le_journal_ne_livre_aucune_session_a_rejouer(self, client: TestClient):
+        """19 octobre 2026 (audit de sécurité) : l'identifiant de session est le secret
+        porteur. Écrit au journal, il laissait la direction, qui lit le journal, rejouer
+        la session du super administrateur."""
+        from app.contextes.transverse.api import MOT_DE_PASSE_DEMO
+
+        ouverte = client.post(
+            "/transverse/session",
+            json={"courriel": "h.kamga@cga-brcg.cm", "mot_de_passe": MOT_DE_PASSE_DEMO},
+        )
+        assert ouverte.status_code == 200
+        secret = ouverte.json()["session"]
+        assert len(secret) >= 40, "un secret porteur de 48 bits se devine"
+
+        client.cookies.clear()
+        _connecter(client, "b.mballa@cga-brcg.cm")
+        journal = client.get("/transverse/audit", params={"acteur": "C-010"})
+        assert journal.status_code == 200
+        assert secret not in journal.text
+        references = [e["objet_id"] for e in journal.json() if e["objet_type"] == "session"]
+        assert references and all(r.startswith("S#") for r in references)
+
+        client.cookies.clear()
+        for reference in references:
+            rejouee = client.get(
+                "/transverse/moi", headers={"Authorization": f"Bearer {reference}"}
+            )
+            assert rejouee.status_code == 401
+
+    def test_l_administrateur_ne_desarme_pas_le_super_administrateur(
+        self, client: TestClient
+    ):
+        """19 octobre 2026 (audit de sécurité) : `GERER_COMPTES` suffisait pour
+        suspendre le super administrateur ou retirer son second facteur.
+
+        ⚠️ Après le 18 octobre 2026 : C-010 n'est super administrateur que depuis ce
+        jour-là dans le jeu de démonstration."""
+        from app.partage.horloge import horloge_figee
+
+        with horloge_figee(datetime(2026, 10, 19, 9, 0)):
+            _connecter(client, "s.onana@cga-brcg.cm")
+            renforcer_la_session(client)
+            suspension = client.post(
+                "/transverse/comptes/C-010/suspension", json={"motif": "essai de suspension"}
+            )
+            assert suspension.status_code == 403, suspension.text
+            reinitialisation = client.post(
+                "/transverse/comptes/C-010/second-facteur/reinitialisation",
+                json={"motif": "téléphone déclaré perdu par appel au cabinet ce matin"},
+            )
+            assert reinitialisation.status_code == 403, reinitialisation.text
+            # Un compte de métier reste à sa portée.
+            assert (
+                client.post(
+                    "/transverse/comptes/C-005/suspension", json={"motif": "fin de mission"}
+                ).status_code
+                == 200
+            )
 
     def test_le_comptable_ne_lit_pas_le_journal(self, client: TestClient):
         _connecter(client, "l.fotso@cga-brcg.cm")

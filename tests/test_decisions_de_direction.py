@@ -378,11 +378,15 @@ class TestLesRoutes:
 
     def test_les_decisions_sont_rendues_de_la_plus_recente_a_la_plus_ancienne(self):
         direction = _client(DIRECTION)
-        _decider(direction)
-        _decider(direction, mesure="CONVOQUER_CADRAGE")
+        assert _decider(direction).status_code == 200
+        # ⚠️ 15 octobre 2026 : NGUEMA, à l'IGS, ne doit plus la patente (CGI art. C 38) ;
+        # la patente qu'on lui réclamait à tort comptait en retard, et le dossier est
+        # passé « à surveiller ». Une mesure de ce niveau, donc : le cas mesure l'ORDRE.
+        seconde = _decider(direction, mesure="EXIGER_REGULARISATION", echeance="2026-12-31")
+        assert seconde.status_code == 200, seconde.text
         decisions = direction.get(f"/pilotage/dossiers/{NGUEMA}/decisions").json()
         assert [d["decision"]["mesure"] for d in decisions] == [
-            "CONVOQUER_CADRAGE",
+            "EXIGER_REGULARISATION",
             "RENFORCER_SUIVI",
         ]
 

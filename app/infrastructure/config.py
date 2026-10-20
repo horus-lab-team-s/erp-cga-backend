@@ -6,8 +6,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: La base d'un poste de travail : la production doit en poser une autre.
+_URL_DE_DEVELOPPEMENT = "postgresql+psycopg://cga:cga@localhost:5432/cga_dev"
 
 #: Racine du dépôt : app/infrastructure/config.py → deux niveaux au-dessus.
 #:
@@ -19,6 +22,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: de niveau dans ce calcul ne se voit donc pas au démarrage : elle se voit sur un
 #: taux d'imposition.
 RACINE_DEPOT = Path(__file__).resolve().parents[2]
+
+#: Les postes de travail : ici seulement, les garde-fous de production sont levés.
+ENVIRONNEMENTS_DE_POSTE: frozenset[str] = frozenset({"developpement", "test", "local"})
+
+#: Tout ce qui est exposé, recette et préproduction comprises.
+ENVIRONNEMENTS_EXPOSES: frozenset[str] = frozenset(
+    {"recette", "preproduction", "preprod", "production", "prod"}
+)
 
 
 class Configuration(BaseSettings):
@@ -238,7 +249,7 @@ class Configuration(BaseSettings):
     #: L'adresse de la base. ⚠️ Le mot de passe n'a rien à faire en dépôt : la
     #: valeur par défaut vise une base de développement locale, et la production
     #: la surcharge par `CGA_URL_BASE_DE_DONNEES`.
-    url_base_de_donnees: str = "postgresql+psycopg://cga:cga@localhost:5432/cga_dev"
+    url_base_de_donnees: str = _URL_DE_DEVELOPPEMENT
 
     #: Trace le SQL émis. Lire les requêtes est le premier geste de diagnostic,
     #: et il ne doit pas demander un changement de code.
@@ -288,6 +299,18 @@ class Configuration(BaseSettings):
     tara_cle_api: str = ""
     tara_identifiant_marchand: str = ""
 
+    #: La lecture automatique des factures par Claude (décision du cabinet, 14 octobre 2026).
+    #:
+    #: ⚠️ **VIDE ⇒ AUCUN DOCUMENT NE SORT DU SERVEUR.** Sans clé, le bouton « Lire
+    #: automatiquement » n'est pas proposé et la facture se saisit à la main, à côté de son
+    #: aperçu. Avec la clé, le document est envoyé à l'API d'Anthropic : le cabinet doit le
+    #: mentionner dans sa politique de confidentialité. La clé n'est lue qu'ici, jamais dans
+    #: l'environnement par défaut du SDK, pour qu'une variable posée pour un autre usage
+    #: n'active pas l'envoi de pièces d'adhérents sans que personne l'ait décidé.
+    anthropic_cle_api: str = ""
+    #: Le modèle de lecture. Opus 5.5 par défaut : une erreur de lecture se paie en écriture fausse.
+    lecture_modele: str = "claude-opus-5-5"
+
     #: Le relais de messagerie. **Vide ⇒ aucun courriel ne part** : l'adaptateur
     #: en mémoire prend le relais et retient les messages, ce qui est le mode de
     #: développement voulu. Voir `adaptateurs/sortant/notifications_smtp.py`.
@@ -298,6 +321,12 @@ class Configuration(BaseSettings):
     #: `STARTTLS` sur les ports en clair. Le port 465 chiffre d'emblée et ignore
     #: ce réglage. ⚠️ La production refuse `false` — voir `_exigences_production`.
     smtp_chiffrement: bool = True
+    #: ⚠️ 20 octobre 2026 : la mise en ligne AVANT que le relais soit prêt, décidée par
+    #: l'exploitant. Vrai, la production démarre sans relais et les courriels sont RETENUS,
+    #: jamais envoyés : aucun lien d'activation ni de mot de passe oublié ne part. Le
+    #: premier administrateur reçoit le sien par la commande qui le crée. Un réglage écrit
+    #: en toutes lettres, et non un relais vide qu'on tolérerait : l'oubli reste refusé.
+    courriels_differes: bool = False
 
     #: La clé de chiffrement au repos, en base64 — 32 octets décodés.
     #:
@@ -347,9 +376,29 @@ class Configuration(BaseSettings):
         """
         return self.persistance == "postgresql"
 
+    @field_validator("environnement")
+    @classmethod
+    def _environnement_connu(cls, valeur: str) -> str:
+        """⚠️ 19 octobre 2026 (audit de sécurité) : la valeur était libre, et seules
+        « production » et « prod » armaient les garde-fous. Une préproduction exposée,
+        ou une faute de frappe, ouvrait en silence la simulation de paiement, la
+        démonstration et la persistance en mémoire. La liste est désormais fermée : une
+        valeur inconnue empêche le démarrage."""
+        normalisee = valeur.strip().lower()
+        if normalisee not in ENVIRONNEMENTS_DE_POSTE | ENVIRONNEMENTS_EXPOSES:
+            raise ValueError(
+                f"CGA_ENVIRONNEMENT={valeur!r} est inconnu. Valeurs admises : "
+                f"{', '.join(sorted(ENVIRONNEMENTS_DE_POSTE | ENVIRONNEMENTS_EXPOSES))}."
+            )
+        return normalisee
+
     @property
     def en_production(self) -> bool:
-        return self.environnement.lower() in {"production", "prod"}
+        """Vrai pour tout environnement exposé, recette et préproduction comprises.
+
+        Les garde-fous ne se lèvent que sur un poste de travail : ce qui est joignable
+        de l'extérieur se défend comme la production."""
+        return self.environnement not in ENVIRONNEMENTS_DE_POSTE
 
     @model_validator(mode="after")
     def _exigences_production(self) -> Configuration:
@@ -383,7 +432,7 @@ class Configuration(BaseSettings):
                 "CGA_PERSISTANCE doit valoir 'postgresql' : en mémoire, toutes "
                 "les écritures comptables disparaissent au redémarrage."
             )
-        if not self.smtp_hote:
+        if not self.smtp_hote and not self.courriels_differes:
             fautes.append(
                 "CGA_SMTP_HOTE est vide : aucun lien d'activation ne partirait, "
                 "et aucun compte ne pourrait être activé."
@@ -416,9 +465,42 @@ class Configuration(BaseSettings):
                 "CGA_ORIGINES_CORS contient une origine en clair ; le témoin de "
                 "session serait exposé."
             )
+        # 19 octobre 2026 (audit de sécurité) : deux réglages que rien ne refusait.
+        if "*" in self.origines_cors:
+            fautes.append(
+                "CGA_ORIGINES_CORS contient « * » : avec les témoins, toute origine "
+                "pourrait appeler l'API au nom d'un collaborateur connecté."
+            )
+        if self.tracer_le_sql:
+            fautes.append(
+                "CGA_TRACER_LE_SQL=true écrirait au journal les paramètres des requêtes : "
+                "noms, NIU, montants, empreintes."
+            )
+        # 20 octobre 2026 (audit avant la production) : deux réglages que seul le premier
+        # usage révélait, bien après le démarrage.
+        if self.cle_chiffrement and not _cle_aes_256(self.cle_chiffrement):
+            fautes.append(
+                "CGA_CLE_CHIFFREMENT doit être 32 octets en base64 (AES-256). En produire "
+                'une : python -c "import base64,os; '
+                'print(base64.b64encode(os.urandom(32)).decode())"'
+            )
+        if self.url_base_de_donnees == _URL_DE_DEVELOPPEMENT:
+            fautes.append(
+                "CGA_URL_BASE_DE_DONNEES n'est pas posée : la base de développement locale "
+                "(cga/cga) n'est pas celle de la production."
+            )
         if fautes:
             raise ValueError("Configuration de production refusée :\n  · " + "\n  · ".join(fautes))
         return self
+
+
+def _cle_aes_256(cle_base64: str) -> bool:
+    import base64
+
+    try:
+        return len(base64.b64decode(cle_base64, validate=True)) == 32
+    except ValueError:
+        return False
 
 
 @lru_cache

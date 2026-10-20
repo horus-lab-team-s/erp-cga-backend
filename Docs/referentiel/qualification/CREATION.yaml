@@ -1,8 +1,35 @@
 service: CREATION
 version: "2"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ CE QUE LE SITE DEMANDE AU CLIENT (14 octobre 2026).
+#
+# `visiteur: true` propose la question sur le site, toujours facultative. La
+# réponse ouvre la qualification déjà remplie : le responsable ne redemande pas
+# au téléphone ce que le client a écrit.
+#
+# `libelle_visiteur` dit la question au client, `libelle` la dit au juriste.
+# `libelles_valeurs` donne un nom lisible aux valeurs d'une liste.
+#
+# ⚠️ La version reste « 2 » : aucune question n'est ajoutée, retirée ni changée
+# de sens. Une qualification ancienne se relit exactement comme avant.
+#
+# `pages_statuts` n'est pas posée au client : elle n'a de sens que pour celui
+# qui estime un temps de relecture.
+# ─────────────────────────────────────────────────────────────────────────────
+
 questions:
   - code: forme_juridique
+    visiteur: true
+    libelle_visiteur: "Quelle forme de société voulez-vous créer ?"
+    aide_visiteur: "Si vous hésitez, laissez vide : nous vous conseillerons au premier échange."
+    libelles_valeurs:
+      SARL: "SARL (plusieurs associés)"
+      SARLU: "SARL unipersonnelle (un seul associé)"
+      SA: "Société anonyme (SA)"
+      SAS: "Société par actions simplifiée (SAS)"
+      GIE: "Groupement d'intérêt économique (GIE)"
+      ETS: "Établissement (entreprise individuelle)"
     libelle: Forme juridique retenue
     type: ENUM
     # ⚠️ LES VALEURS DE `FormeJuridique`, l'énumération du portefeuille, et non
@@ -18,6 +45,8 @@ questions:
       Ce que le client veut créer. En cas d'hésitation entre SARL et SARL unipersonnelle, le nombre d'associés tranche.
 
   - code: associes
+    visiteur: true
+    libelle_visiteur: "Combien serez-vous d'associés, vous compris ?"
     libelle: Nombre d'associés
     type: ENTIER
     rang: 2
@@ -26,6 +55,9 @@ questions:
       Un seul associé impose la forme unipersonnelle. Au-delà de cinq, les statuts demandent plus de travail.
 
   - code: capital_social
+    visiteur: true
+    libelle_visiteur: "Quel capital envisagez-vous ?"
+    aide_visiteur: "Un ordre de grandeur suffit."
     libelle: Capital social envisagé
     type: DECIMAL
     unite: FCFA
@@ -33,6 +65,8 @@ questions:
     obligatoire: true
 
   - code: apports_en_nature
+    visiteur: true
+    libelle_visiteur: "Apporterez-vous autre chose que de l'argent (matériel, véhicule, local) ?"
     libelle: Y a-t-il des apports en nature ?
     type: BOOLEEN
     rang: 4
@@ -41,6 +75,13 @@ questions:
       Un apport en nature peut exiger un commissaire aux apports, ce qui change le calendrier et le coût.
 
   - code: chiffre_affaires_prevu
+    visiteur: true
+    libelle_visiteur: "Quel chiffre d'affaires visez-vous la première année ?"
+    libelles_valeurs:
+      MOINS_10M: "Moins de 10 millions de FCFA"
+      DE_10M_A_50M: "De 10 à 50 millions de FCFA"
+      DE_50M_A_250M: "De 50 à 250 millions de FCFA"
+      PLUS_250M: "Plus de 250 millions de FCFA"
     libelle: Chiffre d'affaires prévisionnel, en tranche
     type: ENUM
     valeurs: [MOINS_10M, DE_10M_A_50M, DE_50M_A_250M, PLUS_250M]
@@ -50,12 +91,28 @@ questions:
       En tranche et non en montant : un prévisionnel au franc près est une fausse précision, et le régime fiscal se décide par seuils.
 
   - code: salaries_prevus
+    visiteur: true
+    libelle_visiteur: "Combien de salariés prévoyez-vous la première année ?"
+    aide_visiteur: "Zéro si vous démarrez seul."
     libelle: Salariés prévus la première année
     type: ENTIER
     rang: 6
     obligatoire: true
 
   - code: region_siege
+    visiteur: true
+    libelle_visiteur: "Dans quelle région sera le siège ?"
+    libelles_valeurs:
+      LITTORAL: "Littoral"
+      CENTRE: "Centre"
+      OUEST: "Ouest"
+      NORD_OUEST: "Nord-Ouest"
+      SUD_OUEST: "Sud-Ouest"
+      NORD: "Nord"
+      EXTREME_NORD: "Extrême-Nord"
+      ADAMAOUA: "Adamaoua"
+      EST: "Est"
+      SUD: "Sud"
     libelle: Région du siège social
     type: ENUM
     valeurs:
@@ -75,12 +132,17 @@ questions:
       Détermine le centre des impôts compétent, et l'agence du centre qui suivra le dossier.
 
   - code: activite
+    visiteur: true
+    libelle_visiteur: "Quelle sera votre activité principale ?"
     libelle: Activité principale, selon la nomenclature
     type: TEXTE
     rang: 9
     obligatoire: true
 
   - code: denomination_souhaitee
+    visiteur: true
+    libelle_visiteur: "Quel nom voulez-vous donner à votre société ?"
+    aide_visiteur: "Nous vérifierons sa disponibilité au registre du commerce."
     libelle: Dénomination souhaitée pour la société
     type: TEXTE
     rang: 1
@@ -95,6 +157,9 @@ questions:
       La disponibilité au RCCM se vérifie plus tard, à la constitution.
 
   - code: siege
+    visiteur: true
+    libelle_visiteur: "À quelle adresse sera le siège ?"
+    aide_visiteur: "Un quartier et une ville suffisent."
     libelle: Adresse du siège social
     type: TEXTE
     rang: 8
@@ -105,6 +170,8 @@ questions:
       suffisent à ouvrir le dossier ; le complément se porte à la constitution.
 
   - code: statuts_apportes
+    visiteur: true
+    libelle_visiteur: "Avez-vous déjà des statuts rédigés ?"
     libelle: Le client apporte-t-il des statuts déjà rédigés ?
     type: BOOLEEN
     rang: 10
@@ -117,6 +184,9 @@ questions:
       Sans objet si le centre les rédige. Sert à estimer le temps de relecture.
 
   - code: pieces_deja_reunies
+    visiteur: true
+    libelle_visiteur: "Quelles pièces avez-vous déjà réunies ?"
+    aide_visiteur: "Par exemple : pièces d'identité, plan de localisation. Séparez par des virgules."
     libelle: Pièces déjà réunies par le client
     type: LISTE
     rang: 12

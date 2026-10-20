@@ -44,10 +44,10 @@ from __future__ import annotations
 # aussi, pour accepter le fichier qu'elle dépose. Le graphe des dépendances
 # n'autorise pas ces deux contextes à se voir, et une arête ajoutée par
 # commodité ne se retire jamais. Voir l'en-tête de `partage/sceau.py`.
-from app.partage.sceau import SceauInvalide, sceller, valide
+from app.partage.sceau import SceauInvalide, sceller
 from app.partage.sceau import exiger_le_sceau as _exiger_le_sceau
 
-__all__ = ["LienDeSuiviInvalide", "exiger_le_sceau", "sceau_de_suivi", "sceau_valide"]
+__all__ = ["LienDeSuiviInvalide", "exiger_le_sceau", "sceau_de_suivi"]
 
 #: Conservé sous le nom du contexte : les appelants disent « le sceau de suivi »,
 #: pas « le sceau ». Le mécanisme, lui, est partagé.
@@ -57,10 +57,6 @@ LienDeSuiviInvalide = SceauInvalide
 def sceau_de_suivi(reference: str, *, secret: str) -> str:
     """Le sceau du dossier, seul élément que la cliente présente."""
     return sceller(reference, secret=secret)
-
-
-def sceau_valide(reference: str, sceau: str, *, secret: str) -> bool:
-    return valide(reference, sceau, secret=secret)
 
 
 def exiger_le_sceau(reference: str, sceau: str, *, secret: str) -> None:

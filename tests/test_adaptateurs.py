@@ -310,14 +310,27 @@ class TestEcrituresDemo:
         """Il n'y a pas de convention à maintenir en double : les écritures sont
         construites à partir des pièces. Ce test le vérifie tout de même, parce
         qu'une pièce annonçant une écriture qui n'existe pas romprait la piste
-        d'audit dans le sens que le vérificateur emprunte."""
+        d'audit dans le sens que le vérificateur emprunte.
+
+        ⚠️ Sauf l'exercice 2025 repris du logiciel précédent de CABINET NGUEMA CONSEIL
+        (14 octobre 2026, voir `exercice_repris_demo.py`) : une reprise n'a pas les pièces
+        de la plateforme, et c'est ce qui la distingue. Elle est retirée nommément, pas
+        par un filtre qui laisserait passer n'importe quelle écriture sans pièce."""
+        from app.contextes.comptabilite.adaptateurs.sortant.exercice_repris_demo import (
+            ecritures_reprises,
+        )
+
         annoncees = {
             p.identifiant for p in PIECES_DEMO.values() if p.reference_ecriture
+        }
+        reprises = {
+            e.cle for niu in PORTEFEUILLE_DEMO for e in ecritures_reprises(niu)
         }
         produites = {
             e.piece_justificative
             for niu in PORTEFEUILLE_DEMO
             for e in ecritures_demo(niu)
+            if e.cle not in reprises
         }
         assert annoncees == produites
 

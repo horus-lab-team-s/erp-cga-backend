@@ -32,14 +32,13 @@ from app.contextes.comptabilite.api import (
     depot_des_rapprochements,
     depot_des_revues,
 )
-from app.contextes.pilotage.adaptateurs.entrant.routes_http import (
-    _aujourd_hui,
-    _depot_demandes,
-    _depot_dossiers,
-    _depot_pieces,
-    _echeancier,
-    _ecritures,
-    _sans_echouer,
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_demandes,
+    depot_dossiers,
+    depot_ecritures,
+    depot_pieces,
+    echeancier_du_dossier,
+    sans_echouer,
 )
 from app.contextes.pilotage.adaptateurs.sortant.plan_de_travail_yaml import (
     charger_les_reglages_du_plan,
@@ -53,6 +52,7 @@ from app.contextes.pilotage.domaine.plan_de_travail import (
 )
 from app.contextes.transverse.api import AccesRequis, Permission, exiger, restreindre
 from app.infrastructure.config import configuration
+from app.partage.horloge import aujourd_hui, jour_a_douala
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · plan de travail"])
 
@@ -85,13 +85,13 @@ def _etat_du_dossier(dossier, jour: date) -> tuple[EtatDuDossierPourLePlan, str]
     debut_precedent = fin_precedent.replace(day=1)
 
     pieces = tuple(
-        (p.identifiant, p.recue_le.date())
-        for p in _sans_echouer(lambda: _depot_pieces().du_dossier(niu), [])
+        (p.identifiant, jour_a_douala(p.recue_le))
+        for p in sans_echouer(lambda: depot_pieces().du_dossier(niu), [])
         if p.en_attente_de_traitement
     )
     demandes = tuple(
         d.identifiant
-        for d in _sans_echouer(lambda: _depot_demandes().ouvertes(niu), [])
+        for d in sans_echouer(lambda: depot_demandes().ouvertes(niu), [])
         if d.en_retard(jour) or d.a_escalader(jour)
     )
     declarations = tuple(
@@ -101,13 +101,13 @@ def _etat_du_dossier(dossier, jour: date) -> tuple[EtatDuDossierPourLePlan, str]
             periode_debut=i.periode_debut,
             echeance=i.echeance,
         )
-        for i in _sans_echouer(lambda: _echeancier(dossier, str(jour.year), jour), [])
+        for i in sans_echouer(lambda: echeancier_du_dossier(dossier, str(jour.year), jour), [])
         if not i.deposee
     )
 
-    ecritures = _sans_echouer(lambda: _ecritures(niu).toutes(str(fin_precedent.year)), [])
+    ecritures = sans_echouer(lambda: depot_ecritures(niu).toutes(str(fin_precedent.year)), [])
     du_mois = [e for e in ecritures if debut_precedent <= e.date_operation <= fin_precedent]
-    rapprochements = _sans_echouer(lambda: depot_des_rapprochements().du_dossier(niu), [])
+    rapprochements = sans_echouer(lambda: depot_des_rapprochements().du_dossier(niu), [])
     releves = tuple(
         j.code
         for j in JOURNAUX_CABINET
@@ -122,7 +122,7 @@ def _etat_du_dossier(dossier, jour: date) -> tuple[EtatDuDossierPourLePlan, str]
         )
     )
 
-    revues = _sans_echouer(lambda: depot_des_revues().du_dossier(niu), [])
+    revues = sans_echouer(lambda: depot_des_revues().du_dossier(niu), [])
     renvoyee = next((r for r in revues if r.statut is StatutRevue.RENVOYEE), None)
     du_precedent = next(
         (r for r in revues if r.du <= fin_precedent and debut_precedent <= r.au), None
@@ -157,9 +157,9 @@ def lire_le_plan_de_travail(
     a_la_date: date | None = Query(None, description="Défaut : aujourd'hui"),
 ) -> PlanDeTravail:
     exiger(acces, Permission.SAISIR_ECRITURE)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
     reglages = charger_les_reglages_du_plan(configuration().dossier_referentiel)
-    dossiers = restreindre(acces, _depot_dossiers().lister(), lambda d: d.niu)
+    dossiers = restreindre(acces, depot_dossiers().lister(), lambda d: d.niu)
     etats = [_etat_du_dossier(d, jour) for d in dossiers]
     taches = planifier([e for e, _ in etats], reglages, jour)
     lignes = []

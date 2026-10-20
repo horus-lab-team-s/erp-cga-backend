@@ -31,13 +31,18 @@ registre divergerait.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.obligations.adaptateurs.entrant.routes_http import _entreprise
+from app.contextes.obligations.adaptateurs.entrant.routes_http import (
+    dispense_de_dsf,
+    entreprise_du_portefeuille,
+    estimateur_du_dossier,
+)
 from app.contextes.obligations.adaptateurs.sortant.accuses import accuses_du_portail
 from app.contextes.obligations.adaptateurs.sortant.catalogue_obligations import (
     DepotTypesObligationMemoire,
@@ -49,8 +54,10 @@ from app.contextes.obligations.adaptateurs.sortant.explications_adherent_yaml im
 from app.contextes.obligations.api import ObligationInstance, generer_echeancier
 from app.contextes.obligations.domaine.echeances_adherent import (
     EcheanceDeLAdherent,
+    FondsRecusParLeCabinet,
     PreuveEnvoyee,
     ReglagesDesEcheancesDeLAdherent,
+    VerdictDeLaPreuve,
     echeances_de_l_adherent,
     libelle_de_periode,
 )
@@ -58,11 +65,13 @@ from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
     atelier,
+    exiger,
     exiger_dossier,
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.en_tetes import disposition_en_ligne
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/obligations", tags=["Obligations · espace de l'adhérent"])
@@ -73,11 +82,11 @@ _catalogue = DepotTypesObligationMemoire()
 OBJET_PREUVE = "preuve_de_paiement"
 
 
-def _reglages() -> ReglagesDesEcheancesDeLAdherent:
+def reglages_des_echeances() -> ReglagesDesEcheancesDeLAdherent:
     return charger_les_echeances_de_l_adherent(configuration().dossier_referentiel)
 
 
-def _instances(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
+def instances_de_l_echeancier(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
     """L'échéancier des exercices qui touchent l'année écoulée et l'horizon.
 
     ⚠️ Plusieurs exercices : la période précédente d'une obligation de janvier est en décembre de
@@ -97,25 +106,101 @@ def _instances(dossier, jour: date, horizon: int) -> list[ObligationInstance]:
                 exercice,
                 emploie_sur=effectif_du_dossier(dossier.niu),
                 accuse_de=accuses,
+                estimer=estimateur_du_dossier(dossier, exercice),
+                dispense=dispense_de_dsf(dossier, exercice),
             )
         )
     return instances
 
 
-def _preuves(niu: str) -> list[PreuveEnvoyee]:
+ACTION_RECUE = "obligations.preuve_de_paiement_recue"
+#: ⚠️ 14 octobre 2026 : le verdict du cabinet, écrit au même journal que la preuve. Le journal est
+#: chaîné et conservé dix ans : la vérification d'une quittance engage le cabinet envers l'adhérent
+#: (« payée »), elle se relit au même endroit que l'envoi, et un second registre divergerait.
+ACTION_VERDICT = "obligations.preuve_de_paiement_verifiee"
+#: 14 octobre 2026 : sous mandat de paiement, les fonds de l'adhérent sont reçus par le cabinet.
+#: Écrit par l'abonné de `FondsDeTiersReçus` (`abonne_fonds_de_tiers`).
+ACTION_FONDS = "obligations.fonds_recus_par_le_cabinet"
+
+
+def _fonds_recus(niu: str) -> list[FondsRecusParLeCabinet]:
     return [
-        PreuveEnvoyee(
+        FondsRecusParLeCabinet(
             code_obligation=e.apres["obligation"],
             periode_debut=date.fromisoformat(e.apres["periode_debut"]),
-            piece=e.apres["piece"],
-            envoyee_le=e.horodatage,
-            par=e.acteur,
+            montant=Decimal(e.apres["montant"]),
+            canal=e.apres.get("canal", ""),
+            recus_le=e.horodatage,
         )
         for e in atelier().journal.lister(objet_type=OBJET_PREUVE, objet_id=niu)
-        # Seule action écrite sur ce type d'objet aujourd'hui (mutant équivalent au pas 113) : le
-        # filtre protège la lecture le jour où une autre action s'y ajoute (une preuve rejetée).
-        if e.action == "obligations.preuve_de_paiement_recue"
+        if e.action == ACTION_FONDS
     ]
+
+
+def ecritures_de_paiement(niu: str) -> dict[str, str]:
+    """Pièce → écriture qui la cite (« BQ n° 12 »), sur tous les exercices du dossier.
+
+    18 octobre 2026 (point 7) : une quittance validée propose son écriture de paiement ;
+    celle-ci cite la quittance en pièce justificative. C'est ce lien qui dit qu'elle est
+    déjà passée, sans second registre.
+    """
+    from app.contextes.obligations.adaptateurs.entrant.routes_http import depot_ecritures
+
+    try:
+        exercices = entreprise_du_portefeuille(niu).exercices
+    except HTTPException:
+        return {}
+    depot = depot_ecritures(niu)
+    trouvees: dict[str, str] = {}
+    for exercice in exercices:
+        for e in depot.lister(exercice.libelle):
+            if e.piece_justificative:
+                trouvees.setdefault(e.piece_justificative, f"{e.journal} n° {e.numero}")
+    return trouvees
+
+
+def preuves_du_dossier(niu: str | None) -> list[PreuveEnvoyee]:
+    """Les preuves d'un dossier (ou de tous, `None`), chacune avec son verdict s'il existe.
+
+    ⚠️ Le verdict se rattache par (dossier, obligation, période, pièce) : la même pièce ne
+    s'envoie qu'une fois par échéance, c'est la clé que l'envoi garantit.
+    """
+    entrees = atelier().journal.lister(objet_type=OBJET_PREUVE, objet_id=niu)
+    verdicts = {
+        (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"]): e
+        for e in entrees
+        if e.action == ACTION_VERDICT
+    }
+    preuves = []
+    for e in entrees:
+        if e.action != ACTION_RECUE:
+            continue
+        cle = (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"])
+        v = verdicts.get(cle)
+        preuves.append(
+            PreuveEnvoyee(
+                code_obligation=e.apres["obligation"],
+                periode_debut=date.fromisoformat(e.apres["periode_debut"]),
+                piece=e.apres["piece"],
+                envoyee_le=e.horodatage,
+                par=e.acteur,
+                verdict=VerdictDeLaPreuve(v.apres["verdict"]) if v else None,
+                motif=v.apres.get("motif") if v else None,
+                verifiee_le=v.horodatage if v else None,
+                verifiee_par=v.acteur if v else None,
+                montant_quittance=(
+                    Decimal(v.apres["montant_quittance"])
+                    if v and v.apres.get("montant_quittance")
+                    else None
+                ),
+            )
+        )
+    if niu is not None and any(p.verdict is VerdictDeLaPreuve.VALIDEE for p in preuves):
+        ecrites = ecritures_de_paiement(niu)
+        preuves = [
+            p.model_copy(update={"ecriture_de_paiement": ecrites.get(p.piece)}) for p in preuves
+        ]
+    return preuves
 
 
 class VueDesEcheances(BaseModel):
@@ -133,19 +218,20 @@ class VueDesEcheances(BaseModel):
 )
 def lire_mes_echeances(acces: AccesRequis, entreprise: str) -> VueDesEcheances:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
-    reglages = _reglages()
-    dossier = _entreprise(entreprise)
-    jour = maintenant().date()
+    reglages = reglages_des_echeances()
+    dossier = entreprise_du_portefeuille(entreprise)
+    jour = aujourd_hui()
     montants = {a.numero: a.montant_constate for a in atelier().portail.tous()}
     return VueDesEcheances(
         dossier=entreprise,
         denomination=dossier.denomination,
         echeances=echeances_de_l_adherent(
-            instances=_instances(dossier, jour, reglages.horizon_jours),
+            instances=instances_de_l_echeancier(dossier, jour, reglages.horizon_jours),
             jour=jour,
             reglages=reglages,
             montants_constates=montants,
-            preuves=_preuves(entreprise),
+            preuves=preuves_du_dossier(entreprise),
+            fonds_recus=_fonds_recus(entreprise),
         ),
         explications_validees=reglages.statut == "VALIDE",
     )
@@ -182,10 +268,12 @@ def envoyer_une_preuve(
     exiger_dossier(acces, Permission.DEPOSER_PIECE, entreprise)
     from app.contextes.collecte.api import DepotPiecesSql, pieces_en_memoire
 
-    reglages = _reglages()
-    dossier = _entreprise(entreprise)
+    reglages = reglages_des_echeances()
+    dossier = entreprise_du_portefeuille(entreprise)
     horodatage = maintenant()
-    instances = _instances(dossier, horodatage.date(), reglages.horizon_jours)
+    instances = instances_de_l_echeancier(
+        dossier, jour_a_douala(horodatage), reglages.horizon_jours
+    )
     obligation = next(
         (
             o
@@ -221,10 +309,13 @@ def envoyer_une_preuve(
         raise HTTPException(status_code=404, detail=f"pièce {demande.piece} introuvable.")
     deja = [
         p
-        for p in _preuves(entreprise)
+        for p in preuves_du_dossier(entreprise)
         if p.code_obligation == obligation.code_obligation
         and p.periode_debut == obligation.periode_debut
         and p.piece == demande.piece
+        # ⚠️ Une quittance refusée peut être réexpédiée corrigée : seul un envoi en attente ou
+        # validé fait doublon.
+        and p.verdict is not VerdictDeLaPreuve.REFUSEE
     ]
     if deja:
         raise HTTPException(
@@ -238,7 +329,7 @@ def envoyer_une_preuve(
     atelier().journal.ajouter(
         horodatage=horodatage,
         acteur=acces.compte,
-        action="obligations.preuve_de_paiement_recue",
+        action=ACTION_RECUE,
         objet_type=OBJET_PREUVE,
         objet_id=entreprise,
         apres={
@@ -262,6 +353,256 @@ def envoyer_une_preuve(
         ),
         titre=titre,
         periode=periode,
+    )
+
+
+# ── La vérification des quittances (14 octobre 2026) ───────────────────────────
+#
+# Le cabinet a demandé « paiement de la TVA et de la CNPS, avec changement de statut ». Quand
+# l'adhérent règle lui-même l'administration, sa quittance arrivait et restait « le cabinet la
+# vérifie » jusqu'au dépôt de la déclaration : personne ne disait jamais « c'est payé », et
+# personne n'avait d'écran pour dire « cette quittance ne va pas ».
+
+
+def _francs(montant: Decimal, *, signe: bool = False) -> str:
+    """« 110 618 », ou « +2 000 » : le montant lu comme sur une quittance."""
+    texte = f"{abs(montant):,.0f}".replace(",", "\u202f")
+    return (("+" if montant >= 0 else "−") if signe else ("−" if montant < 0 else "")) + texte
+
+
+#: L'écart toléré entre la quittance et l'accusé : un franc, pour l'arrondi d'un guichet.
+ECART_TOLERE = Decimal("1")
+
+
+def montant_attendu(entreprise: str, code_obligation: str, periode_debut: date) -> Decimal | None:
+    """Le montant que porte l'accusé de dépôt de cette échéance, ou `None` (19 octobre 2026).
+
+    ⚠️ SEULEMENT L'ACCUSÉ, JAMAIS L'ESTIMATION. Le rapprochement était resté manuel parce que
+    la correspondance entre une échéance et son accusé n'était pas sûre : elle l'est par la
+    référence de dépôt que l'échéancier pose lui-même sur l'instance. Sans accusé, rien ne se
+    compare, et la quittance se juge comme avant.
+    """
+    try:
+        dossier = entreprise_du_portefeuille(entreprise)
+    except Exception:  # noqa: BLE001 — un dossier illisible ne doit pas empêcher le verdict
+        return None
+    reglages = reglages_des_echeances()
+    instance = next(
+        (
+            o
+            for o in instances_de_l_echeancier(dossier, aujourd_hui(), reglages.horizon_jours)
+            if o.code_obligation == code_obligation and o.periode_debut == periode_debut
+        ),
+        None,
+    )
+    if instance is None or not instance.reference_depot:
+        return None
+    accuse = next(
+        (a for a in atelier().portail.tous() if a.numero == instance.reference_depot), None
+    )
+    return accuse.montant_constate if accuse else None
+
+
+class QuittanceAVerifier(BaseModel):
+    dossier: str
+    obligation: str
+    libelle: str
+    periode: str
+    periode_debut: date
+    piece: str
+    envoyee_le: datetime
+    par: str
+    #: 19 octobre 2026 (point 7) : ce que porte l'accusé de dépôt, pour comparer.
+    montant_attendu: Decimal | None = None
+
+
+@routeur.get(
+    "/preuves-a-verifier",
+    summary="Les quittances envoyées par les adhérents, en attente de vérification",
+)
+def quittances_a_verifier(acces: AccesRequis) -> list[QuittanceAVerifier]:
+    """Les plus anciennes d'abord. ⚠️ Seulement celles des dossiers de sa portée."""
+    exiger(acces, Permission.VERIFIER_UN_REGLEMENT)
+    entrees = atelier().journal.lister(objet_type=OBJET_PREUVE)
+    jugees = {
+        (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"])
+        for e in entrees
+        if e.action == ACTION_VERDICT
+    }
+    return [
+        QuittanceAVerifier(
+            dossier=e.objet_id,
+            obligation=e.apres["obligation"],
+            libelle=e.apres.get("libelle", e.apres["obligation"]),
+            periode=e.apres.get("periode", e.apres["periode_debut"]),
+            periode_debut=date.fromisoformat(e.apres["periode_debut"]),
+            piece=e.apres["piece"],
+            envoyee_le=e.horodatage,
+            par=e.apres.get("par", e.acteur),
+            montant_attendu=montant_attendu(
+                e.objet_id, e.apres["obligation"], date.fromisoformat(e.apres["periode_debut"])
+            ),
+        )
+        for e in entrees
+        if e.action == ACTION_RECUE
+        and acces.voit(e.objet_id)
+        and (e.objet_id, e.apres["obligation"], e.apres["periode_debut"], e.apres["piece"])
+        not in jugees
+    ]
+
+
+class VerdictDemande(BaseModel):
+    code_obligation: str = Field(min_length=1)
+    periode_debut: date
+    piece: str = Field(min_length=1)
+    verdict: VerdictDeLaPreuve
+    #: Exigé pour un refus : c'est ce que l'adhérent lira pour envoyer la bonne quittance.
+    motif: str | None = Field(default=None, max_length=500)
+    #: 18 octobre 2026 (point 7) : le montant que porte la quittance. Facultatif ; relevé,
+    #: il sert l'écriture de paiement et se compare à ce qui était dû.
+    montant_quittance: Decimal | None = Field(default=None, gt=0)
+
+
+def _prevenir_du_verdict(entreprise: str, demande, motif: str, jour: date) -> None:
+    """15 octobre 2026 : l'adhérent apprend le verdict par courriel, pas à sa prochaine visite.
+
+    ⚠️ Un refus qu'il ne découvre pas laisse courir l'échéance : c'est le cas qui compte.
+    Ne lève jamais (voir `prevenir_les_adherents`).
+    """
+    from app.contextes.transverse.api import prevenir_les_adherents
+
+    dossier = entreprise_du_portefeuille(entreprise)
+    reglages = reglages_des_echeances()
+    instance = next(
+        (
+            o
+            for o in instances_de_l_echeancier(dossier, jour, reglages.horizon_jours)
+            if o.code_obligation == demande.code_obligation
+            and o.periode_debut == demande.periode_debut
+        ),
+        None,
+    )
+    contexte = {
+        "obligation": instance.libelle if instance else demande.code_obligation,
+        "periode": (
+            libelle_de_periode(instance.periode_debut, instance.periode_fin)
+            if instance
+            else f"{demande.periode_debut:%m/%Y}"
+        ),
+        "denomination": dossier.denomination,
+        "lien": f"{configuration().adresse_publique_site.rstrip('/')}/fr/mon-espace/echeances",
+    }
+    if demande.verdict is VerdictDeLaPreuve.REFUSEE:
+        prevenir_les_adherents(
+            atelier(),
+            entreprise,
+            "adherent.quittance_refusee",
+            {**contexte, "motif": motif},
+            jour=jour,
+        )
+    else:
+        prevenir_les_adherents(
+            atelier(), entreprise, "adherent.quittance_verifiee", contexte, jour=jour
+        )
+
+
+@routeur.post(
+    "/dossiers/{entreprise}/preuves-de-paiement/verdict",
+    summary="Valider ou refuser la quittance envoyée par l'adhérent",
+    responses={
+        404: {"description": "Aucune quittance de ce dossier pour cette échéance"},
+        409: {"description": "Quittance déjà vérifiée"},
+        422: {"description": "Refus sans motif"},
+    },
+)
+def juger_une_quittance(
+    acces: AccesRequis, entreprise: str, demande: VerdictDemande
+) -> PreuveEnvoyee:
+    """⚠️ UN VERDICT NE SE REPREND PAS. Il est écrit au journal chaîné ; une erreur se répare en
+    demandant à l'adhérent une nouvelle quittance, pas en effaçant ce qui a été dit."""
+    exiger_dossier(acces, Permission.VERIFIER_UN_REGLEMENT, entreprise)
+    motif = (demande.motif or "").strip()
+    if demande.verdict is VerdictDeLaPreuve.REFUSEE and len(motif) < 5:
+        raise HTTPException(
+            status_code=422,
+            detail="Un refus dit pourquoi : l'adhérent doit savoir quelle quittance renvoyer.",
+        )
+    preuve = next(
+        (
+            p
+            for p in preuves_du_dossier(entreprise)
+            if p.code_obligation == demande.code_obligation
+            and p.periode_debut == demande.periode_debut
+            and p.piece == demande.piece
+        ),
+        None,
+    )
+    if preuve is None:
+        raise HTTPException(
+            status_code=404, detail="Aucune quittance de ce dossier pour cette échéance."
+        )
+    if preuve.verdict is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cette quittance est déjà {preuve.verdict.value.lower()} "
+            f"depuis le {preuve.verifiee_le:%d/%m/%Y}.",
+        )
+    # ⚠️ 19 octobre 2026 (point 7) : la quittance se compare à l'accusé. Un écart ne bloque
+    # pas la validation (paiement partiel, pénalités, régularisation), mais il ne passe pas
+    # sans un mot : celui qui valide dit pourquoi, et l'écart reste au journal.
+    attendu = montant_attendu(entreprise, demande.code_obligation, demande.periode_debut)
+    ecart = (
+        demande.montant_quittance - attendu
+        if attendu is not None and demande.montant_quittance is not None
+        else None
+    )
+    if (
+        demande.verdict is VerdictDeLaPreuve.VALIDEE
+        and ecart is not None
+        and abs(ecart) > ECART_TOLERE
+        and len(motif) < 5
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"La quittance porte {_francs(demande.montant_quittance)} FCFA, l'accusé de "
+                f"dépôt {_francs(attendu)} FCFA : écart de {_francs(ecart, signe=True)} FCFA. "
+                "Dites pourquoi vous la validez (paiement partiel, pénalités…), ou refusez-la."
+            ),
+        )
+    horodatage = maintenant()
+    atelier().journal.ajouter(
+        horodatage=horodatage,
+        acteur=acces.compte,
+        action=ACTION_VERDICT,
+        objet_type=OBJET_PREUVE,
+        objet_id=entreprise,
+        apres={
+            "obligation": demande.code_obligation,
+            "periode_debut": demande.periode_debut.isoformat(),
+            "piece": demande.piece,
+            "verdict": demande.verdict.value,
+            **({"motif": motif} if motif else {}),
+            **(
+                {"montant_quittance": str(demande.montant_quittance)}
+                if demande.montant_quittance
+                else {}
+            ),
+            **({"montant_attendu": str(attendu)} if attendu is not None else {}),
+            **({"ecart": str(ecart)} if ecart is not None else {}),
+        },
+    )
+    try:
+        _prevenir_du_verdict(entreprise, demande, motif, jour_a_douala(horodatage))
+    except Exception:  # noqa: BLE001 — le verdict est écrit ; l'avis ne doit pas l'annuler
+        logging.getLogger(__name__).exception("Avis du verdict sur %s non envoyé.", entreprise)
+    return preuve.model_copy(
+        update={
+            "verdict": demande.verdict,
+            "motif": motif or None,
+            "verifiee_le": horodatage,
+            "verifiee_par": acces.compte,
+        }
     )
 
 
@@ -310,8 +651,8 @@ class MesDocuments(BaseModel):
 )
 def lire_mes_documents(acces: AccesRequis, entreprise: str) -> MesDocuments:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
-    reglages = _reglages()
-    dossier = _entreprise(entreprise)
+    reglages = reglages_des_echeances()
+    dossier = entreprise_du_portefeuille(entreprise)
     documents = []
     for accuse in atelier().portail.tous():
         morceaux = accuse.reference_document.split("/")
@@ -346,4 +687,153 @@ def lire_mes_documents(acces: AccesRequis, entreprise: str) -> MesDocuments:
     )
 
 
+@routeur.get(
+    "/dossiers/{entreprise}/mes-documents/{numero}/recu",
+    summary="Le reçu de dépôt PDF d'une déclaration, à la charte du cabinet",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}, 404: {"description": "Accusé inconnu"}},
+)
+def recu_de_depot(acces: AccesRequis, entreprise: str, numero: str) -> Response:
+    """18 octobre 2026 : « dans Documents, je ne vois que les références ». Le reçu se
+    rend de la MÊME lecture que la liste, pour qu'il ne dise jamais autre chose qu'elle."""
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, entreprise)
+    from app.contextes.obligations.adaptateurs.sortant.document_recu_de_depot import (
+        rendre_le_recu_de_depot,
+    )
+
+    vue = lire_mes_documents(acces, entreprise)
+    document = next((d for d in vue.documents if d.numero == numero), None)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"aucun accusé {numero} à ce dossier.")
+    return Response(
+        content=rendre_le_recu_de_depot(
+            denomination=vue.denomination,
+            niu=vue.dossier,
+            titre=document.titre,
+            periode=document.periode,
+            guichet=document.guichet,
+            numero=document.numero,
+            depose_le=document.depose_le,
+            montant=document.montant_constate,
+            verifiable=document.verifiable,
+        ),
+        media_type="application/pdf",
+        headers={"Content-Disposition": disposition_en_ligne(f"recu-de-depot-{numero}.pdf")},
+    )
+
+
 __all__ = ["routeur"]
+
+
+# ── L'écriture de paiement proposée (18 octobre 2026, point 7) ─────────────────────
+#
+# « Comment fonctionne le rapprochement des quittances ? » La quittance prouvait le
+# paiement, mais aucune écriture n'en sortait : le comptable la passait à la main.
+# Une quittance VALIDÉE propose maintenant son écriture : au débit le compte de l'État
+# ou de la CNPS que le paiement solde, au crédit la trésorerie qui a payé.
+#
+# ⚠️ UNE PROPOSITION. Rien n'est passé ici : l'écran l'enregistre en brouillon par la
+# route de saisie, qui rejoue tous ses contrôles, et un comptable la valide. Le compte
+# de trésorerie est un choix : le cabinet sait si l'adhérent a payé par banque, mobile
+# money ou en espèces.
+
+#: Le compte que le paiement solde, au plan du cabinet (`plan_syscohada.py`).
+COMPTE_DE_L_OBLIGATION = {
+    "CNPS": "431",
+    "IRPP_SALAIRES": "4441",
+    "TVA": "4431",
+}
+COMPTES_DE_TRESORERIE = {"521": "banque", "5231": "mobile money", "571": "caisse"}
+
+
+class LigneProposee(BaseModel):
+    compte: str
+    libelle: str
+    sens: str
+    montant: Decimal
+
+
+class EcritureDePaiementProposee(BaseModel):
+    journal: str
+    exercice: str
+    date_operation: date
+    libelle: str
+    piece_justificative: str
+    lignes: list[LigneProposee]
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/preuves-de-paiement/ecriture-proposee",
+    summary="L'écriture de paiement qu'une quittance validée propose",
+)
+def proposer_l_ecriture_de_paiement(
+    acces: AccesRequis,
+    entreprise: str,
+    code_obligation: str,
+    periode_debut: date,
+    piece: str,
+    compte_tresorerie: str = "521",
+    montant: Decimal | None = None,
+) -> EcritureDePaiementProposee:
+    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    preuve = next(
+        (
+            p
+            for p in preuves_du_dossier(entreprise)
+            if p.code_obligation == code_obligation
+            and p.periode_debut == periode_debut
+            and p.piece == piece
+        ),
+        None,
+    )
+    if preuve is None or preuve.verdict is not VerdictDeLaPreuve.VALIDEE:
+        raise HTTPException(
+            status_code=409,
+            detail="Seule une quittance validée propose son écriture : la vérifier d'abord.",
+        )
+    if preuve.ecriture_de_paiement:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"L'écriture de cette quittance est déjà passée : {preuve.ecriture_de_paiement}."
+            ),
+        )
+    compte = next(
+        (c for code, c in COMPTE_DE_L_OBLIGATION.items() if code_obligation.startswith(code)),
+        None,
+    )
+    if compte is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"aucun compte connu pour {code_obligation} : passer l'écriture à la main.",
+        )
+    if compte_tresorerie not in COMPTES_DE_TRESORERIE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"trésorerie {compte_tresorerie} inconnue : "
+            + ", ".join(f"{c} ({n})" for c, n in COMPTES_DE_TRESORERIE.items()),
+        )
+    retenu = montant or preuve.montant_quittance
+    if retenu is None:
+        raise HTTPException(
+            status_code=422,
+            detail="le montant de la quittance n'a pas été relevé : le donner.",
+        )
+    jour = (preuve.verifiee_le or maintenant()).date()
+    libelle = f"Paiement {code_obligation} {periode_debut:%m/%Y}"
+    return EcritureDePaiementProposee(
+        journal="BQ" if compte_tresorerie != "571" else "CA",
+        exercice=str(jour.year),
+        date_operation=jour,
+        libelle=libelle,
+        piece_justificative=piece,
+        lignes=[
+            LigneProposee(compte=compte, libelle=libelle, sens="DEBIT", montant=retenu),
+            LigneProposee(
+                compte=compte_tresorerie,
+                libelle=f"{libelle} ({COMPTES_DE_TRESORERIE[compte_tresorerie]})",
+                sens="CREDIT",
+                montant=retenu,
+            ),
+        ],
+    )

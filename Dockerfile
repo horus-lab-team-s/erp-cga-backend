@@ -48,11 +48,19 @@ ENV VIRTUAL_ENV=/opt/venv \
 RUN python -m venv "$VIRTUAL_ENV"
 
 WORKDIR /construction
-COPY pyproject.toml README.md ./
-# Le paquet doit exister pour que `pip install .` aboutisse. On ne copie ici
-# qu'un squelette : copier le vrai code invaliderait le cache d'installation au
-# premier changement d'une ligne.
-RUN mkdir -p app && touch app/__init__.py && pip install .
+COPY pyproject.toml README.md uv.lock ./
+# ⚠️ 19 octobre 2026 (audit de sécurité) : `pip install .` résolvait les bornes « >= »
+# du pyproject au moment de la construction. La production recevait donc d'autres
+# versions que celles testées et auditées (`pip-audit` sur `uv.lock`). Les versions
+# viennent désormais du verrou, empreintes vérifiées : un paquet modifié en chemin
+# fait échouer la construction.
+#
+# Le code n'est pas installé comme paquet : il est copié dans l'étage final, et
+# lancé depuis son dossier (`uvicorn app.main:app`, `prepend_sys_path` d'alembic).
+RUN pip install uv==0.11.8 \
+    && uv export --frozen --no-dev --no-emit-project --format requirements-txt -o exigences.txt \
+    && pip install --require-hashes -r exigences.txt \
+    && pip uninstall -y uv
 
 # ── Étage 2 · exécution ─────────────────────────────────────────────────────
 FROM python:3.12-slim-bookworm AS execution
@@ -114,9 +122,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # l'orchestrateur, qui sait ce que porte la machine. Un `--workers 4` en dur
 # quadruplerait la mémoire consommée sur un hôte à un cœur.
 #
-# ⚠️ `--forwarded-allow-ips *` fait confiance à l'en-tête `X-Forwarded-For`.
-# Correct **derrière un mandataire inverse** qui la réécrit, et seulement là :
-# exposer ce conteneur directement laisserait n'importe qui déclarer son adresse
-# — celle que journalise l'audit et que lira la limitation de débit.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# ⚠️ 16 octobre 2026 (revue de sécurité) : `--forwarded-allow-ips *` faisait confiance
+# à `X-Forwarded-For` venant de n'importe qui. Uvicorn retenait alors l'adresse la plus
+# à gauche, que le client choisit : la limitation de débit se contournait en la
+# changeant à chaque requête. La confiance va désormais aux seuls mandataires déclarés
+# par `FORWARDED_ALLOW_IPS` (lue par uvicorn ; 127.0.0.1 par défaut). Le déploiement
+# y met le réseau de l'ingress, et rien d'autre.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

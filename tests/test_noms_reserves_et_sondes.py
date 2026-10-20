@@ -111,13 +111,59 @@ class TestLesNomsReserves:
 
 
 class TestLaRouteQuiOuvreUnTenant:
-    def test_le_slug_reserve_est_refuse_avant_tout_le_reste(self):
-        """422 sur le slug, et non 404 sur la proforma : le refus vient d'abord.
+    """⚠️ **L'ORDRE A CHANGÉ LE 13 OCTOBRE 2026, ET CE N'EST PAS UN RECUL.**
 
-        L'ordre compte au-delà du code de statut : si la proforma était lue en premier,
-        un slug réservé accompagné d'un numéro inconnu rendrait 404, et l'appelant
-        corrigerait le numéro sans jamais apprendre que son sous-domaine est refusé.
-        """
+    Le slug était refusé avant toute lecture, pour qu'un numéro de proforma
+    inconnu ne masque pas un sous-domaine réservé. Mais savoir si une adresse est
+    due suppose désormais de connaître le service vendu, donc d'avoir lu la
+    proforma : une création d'entreprise n'ouvre pas d'espace, et lui refuser une
+    adresse qu'on va ignorer serait refuser pour rien.
+
+    La garde elle-même tient entière, là où elle a un objet : sur la vente d'un
+    espace, un nom réservé est refusé avant tout effet.
+    """
+
+    @staticmethod
+    def _proforma(service: str):
+        from tests.test_relance import _proforma
+
+        return _proforma(service=service)
+
+    def test_le_slug_reserve_est_refuse_pour_la_vente_d_un_espace(self):
+        from fastapi import HTTPException
+
+        from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+            _adresse_voulue,
+        )
+
+        with pytest.raises(HTTPException) as refus:
+            _adresse_voulue(self._proforma("PLATEFORME"), "api")
+        assert refus.value.status_code == 422
+        assert "réservé" in str(refus.value.detail)
+
+    def test_la_vente_d_un_espace_exige_son_adresse(self):
+        from fastapi import HTTPException
+
+        from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+            _adresse_voulue,
+        )
+
+        for absente in (None, "", "ab"):
+            with pytest.raises(HTTPException) as refus:
+                _adresse_voulue(self._proforma("PLATEFORME"), absente)
+            assert refus.value.status_code == 422
+
+    def test_une_prestation_n_a_pas_d_adresse_meme_si_on_lui_en_envoie_une(self):
+        """Ignorée, y compris quand elle est réservée : il n'y a rien à refuser
+        puisqu'il n'y a rien à ouvrir."""
+        from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+            _adresse_voulue,
+        )
+
+        assert _adresse_voulue(self._proforma("CREATION"), "api") is None
+        assert _adresse_voulue(self._proforma("CREATION"), None) is None
+
+    def test_une_proforma_inconnue_rend_404(self):
         from fastapi.testclient import TestClient
 
         from app.contextes.transverse.api import MOT_DE_PASSE_DEMO
@@ -130,11 +176,9 @@ class TestLaRouteQuiOuvreUnTenant:
         )
         assert session.status_code == 200, session.text
         reponse = client.post(
-            "/acquisition/proformas/PRO-INCONNUE/reglement",
-            json={"slug": "api", "reference": "OM-000", "montant": "1"},
+            "/acquisition/proformas/PRO-INCONNUE/reglement", json={"slug": "api"}
         )
-        assert reponse.status_code == 422, reponse.text
-        assert "réservé" in reponse.text
+        assert reponse.status_code == 404, reponse.text
 
 
 # ── Les sondes ────────────────────────────────────────────────────────────────

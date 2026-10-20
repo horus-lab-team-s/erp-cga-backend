@@ -17,12 +17,17 @@ from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     SouscriptionIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.tables import (
+    TableAppelDeFonds,
+    TableContratDHonoraires,
     TableDevis,
     TableDossierCommercial,
+    TableGraceDeReglement,
     TablePaiement,
     TableProforma,
     TableQualification,
     TableRappelAPasser,
+    TableRegleDeDepassement,
+    TableReglementDHonoraires,
     TableSouscription,
     TableSuiviDeRelance,
     TableTarifFixe,
@@ -32,12 +37,22 @@ from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.fonds_de_tiers import AppelDeFonds
+from app.contextes.souscription.domaine.honoraires import (
+    ContratDHonoraires,
+    PeriodeDejaReglee,
+    ReglementDHonoraires,
+)
 from app.contextes.souscription.domaine.offre import TarifFixe
 from app.contextes.souscription.domaine.paiements import Paiement, StatutPaiement
 from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
 from app.contextes.souscription.domaine.rappels import RappelAPasser
 from app.contextes.souscription.domaine.relance import SuiviDeRelance
+from app.contextes.souscription.domaine.situation_de_reglement import (
+    GraceDeReglement,
+    RegleDeDepassement,
+)
 from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
@@ -45,6 +60,11 @@ from app.contextes.souscription.domaine.souscriptions import (
 from app.infrastructure.depot_document import DepotDocument
 
 __all__ = [
+    "DepotAppelsDeFondsSql",
+    "DepotContratsDHonorairesSql",
+    "DepotGracesDeReglementSql",
+    "DepotRegleDeDepassementSql",
+    "DepotReglementsDHonorairesSql",
     "DepotDevisSql",
     "DepotTarifsFixesSql",
     "DepotProformasSql",
@@ -198,6 +218,14 @@ class DepotPaiementsSql(DepotDocument[Paiement]):
             .order_by(TablePaiement.initie_le)
         )
 
+    def encaisses(self) -> list[Paiement]:
+        """Les paiements validés, toutes natures : le journal de caisse (18 octobre 2026)."""
+        return self._tous(
+            self._requete()
+            .where(TablePaiement.statut == StatutPaiement.VALIDE.value)
+            .order_by(TablePaiement.initie_le)
+        )
+
     def en_attente(self, *, depuis: datetime | None = None) -> list[Paiement]:
         requete = (
             self._requete()
@@ -298,6 +326,15 @@ class DepotDossiersSql(DepotDocument[DossierCommercial]):
         )
         if etat is not None:
             requete = requete.where(TableDossierCommercial.etat == etat.value)
+        return self._tous(requete)
+
+    def payes(self) -> list[DossierCommercial]:
+        """Les dossiers payés, du plus ancien règlement au plus récent (16 octobre 2026)."""
+        requete = (
+            self._requete()
+            .where(TableDossierCommercial.etat == EtatDossier.PAYEE.value)
+            .order_by(TableDossierCommercial.depuis_le)
+        )
         return self._tous(requete)
 
     def charge_par_responsable(self) -> dict[str, int]:
@@ -538,3 +575,136 @@ class DepotTarifsFixesSql(DepotDocument[TarifFixe]):
     def lister(self) -> list[TarifFixe]:
         return self._tous(self._requete().order_by(TableTarifFixe.fixe_le))
 
+
+
+class DepotContratsDHonorairesSql(DepotDocument[ContratDHonoraires]):
+    """Réalisation de `DepotContratsDHonoraires`. Voir `TableContratDHonoraires`."""
+
+    _table = TableContratDHonoraires
+    _entite = ContratDHonoraires
+
+    def _cle(self, entite: ContratDHonoraires) -> dict[str, Any]:
+        return {"locataire": self.locataire, "niu": entite.niu}
+
+    def _colonnes(self, entite: ContratDHonoraires) -> dict[str, Any]:
+        return {"fixe_le": entite.fixe_le}
+
+    def lire(self, niu: str) -> ContratDHonoraires | None:
+        return self._premier(self._requete().where(TableContratDHonoraires.niu == niu))
+
+    def enregistrer(self, contrat: ContratDHonoraires) -> None:
+        self._poser(contrat)
+
+    def lister(self) -> list[ContratDHonoraires]:
+        return sorted(self._tous(self._requete()), key=lambda c: c.denomination)
+
+
+class DepotReglementsDHonorairesSql(DepotDocument[ReglementDHonoraires]):
+    """Réalisation de `DepotReglementsDHonoraires`. Voir `TableReglementDHonoraires`."""
+
+    _table = TableReglementDHonoraires
+    _entite = ReglementDHonoraires
+
+    def _cle(self, entite: ReglementDHonoraires) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: ReglementDHonoraires) -> dict[str, Any]:
+        return {"niu": entite.niu, "periode": entite.periode, "constate_le": entite.constate_le}
+
+    def pour(self, niu: str) -> list[ReglementDHonoraires]:
+        return self._tous(
+            self._requete()
+            .where(TableReglementDHonoraires.niu == niu)
+            .order_by(TableReglementDHonoraires.periode)
+        )
+
+    def enregistrer(self, reglement: ReglementDHonoraires) -> None:
+        """⚠️ La lecture d'abord, pour un refus lisible ; la contrainte de la base
+        tranche la course entre deux règlements simultanés."""
+        if any(r.periode == reglement.periode for r in self.pour(reglement.niu)):
+            raise PeriodeDejaReglee(
+                f"la période du {reglement.periode:%d/%m/%Y} de {reglement.niu} est déjà réglée."
+            )
+        try:
+            self._poser(reglement)
+        except IntegrityError as conflit:
+            raise PeriodeDejaReglee(
+                f"la période du {reglement.periode:%d/%m/%Y} de {reglement.niu} vient "
+                "d'être réglée par un autre canal."
+            ) from conflit
+
+    def lister(self) -> list[ReglementDHonoraires]:
+        return self._tous(self._requete().order_by(TableReglementDHonoraires.constate_le))
+
+
+class DepotAppelsDeFondsSql(DepotDocument[AppelDeFonds]):
+    """Réalisation de `DepotAppelsDeFonds`. Voir `TableAppelDeFonds`."""
+
+    _table = TableAppelDeFonds
+    _entite = AppelDeFonds
+
+    def _cle(self, entite: AppelDeFonds) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: AppelDeFonds) -> dict[str, Any]:
+        return {"niu": entite.niu, "etat": entite.etat.value, "arrete_le": entite.arrete_le}
+
+    def lire(self, identifiant: str) -> AppelDeFonds | None:
+        return self._premier(self._requete().where(TableAppelDeFonds.identifiant == identifiant))
+
+    def pour(self, niu: str) -> list[AppelDeFonds]:
+        return sorted(
+            self._tous(self._requete().where(TableAppelDeFonds.niu == niu)),
+            key=lambda a: (a.periode_debut, a.code_obligation),
+        )
+
+    def enregistrer(self, appel: AppelDeFonds) -> None:
+        self._poser(appel)
+
+    def lister(self) -> list[AppelDeFonds]:
+        return self._tous(self._requete().order_by(TableAppelDeFonds.arrete_le))
+
+
+class DepotRegleDeDepassementSql(DepotDocument[RegleDeDepassement]):
+    """La règle de dépassement du cabinet. Voir `TableRegleDeDepassement`."""
+
+    _table = TableRegleDeDepassement
+    _entite = RegleDeDepassement
+
+    def _cle(self, entite: RegleDeDepassement) -> dict[str, Any]:
+        return {"locataire": self.locataire}
+
+    def _colonnes(self, entite: RegleDeDepassement) -> dict[str, Any]:
+        return {"fixee_le": entite.fixee_le}
+
+    def lire(self) -> RegleDeDepassement | None:
+        return self._premier(self._requete())
+
+    def enregistrer(self, regle: RegleDeDepassement) -> None:
+        self._poser(regle)
+
+
+class DepotGracesDeReglementSql(DepotDocument[GraceDeReglement]):
+    """Les grâces de règlement. Voir `TableGraceDeReglement`."""
+
+    _table = TableGraceDeReglement
+    _entite = GraceDeReglement
+
+    def _cle(self, entite: GraceDeReglement) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: GraceDeReglement) -> dict[str, Any]:
+        return {"niu": entite.niu, "jusqu_au": entite.jusqu_au}
+
+    def pour(self, niu: str) -> list[GraceDeReglement]:
+        return sorted(
+            self._tous(self._requete().where(TableGraceDeReglement.niu == niu)),
+            key=lambda g: g.accordee_le,
+            reverse=True,
+        )
+
+    def toutes(self) -> list[GraceDeReglement]:
+        return self._tous(self._requete())
+
+    def enregistrer(self, grace: GraceDeReglement) -> None:
+        self._poser(grace)

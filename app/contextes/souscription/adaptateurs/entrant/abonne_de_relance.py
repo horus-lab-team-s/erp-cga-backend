@@ -22,7 +22,6 @@ from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
 )
 from app.contextes.souscription.adaptateurs.sortant.magasins_memoire import (
     dossiers_memoire,
-    vider_les_dossiers_memoire,
 )
 from app.contextes.souscription.adaptateurs.sortant.plan_de_contact import (
     charger_le_plan_de_contact,
@@ -41,7 +40,6 @@ __all__ = [
     "DOSSIER_DU_PLAN",
     "abonne_de_relance",
     "poster_une_relance",
-    "reinitialiser_les_rappels",
 ]
 
 #: Le sous-dossier du référentiel où vit le plan de contact.
@@ -118,7 +116,7 @@ def _depots():
 
     session = session_de_travail()
     if session is None:
-        return _dossiers_memoire(), _rappels_memoire()
+        return _dossiers_memoire(), rappels_memoire()
     locataire = courant()
     return DepotDossiersSql(session, locataire), DepotRappelsSql(session, locataire)
 
@@ -137,11 +135,7 @@ _dossiers_memoire = dossiers_memoire
 
 
 @lru_cache
-def _rappels_memoire() -> DepotRappelsMemoire:
+def rappels_memoire() -> DepotRappelsMemoire:
     return DepotRappelsMemoire()
 
 
-def reinitialiser_les_rappels() -> None:
-    """Repart de carnets mémoire vierges. Destiné aux tests."""
-    vider_les_dossiers_memoire()
-    _rappels_memoire.cache_clear()

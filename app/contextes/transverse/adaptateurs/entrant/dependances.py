@@ -38,7 +38,7 @@ lui apprendrait l'existence de dossiers qu'il n'a pas à connaître.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta
@@ -63,12 +63,14 @@ from app.contextes.transverse.adaptateurs.sortant.coffre import Coffre, coffre_d
 from app.contextes.transverse.adaptateurs.sortant.depots_memoire import (
     CompteIntrouvable,
     DepotMandatsMemoire,
+    DepotRolesDuCabinetMemoire,
 )
 from app.contextes.transverse.adaptateurs.sortant.depots_sql import (
     DepotComptesSql,
     DepotHabilitationsSql,
     DepotJetonsSql,
     DepotMandatsSql,
+    DepotRolesDuCabinetSql,
     DepotSessionsSql,
     JournalAuditSql,
     PortailSql,
@@ -101,7 +103,14 @@ from app.contextes.transverse.domaine.ports import (
     JournalAudit,
     ServiceNotification,
 )
-from app.contextes.transverse.domaine.roles import Permission, Role, permissions_de
+from app.contextes.transverse.domaine.roles import (
+    PERMISSIONS_DE_TRAITEMENT,
+    FicheDeRole,
+    Permission,
+    Role,
+    installer_la_source_des_roles,
+    permissions_de,
+)
 from app.contextes.transverse.domaine.sessions import SessionInvalide
 from app.infrastructure.base_de_donnees import (
     fermer_une_session,
@@ -109,11 +118,12 @@ from app.infrastructure.base_de_donnees import (
     session_du_locataire,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant, etabli, poser_le_mandat
 
 __all__ = [
     "NOM_TEMOIN",
+    "exiger_un_geste_fort",
     "AccesRequis",
     "Atelier",
     "AtelierMemoire",
@@ -172,6 +182,14 @@ def service_de_notification() -> ServiceNotification:
     ─────────────────────────────────────────────────────────────────────────
     """
     reglages = configuration()
+    if reglages.courriels_differes:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "CGA_COURRIELS_DIFFERES=true : aucun courriel ne part, ils sont retenus. "
+            "Poser le relais SMTP, puis retirer ce réglage."
+        )
+        return ServiceNotificationMemoire()
     if not reglages.smtp_hote:
         return ServiceNotificationMemoire()
     return ServiceNotificationSmtp(
@@ -217,6 +235,8 @@ class Atelier:
     #: Les mandats **accordés** par ce locataire. Voir `DepotMandats` : ils sont
     #: rangés chez le mandant, parce que c'est dans son périmètre qu'ils se vérifient.
     mandats: DepotMandats
+    #: 18 octobre 2026 : ce que le cabinet a réglé de la matrice des rôles.
+    roles: DepotRolesDuCabinetMemoire | DepotRolesDuCabinetSql
     journal: JournalAudit
     empreintes: ServiceEmpreinteArgon2
     #: ⚠️ Annoté par le **port**, non par une réalisation : c'est le seul membre
@@ -238,6 +258,7 @@ class AtelierMemoire(Atelier):
             self.journal,
         ) = depots_demo()
         self.mandats = DepotMandatsMemoire()
+        self.roles = DepotRolesDuCabinetMemoire()
         self.empreintes = ServiceEmpreinteArgon2()
         self.notifications = service_de_notification()
         self.portail = PortailManuel()
@@ -260,6 +281,7 @@ class AtelierSql(Atelier):
         self.jetons = DepotJetonsSql(session, locataire)
         self.sessions = DepotSessionsSql(session, locataire)
         self.mandats = DepotMandatsSql(session, locataire)
+        self.roles = DepotRolesDuCabinetSql(session, locataire)
         self.journal = JournalAuditSql(session, locataire)
         self.portail = PortailSql(session, locataire)
         self.empreintes = ServiceEmpreinteArgon2()
@@ -306,6 +328,24 @@ def atelier() -> Atelier:
         "le temps d'une requête : l'ouvrir depuis une tâche de fond ou un script "
         "suppose d'employer `unite_de_travail()` explicitement."
     )
+
+
+def _roles_du_cabinet_servi() -> list[FicheDeRole]:
+    """La source de `roles.matrice_en_vigueur` (18 octobre 2026).
+
+    L'atelier de la requête, ou celui du processus en mémoire. ⚠️ Hors de toute requête
+    en PostgreSQL (un script, une tâche de fond), rien n'est lu et la matrice livrée
+    s'applique : aucun accès ne s'y résout, puisque l'accès se résout à la requête.
+    """
+    courant = _ATELIER_COURANT.get()
+    if courant is None:
+        if configuration().en_base:
+            return []
+        courant = _atelier_du_processus()
+    return courant.roles.tous()
+
+
+installer_la_source_des_roles(_roles_du_cabinet_servi)
 
 
 def session_de_travail() -> SessionSql | None:
@@ -687,7 +727,7 @@ async def acces_optionnel(
     except (SessionInvalide, CompteIntrouvable):
         return None
     request.state.session = session
-    return resoudre_acces(compte, session, habilitations, instant.date())
+    return resoudre_acces(compte, session, habilitations, jour_a_douala(instant), instant)
 
 
 def acces_courant(
@@ -723,6 +763,26 @@ def exiger(
             status_code=403,
             detail=f"Action non permise : {permission} est requise. ({type(refus).__name__})",
         ) from refus
+
+
+def exiger_un_geste_fort(acces: Acces, permission: Permission) -> None:
+    """La permission, ET une session renforcée par le second facteur (19 octobre 2026).
+
+    ⚠️ Pour les gestes qui MODIFIENT les comptes : inviter, suspendre, rétablir, fermer
+    une habilitation, retirer le second facteur d'un collègue. `GERER_COMPTES` n'entre
+    pas dans `EXIGE_MFA`, qui garderait aussi la simple lecture de la liste ; c'est le
+    geste qui exige le code. Le mot de passe d'un administrateur, seul, ouvrait sinon
+    un compte au nom de qui le voulait, avec l'adresse de son choix.
+    """
+    exiger(acces, permission)
+    if not acces.facteur_fort:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Action non permise : {permission} est requise. (SecondFacteurRequis) "
+                "Ce geste exige le second facteur : renforcez la session."
+            ),
+        )
 
 
 AccesRequis = Annotated[Acces, Depends(acces_courant)]
@@ -823,6 +883,95 @@ def exiger_dossier(
                 "dans votre portefeuille : en demander l'affectation."
             ),
         )
+    _exiger_le_dossier_en_regle(permission, niu)
+
+
+#: Dit pourquoi un dossier ne se traite plus, ou `None` (18 octobre 2026). Posé par le
+#: contexte qui connaît les honoraires (`souscription`) : le transverse ne le connaît pas.
+_controle_de_reglement: Callable[[str], str | None] | None = None
+
+
+def installer_le_controle_de_reglement(controle: Callable[[str], str | None] | None) -> None:
+    global _controle_de_reglement
+    _controle_de_reglement = controle
+
+
+def _exiger_le_dossier_en_regle(permission: Permission, niu: str) -> None:
+    """Un geste de traitement sur un dossier qui n'est pas en règle rend 423.
+
+    ⚠️ Après le périmètre : un collaborateur hors portée apprend « introuvable », jamais
+    l'état des paiements d'un dossier qu'il ne voit pas.
+    """
+    if _controle_de_reglement is None or permission not in PERMISSIONS_DE_TRAITEMENT:
+        return
+    raison = _controle_de_reglement(niu)
+    if raison is not None:
+        raise HTTPException(status_code=423, detail=raison)
+
+
+def exiger_dossier_pour_l_un_de(
+    acces: Acces,
+    permissions: Sequence[Permission],
+    niu: str,
+    *,
+    motif: str | None = None,
+    introuvable: str | None = None,
+) -> None:
+    """Le droit par **l'une** des permissions nommées, et le périmètre sur le dossier.
+
+    ─────────────────────────────────────────────────────────────────────────
+    POURQUOI UNE ALTERNATIVE, ET POURQUOI ELLE NE RELÂCHE RIEN
+
+    Une même route peut être légitime pour deux rôles qui n'ont aucune permission
+    en commun. La paie en est le cas : le comptable la tient par
+    `LIRE_COMPTABILITE`, qui lui ouvre aussi les livres dont il a besoin pour la
+    contrôler ; l'adhérent la tient sur sa seule entreprise par `TENIR_SA_PAIE`,
+    et n'a rien à faire dans les livres.
+
+    Écrire deux routes jumelles aurait été pire : les gardes recopiées divergent,
+    l'une reçoit une correction et l'autre non, et c'est la moins surveillée qui
+    reste ouverte.
+
+    ⚠️ **LE PÉRIMÈTRE RESTE ENTIER.** Le contrôle de dossier est le même que
+    celui de `exiger_dossier`, et il s'applique quelle que soit la permission qui
+    a ouvert la porte. Un adhérent qui demande la paie d'un autre NIU reçoit
+    `404`, parce que ce dossier n'existe pas **pour lui** — voir la note de
+    `exiger_dossier` sur ce que trahirait un `403`.
+
+    ⚠️ Le refus nomme **toutes** les permissions admises. Un message qui n'en
+    nommerait qu'une enverrait celui qui intègre demander la mauvaise.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    if not permissions:
+        raise ValueError("exiger_dossier_pour_l_un_de sans aucune permission : "
+                         "une garde qui n'exige rien n'est pas une garde.")
+
+    detenue = next(
+        (p for p in permissions if acces.detient(p)),
+        None,
+    )
+    if detenue is None:
+        nommees = ", ".join(str(p) for p in permissions)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Action non permise : l'une de {nommees} est requise.",
+        )
+
+    # ⚠️ On repasse par `exiger` plutôt que de s'arrêter à `detient` : c'est lui
+    # qui porte le contrôle du motif, exigé par trois permissions du produit. Le
+    # court-circuiter ici ferait passer un geste qui doit être justifié.
+    exiger(acces, detenue, motif=motif)
+
+    if not acces.voit(niu):
+        raise HTTPException(
+            status_code=404,
+            detail=introuvable
+            or (
+                f"aucun dossier {niu} accessible. Si ce dossier existe, il n'est pas "
+                "dans votre portefeuille : en demander l'affectation."
+            ),
+        )
+    _exiger_le_dossier_en_regle(detenue, niu)
 
 
 def _acces_sous_mandat(
@@ -873,7 +1022,7 @@ def _acces_sous_mandat(
                 habilitations=chez_le_mandataire.habilitations,
                 a_l_instant=instant,
             )
-            acces = resoudre_acces(compte, session, habilitations, instant.date(), instant)
+            acces = resoudre_acces(compte, session, habilitations, jour_a_douala(instant), instant)
     except (SessionInvalide, CompteIntrouvable):
         return None
 
@@ -887,7 +1036,7 @@ def _acces_sous_mandat(
             mandant=mandant,
             compte=acces.compte,
             role=role,
-            a_la_date=instant.date(),
+            a_la_date=jour_a_douala(instant),
         )
         if mandat is not None:
             couverts.append(role)
@@ -916,7 +1065,7 @@ def _acces_sous_mandat(
     )
     return acces.model_copy(
         update={
-            "roles": sorted(couverts, key=lambda r: r.value),
+            "roles": sorted(couverts, key=str),
             "permissions": sorted(permissions_de(frozenset(couverts)), key=lambda p: p.value),
             # ⚠️ Voir l'en-tête : les dossiers du mandataire ne désignent rien chez le
             # mandant. Le mandat est ce qui borne.

@@ -46,10 +46,13 @@ from email.message import EmailMessage
 from typing import Any, Protocol
 
 from app.contextes.transverse.adaptateurs.sortant.gabarits_courriel import (
+    CID_DU_LOGO,
+    CLE_PIECES_JOINTES,
     cles_manquantes,
     gabarit,
     rendre,
 )
+from app.partage.marque import LOGO, logo_disponible
 
 __all__ = ["ServiceNotificationSmtp", "Transport", "TransportSmtp"]
 
@@ -179,6 +182,8 @@ class ServiceNotificationSmtp:
             # ce que lisent les filtres anti-pourriel.
             message.set_content(rendu.texte)
             message.add_alternative(rendu.html, subtype="html")
+            _joindre_le_logo(message, rendu.html)
+            _joindre_les_pieces(message, enrichi.get(CLE_PIECES_JOINTES))
             self._transport.remettre(message)
         except Exception:  # noqa: BLE001 — voir l'en-tête : ne jamais lever.
             _journal.exception(
@@ -213,3 +218,41 @@ def _masquer(adresse: str) -> str:
     if not domaine:
         return "adresse-invalide"
     return f"{nom[:1]}***@{domaine}"
+
+
+def _joindre_le_logo(message: EmailMessage, html: str) -> None:
+    """Attache le logo au corps HTML, là où `cid:` le désigne.
+
+    ⚠️ Il est rattaché à la partie HTML et non au message : c'est ce qui le
+    range avec le corps (`multipart/related`) au lieu d'en faire une pièce jointe
+    que la cliente verrait listée sous le message, nommée comme un fichier.
+    """
+    if f"cid:{CID_DU_LOGO}" not in html or not logo_disponible():
+        return
+    partie_html = message.get_body(preferencelist=("html",))
+    if partie_html is None:
+        return
+    partie_html.add_related(
+        LOGO.read_bytes(), maintype="image", subtype="jpeg", cid=f"<{CID_DU_LOGO}>"
+    )
+
+
+def _joindre_les_pieces(message: EmailMessage, pieces: Any) -> None:
+    """Les documents joints : une liste de `(nom, octets, type MIME)`.
+
+    ⚠️ Une pièce mal formée est IGNORÉE, jamais levée : le message qui annonce une
+    proposition doit partir même si son document ne peut pas être attaché. La
+    cliente garde le lien, qui ouvre le même document.
+    """
+    if not isinstance(pieces, (list, tuple)):
+        return
+    for piece in pieces:
+        if not (isinstance(piece, (list, tuple)) and len(piece) == 3):
+            continue
+        nom, octets, type_mime = piece
+        if not isinstance(octets, (bytes, bytearray)) or "/" not in str(type_mime):
+            continue
+        principal, _, secondaire = str(type_mime).partition("/")
+        message.add_attachment(
+            bytes(octets), maintype=principal, subtype=secondaire, filename=str(nom)
+        )

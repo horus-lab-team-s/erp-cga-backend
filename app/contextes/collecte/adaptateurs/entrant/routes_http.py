@@ -9,13 +9,15 @@ second appel au contexte D pour l'obtenir. Recopier le verdict ici le ferait
 diverger du rapport dès la première réévaluation, et c'est la copie périmée qui
 s'afficherait — sur l'écran même où le comptable décide s'il faut réclamer une
 facture rectificative.
+
+⚠️ 16 octobre 2026 : la facture lue et sa lecture automatique sont sorties dans
+`routes_facture_lue.py`, sous les mêmes chemins.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
-import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -51,7 +53,6 @@ from app.contextes.collecte.api import (
     DepotRefuse,
     EtatPiece,
     PieceJustificative,
-    RelancePiece,
     ResultatReception,
     SuspicionDoublon,
     TransitionRefusee,
@@ -60,19 +61,13 @@ from app.contextes.collecte.api import (
     empreinte,
     evaluer_completude,
     receptionner,
-    relances_du_jour,
 )
 from app.contextes.collecte.application.demandes_de_piece import (
     DemandeIntrouvable,
     DemandeRefusee,
-    classer_une_demande,
-    demander_une_rectificative,
     repondre_a_une_demande,
-    satisfaire_une_demande,
-    tracer_une_relance,
 )
 from app.contextes.collecte.application.lecture import lire_une_piece
-from app.contextes.collecte.application.traitement import classer_une_piece
 from app.contextes.collecte.domaine.demandes import NatureDeReponse
 from app.contextes.collecte.domaine.espace_adherent import (
     ReglagesDesReponses,
@@ -96,9 +91,9 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.erreurs import message_lisible
+from app.partage import horloge
 from app.partage.formats import montant_fcfa
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant
 from app.partage.recherche import (
     ReponseDeRecherche,
@@ -165,7 +160,7 @@ def _ligne(piece: PieceJustificative, a_la_date: date) -> LignePiece:
         etat=piece.etat,
         type=piece.type,
         depose_le=piece.depose_le,
-        recue_le=piece.recue_le.date(),
+        recue_le=jour_a_douala(piece.recue_le),
         jours_de_transmission=piece.jours_de_transmission(),
         anciennete=piece.anciennete(a_la_date),
         retard_de_remise=piece.retard_de_remise(),
@@ -426,7 +421,7 @@ def deposer_piece(
             ),
         )
 
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     declaree = depot.depose_le or aujourd_hui
     if declaree > aujourd_hui:
         # Pas 88 : le refus d'une date future parlait de « pièce plus ancienne ».
@@ -550,7 +545,7 @@ async def deposer_fichier(
 
 
 async def _ranger_le_fichier(fichier: UploadFile) -> DepotFichier:
-    """Lit, contrôle et range. **Partagé par les trois portes**, et c'est l'objet.
+    """Lit, contrôle et range. **Partagé par toutes les portes**, et c'est l'objet.
 
     ⚠️ Les gardes recopiées dans trois routes divergent : l'une reçoit une
     correction, les autres non, et c'est la moins surveillée qui reste ouverte.
@@ -677,6 +672,43 @@ async def deposer_fichier_scelle(
         # inconnue » permettrait d'énumérer les dossiers en lisant les réponses.
         raise HTTPException(status_code=404, detail=str(refus)) from refus
 
+    return await _ranger_le_fichier(fichier)
+
+
+@routeur.post(
+    "/fichiers-de-creation",
+    summary="Déposer un fichier sur un dossier de création, depuis son compte",
+    status_code=201,
+    responses={
+        404: {"description": "Dossier hors de la portée du compte"},
+        413: {"description": "Fichier trop volumineux"},
+        415: {"description": "Type de document refusé"},
+    },
+)
+async def deposer_fichier_de_creation(
+    acces: AccesRequis,
+    reference: str = Query(..., description="Le dossier de création (CRE-…)"),
+    fichier: UploadFile = File(..., description="Le document photographié"),
+) -> DepotFichier:
+    """La troisième porte : un dossier de création, ouvert par une session.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI ELLE EXISTE (14 octobre 2026)
+
+    La cliente d'une création a désormais un compte, ouvert au paiement. Depuis
+    son espace, elle n'a pas de sceau à présenter, et `/fichiers` exige un NIU
+    qu'elle n'a pas.
+
+    ⚠️ LA PORTÉE, PAS LE SCEAU : la référence doit être dans la portée du compte,
+    son seul dossier, et hors portée rend 404, comme partout.
+
+    ⚠️ LA CLIENTE SEULE. Le cabinet a sa porte, `/fichiers-de-formalite`, sous
+    `SUIVRE_FORMALITE` : l'ouvrir ici aussi ferait deux portes pour un geste.
+
+    ⚠️ **LES MÊMES GARDES QUE LES DEUX AUTRES PORTES** : c'est `_ranger_le_fichier`.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger_dossier(acces, Permission.SUIVRE_MA_CREATION, reference)
     return await _ranger_le_fichier(fichier)
 
 
@@ -807,9 +839,13 @@ def telecharger_par_empreinte(acces: AccesRequis, empreinte: str) -> Response:
     `nosniff` empêchent qu'un fichier déposé s'exécute dans le domaine du
     cabinet, et `no-store` qu'un justificatif nominatif dorme dans un cache
     partagé.
+
+    ⚠️ 19 OCTOBRE 2026 (AUDIT DE SÉCURITÉ) : `LIRE_PIECE` laissait un adhérent lire un
+    fichier déposé sur un autre dossier, pour peu qu'il en connût l'empreinte. Faute de
+    périmètre à vérifier, la porte est réservée à ceux qui suivent les formalités.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.LIRE_PIECE)
+    exiger(acces, Permission.SUIVRE_FORMALITE)
     from app.contextes.collecte.adaptateurs.sortant.magasin_local import CleInvalide
 
     magasin = magasin_fichiers()
@@ -926,14 +962,14 @@ class RectificativeDemandee(BaseModel):
     adherents_prevenus: int
 
 
-def _prevenir_les_adherents(demande: DemandePiece, reference: str | None) -> int:
+def prevenir_les_adherents_de_la_demande(demande: DemandePiece, reference: str | None) -> int:
     """Prévient par courriel les comptes adhérents actifs du dossier.
 
     ⚠️ Le motif part dans le message : c'est ce que l'adhérent doit transmettre à son
     fournisseur. Rien d'autre du dossier n'y figure.
     """
     boutique = atelier()
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     prevenus = 0
     for habilitation in habilitations_actives(
         boutique.habilitations.pour_dossier(demande.entreprise), aujourd_hui
@@ -1005,93 +1041,7 @@ def lire_la_piece(
         raise HTTPException(status_code=409, detail=str(refus)) from refus
 
 
-class DemandeDeClassement(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    motif: str = Field(min_length=1, max_length=500)
-
-
-@routeur.post(
-    "/pieces/{identifiant}/classement",
-    summary="Classer une pièce sans écriture : doublon, relevé rapproché, document hors sujet",
-    responses={
-        404: {"description": "Pièce inconnue, ou hors du portefeuille"},
-        409: {"description": "Motif trop court, ou traitement déjà terminé"},
-    },
-)
-def classer_la_piece(
-    acces: AccesRequis, identifiant: str, demande: DemandeDeClassement
-) -> PieceJustificative:
-    """Pas 107 : `archiver` existait au domaine, sans route. Un doublon ou un relevé bancaire,
-    qui ne produisent pas d'écriture, restaient « à traiter » pour toujours, et bloquaient la
-    clôture de leur mois. Voir `application/traitement.py`.
-
-    `IDENTIFIER_PIECE`, comme la lecture : dire qu'une pièce ne produira pas d'écriture, c'est
-    dire ce qu'elle est. L'acte est inscrit au journal d'audit, avec son motif : une pièce
-    classée disparaît du travail à faire, et il faut pouvoir dire pourquoi.
-    """
-    exiger(acces, Permission.IDENTIFIER_PIECE)
-    introuvable = f"pièce {identifiant} introuvable."
-    piece = depot_pieces().par_identifiant(identifiant)
-    if piece is None:
-        raise HTTPException(status_code=404, detail=introuvable)
-    exiger_dossier(acces, Permission.IDENTIFIER_PIECE, piece.entreprise, introuvable=introuvable)
-    try:
-        classee = classer_une_piece(piece, motif=demande.motif, pieces=depot_pieces())
-    except TransitionRefusee as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-    atelier().journal.ajouter(
-        horodatage=maintenant(),
-        acteur=acces.compte,
-        action="collecte.piece_classee",
-        objet_type="piece_justificative",
-        objet_id=classee.identifiant,
-        apres={"dossier": classee.entreprise, "motif": classee.motif_archivage},
-    )
-    return classee
-
-
-@routeur.post(
-    "/pieces/{identifiant}/rectificative",
-    summary="Demander la facture rectificative d'une pièce",
-    status_code=201,
-)
-def demander_rectificative(
-    acces: AccesRequis, identifiant: str, demande: DemandeDeRectificative
-) -> RectificativeDemandee:
-    exiger(acces, Permission.CONTROLER_CONFORMITE)
-    piece = depot_pieces().par_identifiant(identifiant)
-    if piece is None:
-        raise HTTPException(status_code=404, detail=f"pièce {identifiant} introuvable.")
-    exiger_dossier(
-        acces,
-        Permission.CONTROLER_CONFORMITE,
-        piece.entreprise,
-        introuvable=f"pièce {identifiant} introuvable.",
-    )
-    aujourd_hui = maintenant().date()
-    try:
-        emise = demander_une_rectificative(
-            identifiant=f"DP-{aujourd_hui.year}-{uuid.uuid4().hex[:8].upper()}",
-            piece=identifiant,
-            motif=demande.motif,
-            attendue_pour=demande.attendue_pour,
-            le=aujourd_hui,
-            par=acces.compte,
-            pieces=depot_pieces(),
-            demandes=depot_demandes(),
-        )
-    except DemandeRefusee as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-    except ValueError as invalide:
-        raise HTTPException(status_code=422, detail=message_lisible(invalide)) from invalide
-    return RectificativeDemandee(
-        demande=emise,
-        adherents_prevenus=_prevenir_les_adherents(emise, piece.reference_document),
-    )
-
-
-def _demande_du_perimetre(acces, identifiant: str, permission: Permission) -> DemandePiece:
+def demande_du_perimetre(acces, identifiant: str, permission: Permission) -> DemandePiece:
     """La demande, si elle est du périmètre de l'appelant pour cette permission.
 
     ⚠️ Chaque route appelle **aussi** `exiger(...)` elle-même, en première ligne : le
@@ -1105,91 +1055,6 @@ def _demande_du_perimetre(acces, identifiant: str, permission: Permission) -> De
         acces, permission, demande.entreprise, introuvable=f"demande {identifiant} introuvable."
     )
     return demande
-
-
-class Satisfaction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    piece: str = Field(min_length=1)
-
-
-@routeur.post("/demandes/{identifiant}/satisfaction", summary="Rattacher la pièce reçue")
-def satisfaire(acces: AccesRequis, identifiant: str, corps: Satisfaction) -> DemandePiece:
-    exiger(acces, Permission.IDENTIFIER_PIECE)
-    _demande_du_perimetre(acces, identifiant, Permission.IDENTIFIER_PIECE)
-    try:
-        return satisfaire_une_demande(
-            identifiant, piece=corps.piece, le=maintenant().date(),
-            pieces=depot_pieces(), demandes=depot_demandes(),
-        )
-    except DemandeIntrouvable as absence:
-        raise HTTPException(status_code=404, detail=str(absence)) from absence
-    except DemandeRefusee as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-
-
-class Classement(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    motif: str = Field(min_length=10)
-
-
-@routeur.post("/demandes/{identifiant}/classement", summary="Classer une demande sans suite")
-def classer(acces: AccesRequis, identifiant: str, corps: Classement) -> DemandePiece:
-    exiger(acces, Permission.RELANCER_ADHERENT)
-    _demande_du_perimetre(acces, identifiant, Permission.RELANCER_ADHERENT)
-    try:
-        return classer_une_demande(
-            identifiant, motif=corps.motif, le=maintenant().date(), demandes=depot_demandes()
-        )
-    except DemandeRefusee as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-
-
-class RelanceTracee(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    canal: CanalDepot
-
-
-@routeur.post(
-    "/demandes/{identifiant}/relances",
-    summary="Tracer une relance émise",
-    status_code=201,
-    description=(
-        "Consigne qu'une relance a été émise ce jour, par ce canal. Tracer n'est pas "
-        "émettre : le collaborateur a appelé, écrit ou envoyé le message."
-    ),
-)
-def tracer_relance(acces: AccesRequis, identifiant: str, corps: RelanceTracee) -> DemandePiece:
-    exiger(acces, Permission.RELANCER_ADHERENT)
-    _demande_du_perimetre(acces, identifiant, Permission.RELANCER_ADHERENT)
-    try:
-        return tracer_une_relance(
-            identifiant, canal=corps.canal, le=maintenant().date(), demandes=depot_demandes()
-        )
-    except DemandeRefusee as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-
-
-@routeur.get(
-    "/relances",
-    summary="Les relances à émettre aujourd'hui",
-    description=(
-        "Les jalons J+7, J+15 et J+30 après la demande. Au-delà de trente jours, ce "
-        "n'est plus un oubli : la relance devient une escalade, affaire d'un "
-        "responsable de portefeuille et non plus d'un automate."
-    ),
-)
-def lister_relances(
-    acces: AccesRequis, a_la_date: date = Query(...)
-) -> list[RelancePiece]:
-    exiger(acces, Permission.RELANCER_ADHERENT)
-    return restreindre(acces, _relances(a_la_date), lambda r: r.entreprise)
-
-
-def _relances(a_la_date: date) -> list[RelancePiece]:
-    return relances_du_jour(depot_demandes().ouvertes(), a_la_date)
 
 
 # ── L'espace de l'adhérent (pas 112) ──────────────────────────────────────────
@@ -1233,7 +1098,7 @@ def repondre_au_cabinet(
     acces: AccesRequis, identifiant: str, corps: ReponseAuCabinet
 ) -> DemandePiece:
     exiger(acces, Permission.REPONDRE_AU_CABINET)
-    demande = _demande_du_perimetre(acces, identifiant, Permission.REPONDRE_AU_CABINET)
+    demande = demande_du_perimetre(acces, identifiant, Permission.REPONDRE_AU_CABINET)
     horodatage = maintenant()
     try:
         repondue = repondre_a_une_demande(
@@ -1383,14 +1248,16 @@ def _lien_de_la_piece(piece) -> str:
     """L'écran qui ouvre la pièce.
 
     ⚠️ L'écran de détail (E02) est désigné par la **référence de la facture**, et ne
-    sait aujourd'hui contrôler que les factures du jeu de démonstration. Un lien vers
-    une référence qu'il ne connaît pas ouvrirait « Pièce introuvable » : on renvoie alors
-    à la boîte de réception, qui liste toutes les pièces. Le jour où E02 lira les pièces
-    réelles, cette fonction seule changera.
+    contrôle que les factures que la conformité connaît : celles qui sont lues et
+    confirmées (20 octobre 2026), et le jeu de démonstration hors production. Un lien
+    vers une autre référence ouvrirait « Pièce introuvable » : on renvoie alors à la
+    boîte de réception, qui liste toutes les pièces.
     """
-    from app.contextes.conformite.api import FACTURES_DEMO
+    from app.contextes.conformite.api import facture_par_reference
 
-    if piece.reference_document and piece.reference_document in FACTURES_DEMO:
+    if piece.reference_document and (
+        piece.facture is not None or facture_par_reference(piece.reference_document)
+    ):
         return f"/pieces/{piece.reference_document}"
     return "/pieces"
 

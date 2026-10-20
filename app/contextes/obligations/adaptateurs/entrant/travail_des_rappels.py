@@ -29,11 +29,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 from app.contextes.obligations.adaptateurs.entrant.routes_espace_adherent import (
-    _instances,
-    _preuves,
+    instances_de_l_echeancier,
+    preuves_du_dossier,
 )
 from app.contextes.obligations.adaptateurs.entrant.routes_espace_adherent import (
-    _reglages as _reglages_des_echeances,
+    reglages_des_echeances as _reglages_des_echeances,
 )
 from app.contextes.obligations.adaptateurs.entrant.routes_http import depot_entreprises
 from app.contextes.obligations.adaptateurs.entrant.routes_rappels import (
@@ -44,7 +44,7 @@ from app.contextes.obligations.domaine.echeances_adherent import echeances_a_rap
 from app.contextes.obligations.domaine.rappels_adherent import jalon_du
 from app.contextes.transverse.api import EtatCompte, Role, atelier, habilitations_actives
 from app.orchestration.ordonnanceur import Travail
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 
 __all__ = ["NOM_TRAVAIL", "OBJET_RAPPEL", "envoyer_les_rappels", "travail_des_rappels"]
 
@@ -75,7 +75,7 @@ def cle_du_rappel(dossier: str, code: str, periode_debut, jalon: int) -> str:
 def envoyer_les_rappels() -> str:
     boutique = atelier()
     instant = maintenant()
-    jour = instant.date()
+    jour = jour_a_douala(instant)
     rappels = reglages_des_rappels()
     reglages = _reglages_des_echeances()
     envoyes = 0
@@ -90,10 +90,10 @@ def envoyer_les_rappels() -> str:
         if not comptes:
             continue
         a_venir = echeances_a_rappeler(
-            instances=_instances(dossier, jour, reglages.horizon_jours),
+            instances=instances_de_l_echeancier(dossier, jour, reglages.horizon_jours),
             jour=jour,
             reglages=reglages,
-            preuves=_preuves(dossier.niu),
+            preuves=preuves_du_dossier(dossier.niu),
         )
         for compte in comptes:
             preference = preference_du_compte(compte.identifiant, rappels)

@@ -412,7 +412,34 @@ def enroler_par_le_courriel(client) -> str:
     jeton = dernier.contexte["lien"].split("jeton=", 1)[1]
     confirmation = client.post("/transverse/second-facteur/confirmation", json={"jeton": jeton})
     assert confirmation.status_code == 200, confirmation.text
-    return confirmation.json()["secret"]
+    secret = confirmation.json()["secret"]
+    # ⚠️ 19 octobre 2026 : la clé attend son premier code. Le titulaire le saisit.
+    from app.contextes.transverse.api import code_attendu
+    from app.partage.horloge import maintenant
+
+    # ⚠️ 20 octobre 2026 : le code d'activation est retenu, et ne sert plus ensuite. Le
+    # titulaire saisit celui qu'il lisait il y a un instant (la tranche précédente) : les
+    # cas qui renforcent aussitôt au code du moment restent ce qu'un titulaire ferait.
+    activation = client.post(
+        "/transverse/second-facteur/activation",
+        json={"code": code_attendu(secret, maintenant(), -1)},
+    )
+    assert activation.status_code == 200, activation.text
+    return secret
+
+
+def renforcer_la_session(client) -> None:
+    """Renforce la session du compte connecté, comme son titulaire le ferait.
+
+    ⚠️ 19 octobre 2026 : les gestes qui modifient les comptes exigent le second facteur.
+    Un compte jamais enrôlé s'enrôle (le premier code active la clé et renforce la
+    session) ; un compte déjà renforcé n'a rien à faire.
+    """
+    moi = client.get("/transverse/moi").json()
+    if moi["facteur_fort"]:
+        return
+    assert not moi["second_facteur_enrole"], "compte déjà enrôlé : renforcer avec son secret"
+    enroler_par_le_courriel(client)
 
 
 @pytest.fixture
@@ -435,3 +462,31 @@ def depot_tva_sans_revue_exigee(monkeypatch):
 
     sans = ReglagesDuDepotTVA(revue_du_mois_exigee=ExigenceDeRevue.AUCUNE)
     monkeypatch.setattr(routes_http, "charger_les_reglages_du_depot_tva", lambda _chemin: sans)
+
+
+def tolerer_les_retards_d_honoraires() -> None:
+    """Fixe la règle de dépassement du cabinet de démonstration à un an (18 octobre 2026).
+
+    ⚠️ Pour les cas qui figent l'horloge des mois après l'amorçage : les honoraires de
+    démonstration y sont en retard de plusieurs périodes, et le dossier ne se traiterait
+    plus (`423`). Ce que ces cas éprouvent, la clôture ou la saisie, n'en dépend pas ; le
+    blocage a ses propres cas, dans `test_situation_de_reglement.py`.
+    """
+    from datetime import datetime
+
+    from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+        DepotRegleDeDepassementSql,
+    )
+    from app.contextes.souscription.domaine.situation_de_reglement import RegleDeDepassement
+    from app.contextes.transverse.api import unite_de_travail
+    from app.partage.locataire import etabli
+
+    with etabli("CGA-BRCG"), unite_de_travail("CGA-BRCG") as boutique:
+        DepotRegleDeDepassementSql(boutique.session, "CGA-BRCG").enregistrer(
+            RegleDeDepassement(
+                delai_jours=365,
+                motif="cas de test hors règlement",
+                fixee_par="test",
+                fixee_le=datetime(2026, 10, 18),
+            )
+        )

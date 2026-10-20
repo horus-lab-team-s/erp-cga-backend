@@ -38,6 +38,37 @@ variantes:
     statut: TRANSCRIT
     source: Docs/PROFORMA SARL SOUS SEING PRIVEE.pdf
     applicable_du: 2026-01-01
+    # ⚠️ LA SECONDE PAGE DU DOCUMENT, transcrite mot pour mot (14 octobre 2026).
+    # Elle est identique sur les deux proformas du cabinet : écrite une fois ici,
+    # sous ancres, et reprise par la variante suivante. La recopier ferait deux
+    # listes de pièces qui divergeraient à la première correction.
+    documents_a_fournir: &a_fournir
+      - >-
+        Photocopie de votre CNI camerounaise de l'associé unique ou des associés ; si vous êtes de nationalité étrangère, photocopie de votre passeport
+      - Le nom de votre entreprise
+      - La liste de ses activités
+      - La division des parts sociales et des pourcentages
+      - La localisation de l'entreprise
+      - La photocopie de la CNI du gérant
+      - Le plan de localisation de votre entreprise
+      - Le numéro de téléphone de l'entreprise et son adresse mail
+      - Liste du personnel
+      - Cachet de l'entreprise
+      - >-
+        Une copie certifiée non timbrée de la CNI ou de l'acte de naissance de l'employé
+      - >-
+        Une photocopie simple de la CNI et de l'acte de naissance de l'employé
+    documents_a_recevoir: &a_recevoir
+      - Un registre de commerce et du crédit mobilier
+      - Une attestation de création d'entreprise
+      - Une attestation d'immatriculation
+      - >-
+        Une insertion en ligne dans le fichier national des contribuables camerounais
+      - Une attestation de conformité fiscale qui vaut titre de patente
+      - >-
+        Une attestation de non utilisation du personnel d'une durée de 3 mois renouvelable une fois, ou les numéros CNPS de l'entreprise et de son personnel
+    delai_d_execution: &delai >-
+      8 semaines maximum après relecture et approbation par vous de vos statuts de société, et le paiement des frais au compte bancaire UBA N° 10033-05201-01016000835-92 ou via notre code marchand Orange #150*47# 586853 au nom de BROAD RANGE CONSULTING.
     rubriques:
       - numero: I
         intitule: PROCEDURE AU CFCE
@@ -88,6 +119,9 @@ variantes:
     statut: TRANSCRIT
     source: Docs/PROFORMA SARL SOUS SEING PRIVEE SANS SUIVI 1.pdf
     applicable_du: 2026-01-01
+    documents_a_fournir: *a_fournir
+    documents_a_recevoir: *a_recevoir
+    delai_d_execution: *delai
     rubriques:
       - numero: I
         intitule: PROCEDURE AU CFCE

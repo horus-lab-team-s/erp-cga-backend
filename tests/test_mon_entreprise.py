@@ -214,11 +214,11 @@ class TestLesRoutes:
 
     def test_seuls_les_dirigeants_en_fonction(self, monkeypatch):
         from app.contextes.portefeuille.adaptateurs.entrant import routes_espace_adherent
-        from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire
+        from app.contextes.portefeuille.adaptateurs.entrant.routes_http import lire_le_dossier
         from app.contextes.portefeuille.domaine.entites import Dirigeant
 
         def avec_un_ancien(niu):
-            dossier = _lire(niu)
+            dossier = lire_le_dossier(niu)
             ancien = Dirigeant(
                 nom="ANCIEN Gérant",
                 qualite="Gérant",
@@ -228,7 +228,7 @@ class TestLesRoutes:
             futur = Dirigeant(nom="FUTUR Cogérant", qualite="Cogérant", depuis=date(2027, 1, 1))
             return dossier.model_copy(update={"dirigeants": [*dossier.dirigeants, ancien, futur]})
 
-        monkeypatch.setattr(routes_espace_adherent, "_lire", avec_un_ancien)
+        monkeypatch.setattr(routes_espace_adherent, "lire_le_dossier", avec_un_ancien)
         fiche = _client(ADHERENT).get(FICHE).json()
         assert [d["nom"] for d in fiche["dirigeants"]] == ["NKOA Jean-Pierre"]
 
@@ -305,14 +305,16 @@ class TestLesRoutes:
         )
         assert depot.status_code in (200, 201), depot.text
         # Le dépôt d'un autre dossier ne figure pas parmi les documents de celui-ci.
+        # ⚠️ La patente, et plus la DSF : depuis le 14 octobre 2026, la DSF a son
+        # parcours (préparée, validée, déposée) et le constat libre la refuse.
         autre = reviseur.post(
             "/obligations/dossiers/M071122334455J/depots",
             json={
-                "code_obligation": "DSF",
-                "periode_debut": "2025-01-01",
-                "periode_fin": "2025-12-31",
-                "numero": "DSF-COLOMBE-2025",
-                "depose_le": "2026-03-10T10:00:00",
+                "code_obligation": "PATENTE",
+                "periode_debut": "2026-01-01",
+                "periode_fin": "2026-12-31",
+                "numero": "PATENTE-COLOMBE-2026",
+                "depose_le": "2026-02-20T10:00:00",
             },
         )
         assert autre.status_code in (200, 201), autre.text

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from app.partage import horloge
 from app.registre.etat import Verdict
 
 __all__ = ["CODES_SANS_LESQUELS_AUCUN_BULLETIN", "sonde_du_social"]
@@ -87,9 +88,8 @@ def _les_parametres_de_paie() -> Verdict | None:
         ServiceParametres,
         parametres_communs,
     )
-    from app.partage.horloge import maintenant
 
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     try:
         service = ServiceParametres(list(parametres_communs()))
     except Exception as panne:  # noqa: BLE001 — le motif importe, quel qu'il soit
@@ -129,9 +129,8 @@ def _les_baremes_de_paie() -> Verdict | None:
         ServiceBaremes,
     )
     from app.infrastructure.config import configuration
-    from app.partage.horloge import maintenant
 
-    aujourd_hui: date = maintenant().date()
+    aujourd_hui: date = horloge.aujourd_hui()
     # ⚠️ Le fichier est relu ici, comme la sonde du Référentiel le relit. C'est la
     # même lecture, de quelques kilo-octets, et il n'existe pas d'accesseur mémoïsé
     # pour les barèmes — les routes de la paie le construisent aussi à chaque appel.

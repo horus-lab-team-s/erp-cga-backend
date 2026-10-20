@@ -577,6 +577,76 @@ class TestParLaRoute:
         )
         assert validee.status_code == 200, validee.text
 
+    def _vue(self, client) -> dict:
+        vue = client.get(
+            f"/obligations/dossiers/{DOSSIER}/seuil-de-regime?a_la_date=2026-11-02"
+        )
+        assert vue.status_code == 200, vue.text
+        return vue.json()
+
+    def test_a_cinquante_millions_exactement_le_reel_est_du(self, plateforme):
+        """CGI art. 93 quater (2) a : réel dès un chiffre « égal ou supérieur » à 50 M.
+
+        15 octobre 2026 : la revue lisait le seuil de TVA (« supérieur à »), qui gardait
+        à l'IGS un dossier à 50 000 000 exactement."""
+        client = plateforme
+        ouvrir_une_session(client, self.REVISEUR)
+        deja = Decimal(self._vue(client)["en_cours"]["diagnostic"]["chiffre_affaires"])
+        self._vendre(client, DOSSIER, montant=int(SEUIL - deja))
+
+        corps = self._vue(client)
+        assert Decimal(corps["en_cours"]["diagnostic"]["chiffre_affaires"]) == SEUIL
+        assert corps["borne"] == "INCLUSE"
+        assert corps["en_cours"]["diagnostic"]["franchi"] is True
+
+    def test_une_profession_liberale_passe_au_reel_des_trente_millions(self, plateforme):
+        """CGI art. 93 quater (1) b : 30 M pour une profession libérale."""
+        client = plateforme
+        ouvrir_une_session(client, self.REVISEUR)
+        self._vendre(client, DOSSIER, montant=35_000_000)
+        assert self._vue(client)["en_cours"]["diagnostic"]["franchi"] is False
+
+        nature = client.post(
+            f"/portefeuille/entreprises/{DOSSIER}/nature-activite",
+            json={
+                "nature": "LIBERALE",
+                "justification": "Statuts : cabinet d'avocats, profession libérale réglementée.",
+            },
+        )
+        assert nature.status_code == 200, nature.text
+
+        corps = self._vue(client)
+        assert Decimal(corps["seuil"]) == Decimal(30_000_000)
+        assert corps["en_cours"]["diagnostic"]["franchi"] is True
+        # La revue du portefeuille applique à chaque dossier son propre seuil.
+        revue = client.get(
+            "/obligations/seuils-de-regime?a_la_date=2026-11-02&a_surveiller_seulement=false"
+        ).json()
+        (lui,) = [v for v in revue if v["niu"] == DOSSIER]
+        assert Decimal(lui["seuil"]) == Decimal(30_000_000)
+        assert any(Decimal(v["seuil"]) == SEUIL for v in revue if v["niu"] != DOSSIER)
+
+    def test_un_secteur_au_reel_d_office_est_reclasse_sans_seuil(self, plateforme):
+        """CGI art. 93 quater (2) b : microfinance, assurance, téléphonie mobile… relèvent
+        du réel « sans considération de leur chiffre d'affaires »."""
+        client = plateforme
+        ouvrir_une_session(client, self.REVISEUR)
+        assert self._vue(client)["reclassement_du"] is False
+
+        secteur = client.post(
+            f"/portefeuille/entreprises/{DOSSIER}/nature-activite",
+            json={
+                "nature": "COMMERCIALE",
+                "reel_d_office": "MICROFINANCE",
+                "justification": "Agrément COBAC d'établissement de microfinance de 1re catégorie.",
+            },
+        )
+        assert secteur.status_code == 200, secteur.text
+
+        corps = self._vue(client)
+        assert corps["reel_d_office"] == "MICROFINANCE"
+        assert corps["reclassement_du"] is True and corps["a_surveiller"] is True
+
     def test_le_chiffre_rendu_est_celui_des_livres(self, plateforme):
         client = plateforme
         ouvrir_une_session(client, self.REVISEUR)

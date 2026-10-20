@@ -125,6 +125,12 @@ COMPTES_DEMO: list[Compte] = [
     _compte("C-005", "Christelle", "NDONGO", "c.ndongo@cga-brcg.cm"),
     _compte("C-006", "Roger", "EBOLO", "r.ebolo@cga-brcg.cm"),
     _compte("C-007", "Patricia", "MOUKOURI", "p.moukouri@cga-brcg.cm"),
+    # La responsable de caisse (14 octobre 2026) : elle constate les règlements
+    # reçus au guichet. Elle ne voit ni les comptes des adhérents ni les dossiers.
+    _compte("C-009", "Nadège", "ESSAMA", "n.essama@cga-brcg.cm"),
+    # Le super administrateur (18 octobre 2026) : il règle la matrice des rôles et
+    # accorde les faveurs. Un compte à part : il ne tient aucun dossier.
+    _compte("C-010", "Hervé", "KAMGA", "h.kamga@cga-brcg.cm"),
     # Parti en avril. Le compte est suspendu, l'habilitation fermée, et l'un
     # comme l'autre demeurent : les écritures qu'il a validées portent son
     # identifiant, et le journal d'audit y renvoie.
@@ -136,6 +142,10 @@ COMPTES_DEMO: list[Compte] = [
     # C'est l'état le plus fréquent en production, et celui qu'on oublie de
     # traiter dans les écrans : ni actif, ni inexistant.
     _compte("A-003", "Émile", "TCHOUMBA", "e.tchoumba@tchoumbaetfils.cm", active=False),
+    # 18 octobre 2026 : le gérant de CABINET NGUEMA CONSEIL, le dossier dont la DSF 2025
+    # reste à faire. Sans lui, aucun adhérent de la démonstration n'avait une DSF à suivre
+    # et des pièces à verser : les autres sont déposées.
+    _compte("A-004", "Sylvain", "NGUEMA", "s.nguema@nguemaconseil.cm"),
     # ── L'externe ────────────────────────────────────────────────────────────
     _compte("I-001", "Georges", "ATANGANA", "g.atangana@inspection.cm"),
 ]
@@ -200,6 +210,10 @@ HABILITATIONS_DEMO: list[Habilitation] = [
     _hab("H-008", "C-007", Role.CHARGE_FORMALITES, None, date(2025, 6, 1),
          motif=MotifHabilitation.CHANGEMENT_DE_POSTE,
          precision="cumule les formalités depuis le départ de A. TCHINDA"),
+    _hab("H-013", "C-009", Role.CAISSE, None, date(2026, 10, 1),
+         accordee_par="C-001", precision="tient la caisse du cabinet"),
+    _hab("H-014", "C-010", Role.SUPER_ADMIN, None, date(2026, 10, 18),
+         accordee_par="C-001", precision="désigné par le gérant pour régler la matrice"),
     # Le comptable parti : habilitation fermée, ligne conservée. Résoudre les
     # droits de C-008 au 1er mars et au 1er juin 2026 donne deux réponses.
     _hab(
@@ -213,6 +227,8 @@ HABILITATIONS_DEMO: list[Habilitation] = [
     _hab("H-011", "A-002", Role.ADHERENT, {NIU_DEMO["COLOMBE"]}, date(2021, 1, 1),
          motif=MotifHabilitation.SOUSCRIPTION, accordee_par="systeme"),
     _hab("H-012", "A-003", Role.ADHERENT, {NIU_DEMO["TCHOUMBA"]}, date(2023, 2, 1),
+         motif=MotifHabilitation.SOUSCRIPTION, accordee_par="systeme"),
+    _hab("H-015", "A-004", Role.ADHERENT, {NIU_DEMO["NGUEMA"]}, date(2022, 4, 11),
          motif=MotifHabilitation.SOUSCRIPTION, accordee_par="systeme"),
     # L'inspecteur assistant : un dossier, une mission datée, lecture et avis.
     _hab(

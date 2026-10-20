@@ -97,6 +97,9 @@ class TestLeTourHorsRequete:
             "relais",
             "reconciliation-des-paiements",
             "relance",
+            # 18 octobre 2026 : la lecture au dépôt, après la relance. Elle appelle le réseau,
+            # mais ne lit rien tant que le cabinet ne l'a pas activée.
+            "lecture-au-depot",
             "reprise-des-dossiers",
             "veille-des-dossiers",
             # Pas 115 : les rappels d'échéance des adhérents, en dernier. Un rappel à J-7 n'est pas
@@ -120,6 +123,7 @@ class TestLeTourHorsRequete:
         # ⚠️ Trié par **nom** en SQL, et non par ordre d'exécution : le cas
         # précédent garde l'ordre d'exécution, celui-ci garde la persistance.
         assert [ligne.travail for ligne in lignes] == [
+            "lecture-au-depot",
             "rappels-d-echeance",
             "reconciliation-des-paiements",
             "relais",

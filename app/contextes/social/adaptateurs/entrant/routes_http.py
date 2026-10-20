@@ -18,7 +18,7 @@ from datetime import date
 from decimal import Decimal
 from functools import lru_cache
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.referentiel.api import (
@@ -27,6 +27,7 @@ from app.contextes.referentiel.api import (
     ServiceParametres,
     service_parametres,
 )
+from app.contextes.social.adaptateurs.sortant.magasins import depot_des_arretes
 from app.contextes.social.api import (
     AvantageNature,
     Bulletin,
@@ -49,13 +50,21 @@ from app.contextes.social.api import (
     inscrire_un_salarie,
     ouvrir_un_contrat,
 )
+from app.contextes.social.domaine.arrete_des_charges import (
+    ArreteDesCharges,
+    RubriqueSociale,
+    proposition_des_charges,
+)
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
+    atelier,
     exiger_dossier,
+    exiger_dossier_pour_l_un_de,
 )
 from app.infrastructure.config import configuration
 from app.partage.erreurs import message_lisible
+from app.partage.horloge import aujourd_hui, maintenant
 
 routeur = APIRouter(prefix="/social", tags=["Social et paie"])
 
@@ -109,6 +118,9 @@ class SyntheseDeclaration(BaseModel):
     en_retard: bool
     repose_sur_des_valeurs_non_validees: bool
     mouvements: list[dict]
+    #: Le groupe de risque appliqué, et s'il est supposé faute d'être au dossier.
+    groupe_risque: GroupeRisque = GroupeRisque.A
+    groupe_risque_suppose: bool = False
     bulletins: list[Bulletin]
 
 
@@ -139,6 +151,33 @@ def _periode(annee: int, mois: int) -> Periode:
 
 
 # ── Lectures ─────────────────────────────────────────────────────────────────
+
+#: Qui peut LIRE la paie d'un dossier.
+#:
+#: ─────────────────────────────────────────────────────────────────────────────
+#: DEUX RÔLES, AUCUNE PERMISSION EN COMMUN, ET C'EST VOULU
+#:
+#: Le collaborateur tient la paie de ses dossiers par `LIRE_COMPTABILITE`, qui
+#: lui ouvre aussi la balance et le journal dont il a besoin pour la contrôler.
+#:
+#: L'adhérent tient la sienne par `TENIR_SA_PAIE`, et rien d'autre : un bulletin
+#: porte des rémunérations nominatives, et lui ouvrir la comptabilité du dossier
+#: pour qu'il voie sa paie lui ouvrirait au passage tous les livres.
+#:
+#: ⚠️ Le périmètre reste entier dans les deux cas. `exiger_dossier_pour_l_un_de`
+#: applique le même contrôle de dossier quelle que soit la permission qui a
+#: ouvert la porte : une paie demandée sur un autre NIU rend 404.
+#: ─────────────────────────────────────────────────────────────────────────────
+LECTURE_DE_LA_PAIE = (Permission.LIRE_COMPTABILITE, Permission.TENIR_SA_PAIE)
+
+#: Qui peut TENIR la paie : inscrire un salarié, ouvrir et clore un contrat.
+#:
+#: ⚠️ `SAISIR_ECRITURE` côté cabinet et non `LIRE_COMPTABILITE` : inscrire un
+#: salarié engage le dossier, et un chargé de clientèle qui lit les comptes n'a
+#: pas à embaucher. L'adhérent, lui, saisit son propre personnel : c'est tout
+#: l'objet du libre service.
+TENUE_DE_LA_PAIE = (Permission.SAISIR_ECRITURE, Permission.TENIR_SA_PAIE)
+
 @routeur.get("/dossiers/{entreprise}/salaries", summary="Le fichier du personnel")
 def lister_salaries(
     acces: AccesRequis,
@@ -152,7 +191,7 @@ def lister_salaries(
     nominatif des années après un départ. Ceux qui sont sortis portent
     `sans_contrat` — l'écran les grise, il ne les efface pas.
     """
-    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     en_cours = {
         c.salarie: c for c in depot_contrats.du_dossier(entreprise, a_la_date=a_la_date)
@@ -186,16 +225,69 @@ def lire_bulletin(
     annee: int,
     mois: int,
     matricule: str,
-    groupe_risque: GroupeRisque = Query(
-        GroupeRisque.A,
+    groupe_risque: GroupeRisque | None = Query(
+        None,
         description=(
-            "Groupe de tarification du risque professionnel **notifié par la CNPS**. "
-            "Il ne se déduit pas de l'activité : le saisir de travers coûte le triple "
-            "ou le tiers de la cotisation accidents du travail."
+            "Pour simuler un autre groupe. Absent : le groupe **notifié par la CNPS** et "
+            "enregistré au dossier ; à défaut, A, et le bulletin le signale."
         ),
     ),
 ) -> Bulletin:
-    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    bulletin, _ = _bulletin_du_mois(entreprise, annee, mois, matricule, groupe_risque)
+    return bulletin
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/bulletins/{annee}/{mois}/{matricule}/pdf",
+    summary="Le bulletin de paie imprimable, du même calcul que l'écran",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def imprimer_le_bulletin(
+    acces: AccesRequis,
+    entreprise: str,
+    annee: int,
+    mois: int,
+    matricule: str,
+    groupe_risque: GroupeRisque | None = Query(None),
+) -> Response:
+    """15 octobre 2026 : le bulletin se remet au salarié. Même garde, même calcul."""
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    bulletin, contrat = _bulletin_du_mois(entreprise, annee, mois, matricule, groupe_risque)
+    depot_salaries, _ = depots()
+    salarie = depot_salaries.lire(matricule)
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+    from app.contextes.social.adaptateurs.sortant.document_bulletin import rendre_le_bulletin
+
+    try:
+        employeur = _dossiers_du_portefeuille().lire(entreprise).denomination
+    except EntrepriseIntrouvable:
+        employeur = entreprise
+    octets = rendre_le_bulletin(
+        bulletin,
+        employeur=employeur,
+        niu=entreprise,
+        salarie=f"{salarie.prenom} {salarie.nom}",
+        matricule_cnps=salarie.matricule_cnps,
+        poste=contrat.poste,
+    )
+    return Response(
+        content=octets,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="bulletin-{matricule}-{annee}-{mois:02d}.pdf"'
+            )
+        },
+    )
+
+
+def _bulletin_du_mois(
+    entreprise: str, annee: int, mois: int, matricule: str, groupe_risque: GroupeRisque | None
+):
+    """Le bulletin du mois et le contrat qui le fonde. Extrait le 15 octobre 2026 pour que
+    l'écran et le PDF portent le même calcul ; l'accès reste à l'appelant."""
     periode = _periode(annee, mois)
     _, depot_contrats = depots()
     contrats = [
@@ -223,7 +315,46 @@ def lire_bulletin(
                 "prorata que le cabinet n'a pas arrêtée : à traiter à la main."
             ),
         )
-    return _calculer(contrats[0], entreprise, periode, groupe_risque)
+    groupe, suppose = _groupe_de_risque(entreprise, groupe_risque)
+    bulletin = _calculer(contrats[0], entreprise, periode, groupe)
+    if suppose:
+        bulletin = bulletin.model_copy(update={"alertes": (*bulletin.alertes, _GROUPE_SUPPOSE)})
+    return bulletin, contrats[0]
+
+
+_GROUPE_SUPPOSE = (
+    "Groupe de risque professionnel non renseigné au dossier : le groupe A (risque faible) "
+    "est supposé. Enregistrez le groupe notifié par la CNPS : un groupe B ou C coûte "
+    "davantage de cotisation accidents du travail."
+)
+
+
+def _dossiers_du_portefeuille():
+    from app.contextes.portefeuille.api import depot_entreprises
+
+    return depot_entreprises()
+
+
+def _groupe_de_risque(
+    entreprise: str, demande: GroupeRisque | None
+) -> tuple[GroupeRisque, bool]:
+    """Le groupe à appliquer, et s'il est supposé (16 octobre 2026).
+
+    Celui demandé pour une simulation ; sinon celui que la CNPS a notifié, enregistré au
+    dossier ; à défaut A, le plus bas, et l'appelant le signale. Supposer sans le dire
+    sous-cotiserait un employeur à risque élevé sans que personne ne le voie.
+    """
+    if demande is not None:
+        return demande, False
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+
+    try:
+        notifie = _dossiers_du_portefeuille().lire(entreprise).groupe_risque_cnps
+    except EntrepriseIntrouvable:
+        notifie = None
+    if notifie is None:
+        return GroupeRisque.A, True
+    return GroupeRisque(notifie), False
 
 
 @routeur.get(
@@ -236,7 +367,7 @@ def lire_declaration(
     annee: int,
     mois: int,
     a_la_date: date = Query(..., description="Date à laquelle juger le retard de dépôt"),
-    groupe_risque: GroupeRisque = Query(GroupeRisque.A),
+    groupe_risque: GroupeRisque | None = Query(None),
 ) -> SyntheseDeclaration:
     """Le DIPE du mois, calculé depuis les contrats en vigueur.
 
@@ -244,9 +375,10 @@ def lire_declaration(
     qu'une erreur : la CNPS attend une déclaration à zéro, pas une absence de
     déclaration.
     """
-    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
     periode = _periode(annee, mois)
     _, depot_contrats = depots()
+    groupe, suppose = _groupe_de_risque(entreprise, groupe_risque)
     try:
         declaration = etablir_la_declaration(
             entreprise,
@@ -254,7 +386,7 @@ def lire_declaration(
             depot_contrats.du_dossier(entreprise),
             parametres(),
             baremes(),
-            groupe_risque=groupe_risque,
+            groupe_risque=groupe,
         )
     except ParametrePaieAbsent as absence:
         raise HTTPException(status_code=503, detail=str(absence)) from absence
@@ -269,7 +401,8 @@ def lire_declaration(
         total_a_verser=declaration.total_a_verser,
         cotisations_cnps=declaration.cotisations_cnps,
         a_deposer_avant=declaration.a_deposer_avant,
-        en_retard=declaration.en_retard_au(a_la_date),
+        en_retard=declaration.en_retard_au(a_la_date)
+        and not _avant_le_suivi(entreprise, declaration.a_deposer_avant),
         repose_sur_des_valeurs_non_validees=(
             declaration.repose_sur_des_valeurs_non_validees
         ),
@@ -278,15 +411,184 @@ def lire_declaration(
             for m in declaration.mouvements
         ],
         bulletins=list(declaration.bulletins),
+        groupe_risque=groupe,
+        groupe_risque_suppose=suppose,
     )
 
+
+
+# ── L'arrêté des charges du mois (18 octobre 2026, point 8) ───────────────────────
+
+
+class ChargesDuMois(BaseModel):
+    """Ce que la paie propose, et ce que le cabinet a arrêté (s'il l'a fait)."""
+
+    proposition: dict[RubriqueSociale, Decimal]
+    arrete: ArreteDesCharges | None
+
+
+def _proposition(entreprise: str, annee: int, mois: int) -> dict[RubriqueSociale, Decimal]:
+    periode = _periode(annee, mois)
+    _, depot_contrats = depots()
+    groupe, _ = _groupe_de_risque(entreprise, None)
+    try:
+        declaration = etablir_la_declaration(
+            entreprise,
+            periode,
+            depot_contrats.du_dossier(entreprise),
+            parametres(),
+            baremes(),
+            groupe_risque=groupe,
+        )
+    except ParametrePaieAbsent as absence:
+        raise HTTPException(status_code=503, detail=str(absence)) from absence
+    return proposition_des_charges(declaration.bulletins)
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/declaration/{annee}/{mois}/arrete",
+    summary="Les charges du mois : la proposition de la paie et l'arrêté du cabinet",
+)
+def lire_les_charges_du_mois(
+    acces: AccesRequis, entreprise: str, annee: int, mois: int
+) -> ChargesDuMois:
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    return ChargesDuMois(
+        proposition=_proposition(entreprise, annee, mois),
+        arrete=depot_des_arretes().lire(entreprise, f"{annee:04d}-{mois:02d}"),
+    )
+
+
+class ArreteDemande(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    montants: dict[RubriqueSociale, Decimal]
+    motif: str | None = Field(default=None, max_length=500)
+
+
+@routeur.put(
+    "/dossiers/{entreprise}/declaration/{annee}/{mois}/arrete",
+    summary="Arrêter les charges du mois, en corrigeant la proposition s'il le faut",
+)
+def arreter_les_charges(
+    acces: AccesRequis, entreprise: str, annee: int, mois: int, demande: ArreteDemande
+) -> ChargesDuMois:
+    """⚠️ Le cabinet arrête : `SAISIR_ECRITURE`, comme la tenue de la paie côté cabinet. Un
+    dossier qui n'est pas en règle ne s'arrête pas (point 5) : c'est un geste de traitement."""
+    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    proposition = _proposition(entreprise, annee, mois)
+    try:
+        arrete = ArreteDesCharges(
+            entreprise=entreprise,
+            periode=f"{annee:04d}-{mois:02d}",
+            montants=demande.montants,
+            proposition=proposition,
+            arrete_par=acces.compte,
+            arrete_le=maintenant(),
+            motif=(demande.motif or "").strip() or None,
+        )
+    except ValueError as invalide:
+        raise HTTPException(status_code=422, detail=message_lisible(invalide)) from invalide
+    depot_des_arretes().enregistrer(arrete)
+    atelier().journal.ajouter(
+        horodatage=arrete.arrete_le,
+        acteur=acces.compte,
+        action="social.arrete_des_charges",
+        objet_type="arrete_des_charges",
+        objet_id=f"{entreprise}/{arrete.periode}",
+        apres={k.value: str(v) for k, v in arrete.montants.items()},
+        motif=arrete.motif,
+    )
+    return ChargesDuMois(proposition=proposition, arrete=arrete)
+
+
+# ── Le groupe de risque professionnel notifié par la CNPS (16 octobre 2026) ──────
+
+
+class GroupeDeRisqueDuDossier(BaseModel):
+    groupe: GroupeRisque | None
+    notifie_le: date | None
+
+
+class NotificationDuGroupe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groupe: GroupeRisque
+    notifie_le: date
+
+
+@routeur.get(
+    "/dossiers/{entreprise}/groupe-risque",
+    summary="Le groupe de risque professionnel notifié par la CNPS, s'il est enregistré",
+)
+def lire_le_groupe_de_risque(acces: AccesRequis, entreprise: str) -> GroupeDeRisqueDuDossier:
+    exiger_dossier_pour_l_un_de(acces, LECTURE_DE_LA_PAIE, entreprise)
+    dossier = _lire_le_dossier(entreprise)
+    return GroupeDeRisqueDuDossier(
+        groupe=dossier.groupe_risque_cnps, notifie_le=dossier.groupe_risque_notifie_le
+    )
+
+
+@routeur.put(
+    "/dossiers/{entreprise}/groupe-risque",
+    summary="Enregistrer le groupe notifié par la CNPS : chaque bulletin et le DIPE le lisent",
+)
+def enregistrer_le_groupe_de_risque(
+    acces: AccesRequis, entreprise: str, notification: NotificationDuGroupe
+) -> GroupeDeRisqueDuDossier:
+    """Le cabinet, ou l'employeur dans son espace : c'est lui qui reçoit la notification."""
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
+    if notification.notifie_le > aujourd_hui():
+        raise HTTPException(
+            status_code=422, detail="la date de notification ne peut pas être à venir."
+        )
+    dossier = _lire_le_dossier(entreprise)
+    _dossiers_du_portefeuille().enregistrer(
+        dossier.model_copy(
+            update={
+                "groupe_risque_cnps": notification.groupe.value,
+                "groupe_risque_notifie_le": notification.notifie_le,
+            }
+        )
+    )
+    atelier().journal.ajouter(
+        horodatage=maintenant(),
+        acteur=acces.compte,
+        action="social.groupe_risque_notifie",
+        objet_type="dossier",
+        objet_id=entreprise,
+        avant={"groupe": dossier.groupe_risque_cnps},
+        apres={"groupe": notification.groupe.value, "notifie_le": str(notification.notifie_le)},
+    )
+    return GroupeDeRisqueDuDossier(groupe=notification.groupe, notifie_le=notification.notifie_le)
+
+
+def _avant_le_suivi(entreprise: str, echeance: date) -> bool:
+    """La déclaration était due avant que le cabinet ne prenne le dossier : pas son retard.
+    Voir `Entreprise.suivi_depuis`."""
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+
+    try:
+        depuis = _dossiers_du_portefeuille().lire(entreprise).suivi_depuis
+    except EntrepriseIntrouvable:
+        return False
+    return depuis is not None and echeance < depuis
+
+
+def _lire_le_dossier(entreprise: str):
+    from app.contextes.portefeuille.api import EntrepriseIntrouvable
+
+    try:
+        return _dossiers_du_portefeuille().lire(entreprise)
+    except EntrepriseIntrouvable as absence:
+        raise HTTPException(status_code=404, detail=str(absence)) from absence
 
 # ── Écritures ────────────────────────────────────────────────────────────────
 @routeur.post("/dossiers/{entreprise}/salaries", summary="Inscrire un salarié", status_code=201)
 def inscrire(acces: AccesRequis, entreprise: str, demande: DemandeSalarie) -> Salarie:
     """⚠️ Pas 89 : un matricule déjà attribué est refusé (409). Il écrasait le salarié,
     fût-il d'un autre dossier. Voir `application/personnel.py`."""
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     salarie = Salarie(
         matricule=demande.matricule,
@@ -317,7 +619,7 @@ def engager(
     on le ferme et on en ouvre un nouveau. Écraser le salaire effacerait
     l'histoire, et la paie de mars se recalculerait avec le salaire d'avril.
     """
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     try:
         contrat = Contrat(
@@ -367,7 +669,7 @@ def clore(
     contrats ne se chevauchent plus. La fin est exclue : clore le 01/10 laisse septembre
     au contrat clos, et le nouveau contrat commence le 01/10.
     """
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
     depot_salaries, depot_contrats = depots()
     try:
         return clore_un_contrat(

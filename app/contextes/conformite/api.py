@@ -47,6 +47,12 @@ from app.contextes.conformite.adaptateurs.sortant.donnees_demo import (
     FACTURES_DEMO,
     REFERENCES_CANONIQUES,
 )
+from app.contextes.conformite.adaptateurs.sortant.factures_a_controler import (
+    SourceDesFactures,
+    brancher_la_source_des_factures,
+    facture_par_reference,
+    factures_a_controler,
+)
 from app.contextes.conformite.adaptateurs.sortant.politique_ecarts_yaml import (
     charger_la_politique_d_ecart,
 )
@@ -94,7 +100,7 @@ from app.contextes.conformite.domaine.qualite_des_regles import (
     StatistiqueDeRegle,
     mesurer_les_regles,
 )
-from app.partage.horloge import maintenant as _maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala
 
 __all__ = [
     "DerogationARegulariser",
@@ -114,6 +120,12 @@ __all__ = [
     # leurs propres jeux, et qu'ils ne doivent pas fouiller les adaptateurs.
     "FACTURES_DEMO",
     "REFERENCES_CANONIQUES",
+    # Les factures que les écrans contrôlent : les réelles, branchées par la collecte,
+    # et le jeu de démonstration hors production (20 octobre 2026).
+    "SourceDesFactures",
+    "brancher_la_source_des_factures",
+    "facture_par_reference",
+    "factures_a_controler",
     # Entrée
     "ContexteControle",
     "Document",
@@ -350,8 +362,8 @@ def derogations_du_perimetre(
         and (auteur is None or e.propose_par == auteur)
         and (dossier is None or e.dossier == dossier)
         and (statut is None or e.statut.value == statut)
-        and (du is None or e.propose_le.date() >= du)
-        and (au is None or e.propose_le.date() <= au)
+        and (du is None or jour_a_douala(e.propose_le) >= du)
+        and (au is None or jour_a_douala(e.propose_le) <= au)
     ]
 
 
@@ -360,7 +372,7 @@ def lire_le_journal_des_derogations(acces, **filtres) -> JournalDesDerogations:
     effectives = [e for e in derogations if e.statut is StatutEcart.EFFECTIF]
     noms = noms_des_comptes()
     politique = politique_d_ecart()
-    jour = _maintenant().date()
+    jour = aujourd_hui()
     retards = [
         DerogationARegulariser(
             identifiant=e.identifiant,
@@ -368,9 +380,9 @@ def lire_le_journal_des_derogations(acces, **filtres) -> JournalDesDerogations:
             reference_document=e.reference_document,
             code_regle=e.code_regle,
             severite=e.severite.value,
-            propose_le=e.propose_le.date(),
+            propose_le=jour_a_douala(e.propose_le),
             propose_par=noms.get(e.propose_par, e.propose_par),
-            jours=(jour - e.propose_le.date()).days,
+            jours=(jour - jour_a_douala(e.propose_le)).days,
         )
         for e in derogations
         if a_regulariser(e, politique, jour)
@@ -404,7 +416,7 @@ def mesurer_la_qualite_des_regles(acces, du: _date, au: _date) -> QualiteDesRegl
     def destinataire(facture):
         return facture.destinataire.niu if facture.destinataire is not None else None
 
-    for facture in restreindre(acces, FACTURES_DEMO.values(), destinataire):
+    for facture in restreindre(acces, factures_a_controler(), destinataire):
         if not (du <= facture.document.date_emission <= au):
             continue
         brut = moteur_.controler(facture)

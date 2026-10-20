@@ -43,13 +43,15 @@ from app.contextes.portefeuille.domaine.entites import (
     Exercice,
     FormeJuridique,
     MandatDeclaratif,
+    MandatDePaiement,
+    NatureActivite,
     RegimeFiscal,
     StatutRattachement,
     StatutRegime,
 )
 from app.contextes.portefeuille.domaine.temporel import MotifChangement
 
-__all__ = ["PORTEFEUILLE_DEMO", "entreprise_demo"]
+__all__ = ["PORTEFEUILLE_DEMO"]
 
 
 def _exercices(premier: int, dernier: int) -> list[Exercice]:
@@ -136,6 +138,17 @@ BATIMENT = Entreprise(
         )
     ],
     mandats=[_mandat_complet(date(2022, 6, 1), "NKOA Jean-Pierre, gérant")],
+    # 14 octobre 2026 : il confie au cabinet le paiement de la CNPS et des retenues sur
+    # salaires, et règle lui-même sa TVA. Voir `MandatDePaiement`.
+    mandats_de_paiement=[
+        MandatDePaiement(
+            debut=date(2026, 6, 1),
+            motif=MotifChangement.ADHESION,
+            obligations=["CNPS", "IRPP_SALAIRES"],
+            signe_le=date(2026, 6, 1),
+            signe_par="NKOA Jean-Pierre, gérant",
+        )
+    ],
     exercices=_exercices(2021, 2026),
     dirigeants=[
         Dirigeant(
@@ -154,6 +167,7 @@ TCHOUMBA = Entreprise(
     date_creation=date(2019, 9, 2),
     rccm="RC/DLA/2019/A/1842",
     activite="Commerce général de détail",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Marché Central, Douala I",
     regimes=[
         StatutRegime(
@@ -191,6 +205,7 @@ COLOMBE = Entreprise(
     rccm="RC/YAO/2020/B/0311",
     capital=Decimal("2000000"),
     activite="Boulangerie et pâtisserie",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Mvog-Mbi, Yaoundé III",
     regimes=[
         StatutRegime(
@@ -235,6 +250,7 @@ AGRO = Entreprise(
     rccm="RC/BAF/2018/B/0145",
     capital=Decimal("50000000"),
     activite="Culture, collecte et négoce de produits agricoles",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Bafoussam I",
     etablissements=["Entrepôt de Bafoussam", "Antenne de Douala — Bonabéri"],
     regimes=[
@@ -283,6 +299,8 @@ NGUEMA = Entreprise(
     date_creation=date(2022, 4, 11),
     rccm="RC/DLA/2022/A/2510",
     activite="Conseil en gestion et assistance administrative",
+    # ⚠️ Nature laissée en blanc : qualifier le conseil en gestion de profession
+    # libérale (seuil de 30 M, CGI art. 93 quater) relève du fiscaliste du cabinet.
     siege="Akwa, Douala I",
     regimes=[
         StatutRegime(
@@ -320,6 +338,7 @@ CLINIQUE = Entreprise(
     rccm="RC/YAO/2017/B/0892",
     capital=Decimal("25000000"),
     activite="Activités hospitalières et soins ambulatoires",
+    nature_activite=NatureActivite.COMMERCIALE,
     siege="Nlongkak, Yaoundé I",
     regimes=[
         StatutRegime(
@@ -364,11 +383,3 @@ PORTEFEUILLE_DEMO: dict[str, Entreprise] = {
 }
 
 
-def entreprise_demo(niu: str) -> Entreprise:
-    """Rend un dossier de démonstration, ou lève avec la liste des NIU connus."""
-    if niu not in PORTEFEUILLE_DEMO:
-        raise KeyError(
-            f"NIU « {niu} » absent du portefeuille de démonstration. "
-            f"Connus : {', '.join(sorted(PORTEFEUILLE_DEMO))}"
-        )
-    return PORTEFEUILLE_DEMO[niu]

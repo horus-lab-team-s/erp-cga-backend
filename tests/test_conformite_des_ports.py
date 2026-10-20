@@ -55,12 +55,18 @@ _HORS_SUJET = frozenset({"__init__", "tables", "donnees_demo"})
 
 
 def _cas() -> list[tuple[str, str]]:
-    """Tous les couples (contexte, module d'adaptateur sortant) du dépôt."""
+    """Les couples (contexte, module d'adaptateur sortant) qui ont un port à couvrir.
+
+    ⚠️ 18 octobre 2026 : un contexte sans `domaine/ports.py` (la clôture) n'a rien à
+    vérifier. Ses modules étaient listés puis sautés, et la CI refuse tout test sauté
+    (« base ou dépôt voisin manquant ») : cinq sauts faisaient tomber la vérification
+    sans qu'aucun contrôle ait échoué. Ils ne sont plus des cas.
+    """
     racine = Path(__file__).resolve().parents[1] / "app" / "contextes"
     return [
         (chemin.parents[2].name, chemin.stem)
         for chemin in sorted(racine.glob("*/adaptateurs/sortant/*.py"))
-        if chemin.stem not in _HORS_SUJET
+        if chemin.stem not in _HORS_SUJET and _ports(chemin.parents[2].name) is not None
     ]
 
 
@@ -126,8 +132,6 @@ def _manques(contexte: str, module: str) -> list[str]:
 
 @pytest.mark.parametrize(("contexte", "module"), _cas())
 def test_chaque_realisation_couvre_son_port(contexte: str, module: str):
-    if _ports(contexte) is None:
-        pytest.skip(f"{contexte} n'a pas de module `domaine/ports.py`")
     manques = _manques(contexte, module)
     assert not manques, (
         "Des réalisations sont incomplètes. Un Protocol ne vérifie rien à "

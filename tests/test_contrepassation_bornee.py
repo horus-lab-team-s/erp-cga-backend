@@ -32,7 +32,7 @@ from app.contextes.comptabilite.api import (
 )
 from app.contextes.portefeuille.contrats import Exercice
 from app.partage.horloge import horloge_figee
-from tests.conftest import exige_postgresql, ouvrir_une_session
+from tests.conftest import exige_postgresql, ouvrir_une_session, tolerer_les_retards_d_honoraires
 from tests.test_cloture_exercice import DOSSIER, REVISEUR, _balance, _clore
 from tests.test_comptabilite_saisie import JOUR, OUVERT, _enregistrer, depot  # noqa: F401
 
@@ -125,6 +125,7 @@ class TestParLaRoute:
         self, plateforme
     ):
         client = plateforme
+        tolerer_les_retards_d_honoraires()
         with horloge_figee(datetime(2027, 1, 15, 9, 0)):
             ouvrir_une_session(client, REVISEUR)
             ecritures = client.get(

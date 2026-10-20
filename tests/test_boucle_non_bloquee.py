@@ -178,8 +178,21 @@ ROUTES_ASYNCHRONES = {
     "deposer_fichier": "await fichier.read()",
     "deposer_fichier_scelle": "await fichier.read()",
     "deposer_fichier_de_formalite": "await fichier.read()",
+    "deposer_fichier_de_creation": "await fichier.read()",
     "reprendre": "await fichier.read()",
+    # 15 octobre 2026 : le contrat d'une mission. Lecture bornée, rangement dans un fil.
+    "verser": "await fichier.read()",
+    "verser_une_piece": "await fichier.read()",
+    # 18 octobre 2026, point 24 : la même pièce, versée par l'adhérent.
+    "verser_ma_piece": "await fichier.read()",
     "notification_tara": "await requete.json()",
+    # 16 octobre 2026 : le CV d'une candidature. Lecture bornée, le reste dans un fil.
+    "postuler": "await cv.read()",
+    # 18 octobre 2026 : l'image d'une offre, lue bornée ; le dépôt part dans un fil.
+    "joindre_une_image": "await image.read()",
+    # 19 octobre 2026, point 22 : la pièce jointe à une demande, lue bornée ; le reste
+    # dans un fil.
+    "joindre_une_piece": "await fichier.read()",
 }
 
 #: Ce qui n'est pas une route mais traverse la boucle à chaque requête.
