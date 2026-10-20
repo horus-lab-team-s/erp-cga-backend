@@ -182,6 +182,14 @@ def service_de_notification() -> ServiceNotification:
     ─────────────────────────────────────────────────────────────────────────
     """
     reglages = configuration()
+    if reglages.courriels_differes:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "CGA_COURRIELS_DIFFERES=true : aucun courriel ne part, ils sont retenus. "
+            "Poser le relais SMTP, puis retirer ce réglage."
+        )
+        return ServiceNotificationMemoire()
     if not reglages.smtp_hote:
         return ServiceNotificationMemoire()
     return ServiceNotificationSmtp(

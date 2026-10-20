@@ -321,6 +321,12 @@ class Configuration(BaseSettings):
     #: `STARTTLS` sur les ports en clair. Le port 465 chiffre d'emblée et ignore
     #: ce réglage. ⚠️ La production refuse `false` — voir `_exigences_production`.
     smtp_chiffrement: bool = True
+    #: ⚠️ 20 octobre 2026 : la mise en ligne AVANT que le relais soit prêt, décidée par
+    #: l'exploitant. Vrai, la production démarre sans relais et les courriels sont RETENUS,
+    #: jamais envoyés : aucun lien d'activation ni de mot de passe oublié ne part. Le
+    #: premier administrateur reçoit le sien par la commande qui le crée. Un réglage écrit
+    #: en toutes lettres, et non un relais vide qu'on tolérerait : l'oubli reste refusé.
+    courriels_differes: bool = False
 
     #: La clé de chiffrement au repos, en base64 — 32 octets décodés.
     #:
@@ -426,7 +432,7 @@ class Configuration(BaseSettings):
                 "CGA_PERSISTANCE doit valoir 'postgresql' : en mémoire, toutes "
                 "les écritures comptables disparaissent au redémarrage."
             )
-        if not self.smtp_hote:
+        if not self.smtp_hote and not self.courriels_differes:
             fautes.append(
                 "CGA_SMTP_HOTE est vide : aucun lien d'activation ne partirait, "
                 "et aucun compte ne pourrait être activé."

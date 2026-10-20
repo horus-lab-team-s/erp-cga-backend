@@ -577,6 +577,29 @@ class TestConfigurationDeProduction:
 
         assert Configuration(**self._reglages()).en_production is True
 
+    def test_differer_les_courriels_se_dit_en_toutes_lettres(self):
+        """20 octobre 2026 : en ligne avant le relais, sur décision écrite de l'exploitant.
+        L'oubli du relais reste refusé ; le réglage explicite démarre, et rien ne part."""
+        from app.contextes.transverse.adaptateurs.entrant import dependances
+        from app.contextes.transverse.adaptateurs.sortant.notifications_memoire import (
+            ServiceNotificationMemoire,
+        )
+        from app.infrastructure import config
+
+        with pytest.raises(ValueError, match="CGA_SMTP_HOTE est vide"):
+            config.Configuration(**self._reglages(smtp_hote=""))
+        differee = config.Configuration(
+            **self._reglages(smtp_hote="smtp-relay.brevo.com", courriels_differes=True)
+        )
+        assert differee.en_production is True
+        dependances.service_de_notification.cache_clear()
+        try:
+            with pytest.MonkeyPatch.context() as m:
+                m.setattr(dependances, "configuration", lambda: differee)
+                assert isinstance(dependances.service_de_notification(), ServiceNotificationMemoire)
+        finally:
+            dependances.service_de_notification.cache_clear()
+
     @pytest.mark.parametrize(
         ("surcharge", "attendu"),
         [
