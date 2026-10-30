@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -311,6 +312,18 @@ class Configuration(BaseSettings):
     #: Le modèle de lecture. Opus 5.5 par défaut : une erreur de lecture se paie en écriture fausse.
     lecture_modele: str = "claude-opus-5-5"
 
+    #: ChatGPT, l'autre fournisseur des agents (décision du cabinet, 30 octobre 2026). Mêmes
+    #: règles que pour Claude : vide ⇒ rien ne part chez OpenAI, et la clé n'est lue qu'ici
+    #: (`CGA_OPENAI_CLE_API`), jamais dans la variable `OPENAI_API_KEY` du SDK.
+    openai_cle_api: str = ""
+    #: Le modèle OpenAI : il lit les PDF et les photos de pièces lui-même (l'OCR est fait par
+    #: le modèle, aucun moteur de reconnaissance séparé à installer).
+    openai_modele: str = "gpt-5.5"
+    #: Qui répond aux agents : `openai`, `anthropic`, ou vide. Vide, c'est le fournisseur dont
+    #: la clé est posée (Claude s'il y a les deux, comme avant). Nommé, c'est lui seul : sa clé
+    #: manquante coupe les agents au lieu de basculer en silence chez l'autre fournisseur.
+    ia_fournisseur: Literal["", "anthropic", "openai"] = ""
+
     #: Le relais de messagerie. **Vide ⇒ aucun courriel ne part** : l'adaptateur
     #: en mémoire prend le relais et retient les messages, ce qui est le mode de
     #: développement voulu. Voir `adaptateurs/sortant/notifications_smtp.py`.
@@ -501,6 +514,40 @@ def _cle_aes_256(cle_base64: str) -> bool:
         return len(base64.b64decode(cle_base64, validate=True)) == 32
     except ValueError:
         return False
+
+
+@dataclass(frozen=True)
+class MoteurIA:
+    """Le fournisseur retenu pour les agents, sa clé et son modèle.
+
+    ⚠️ Une `dataclass`, pas un modèle pydantic : un modèle portant `cle_api` pourrait finir
+    dans une réponse de l'API (`tests/test_surface_des_reponses.py` le refuse).
+    """
+
+    fournisseur: Literal["anthropic", "openai"]
+    cle_api: str
+    modele: str
+
+
+def moteur_ia(reglages: Configuration) -> MoteurIA | None:
+    """Le moteur des agents, ou `None` : aucune clé utilisable, aucun document ne sort.
+
+    Les six agents (lecture des factures, relecture de la balance et de la DSF, analyse et
+    rédaction des contrats, réponses de recrutement) passent tous par ici.
+    """
+    anthropic = MoteurIA(
+        fournisseur="anthropic", cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele
+    )
+    openai = MoteurIA(
+        fournisseur="openai", cle_api=reglages.openai_cle_api, modele=reglages.openai_modele
+    )
+    if reglages.ia_fournisseur == "anthropic":
+        candidats = [anthropic]
+    elif reglages.ia_fournisseur == "openai":
+        candidats = [openai]
+    else:
+        candidats = [anthropic, openai]
+    return next((m for m in candidats if m.cle_api), None)
 
 
 @lru_cache

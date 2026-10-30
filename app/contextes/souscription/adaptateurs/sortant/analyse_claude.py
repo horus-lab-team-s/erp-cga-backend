@@ -36,7 +36,7 @@ from typing import Any
 from app.partage.agent_claude import (
     Incident,
     bloc_du_document,
-    client_anthropic,
+    client_du_fournisseur,
     demander_en_json,
 )
 
@@ -126,11 +126,19 @@ class AnalyseClaude:
 
     MOTEUR = "claude"
 
-    def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
+    def __init__(
+        self, *, cle_api: str, modele: str, client: Any = None, fournisseur: str = "anthropic"
+    ) -> None:
         self._modele = modele
+        # Le moteur inscrit sur ce qui a été lu ou rédigé : qui l'a fait, pour la trace.
+        self.MOTEUR = "chatgpt" if fournisseur == "openai" else "claude"
         # Un contrat de quelques pages se lit en une à deux minutes ; au-delà de cinq, le
         # juriste est mieux servi par l'instruction à la main.
-        self._client = client if client is not None else client_anthropic(cle_api, delai_s=300.0)
+        self._client = (
+            client
+            if client is not None
+            else client_du_fournisseur(fournisseur, cle_api, delai_s=300.0)
+        )
 
     def lire(self, contenu: bytes) -> LectureDeContrat:
         bloc = bloc_du_document(contenu)

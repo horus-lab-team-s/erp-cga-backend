@@ -42,7 +42,7 @@ from app.contextes.vitrine.domaine.recrutement import (
     TypeDeContrat,
 )
 from app.contextes.vitrine.domaine.texte_riche import BlocDeTexte, en_blocs
-from app.infrastructure.config import configuration
+from app.infrastructure.config import configuration, moteur_ia
 from app.partage.en_tetes import disposition_en_piece_jointe
 from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
@@ -458,13 +458,16 @@ class ReponseProposee(BaseModel):
 def service_de_redaction():
     """L'agent de rédaction, ou `None` sans clé : l'écran garde alors le texte type."""
     reglages = configuration()
-    if not reglages.anthropic_cle_api:
+    moteur = moteur_ia(reglages)
+    if moteur is None:
         return None
     from app.contextes.vitrine.adaptateurs.sortant.redaction_reponse_claude import (
         RedactionDeReponse,
     )
 
-    return RedactionDeReponse(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+    return RedactionDeReponse(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
 
 
 @routeur.get(

@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.partage.agent_claude import Incident, client_anthropic, demander_en_json
+from app.partage.agent_claude import Incident, client_du_fournisseur, demander_en_json
 
 __all__ = ["RelectureDeLaBalance", "RemarqueSurLaBalance"]
 
@@ -74,9 +74,15 @@ class RemarqueSurLaBalance:
 
 
 class RelectureDeLaBalance:
-    def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
+    def __init__(
+        self, *, cle_api: str, modele: str, client: Any = None, fournisseur: str = "anthropic"
+    ) -> None:
         self._modele = modele
-        self._client = client if client is not None else client_anthropic(cle_api, delai_s=90.0)
+        self._client = (
+            client
+            if client is not None
+            else client_du_fournisseur(fournisseur, cle_api, delai_s=90.0)
+        )
 
     def relire(self, balance: str) -> list[RemarqueSurLaBalance] | None:
         """Les remarques, ou `None` : l'agent n'a pas répondu, l'écran le dit."""

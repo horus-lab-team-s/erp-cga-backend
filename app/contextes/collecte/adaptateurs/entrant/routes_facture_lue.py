@@ -57,7 +57,7 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     restreindre,
 )
-from app.infrastructure.config import configuration
+from app.infrastructure.config import configuration, moteur_ia
 from app.partage import horloge
 from app.partage.erreurs import message_lisible
 from app.partage.horloge import aujourd_hui, maintenant
@@ -78,14 +78,18 @@ def service_de_lecture():
     """Le moteur de lecture automatique, ou `None` s'il n'est pas configuré.
 
     ⚠️ `None` sans clé, et c'est voulu : aucun document ne sort du serveur tant que le
-    cabinet n'a pas posé `CGA_ANTHROPIC_CLE_API`. Les essais remplacent cette fonction.
+    cabinet n'a pas posé la clé de son fournisseur (`CGA_OPENAI_CLE_API` ou
+    `CGA_ANTHROPIC_CLE_API`). Les essais remplacent cette fonction.
     """
     reglages = configuration()
-    if not reglages.anthropic_cle_api:
+    moteur = moteur_ia(reglages)
+    if moteur is None:
         return None
     from app.contextes.collecte.adaptateurs.sortant.extraction_claude import ExtractionClaude
 
-    return ExtractionClaude(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+    return ExtractionClaude(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
 
 
 class EtatDeLaLecture(BaseModel):
@@ -95,7 +99,7 @@ class EtatDeLaLecture(BaseModel):
 @routeur.get("/lecture-automatique", summary="La lecture automatique est-elle configurée ?")
 def lecture_automatique_disponible(acces: AccesRequis) -> EtatDeLaLecture:
     exiger(acces, Permission.IDENTIFIER_PIECE)
-    return EtatDeLaLecture(disponible=bool(configuration().anthropic_cle_api))
+    return EtatDeLaLecture(disponible=moteur_ia(configuration()) is not None)
 
 
 class ValeurProposee(BaseModel):
@@ -215,8 +219,7 @@ def enregistrer_la_facture(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"pièce {identifiant} {piece.etat.value.lower()} : "
-                "sa facture ne se modifie plus."
+                f"pièce {identifiant} {piece.etat.value.lower()} : sa facture ne se modifie plus."
             ),
         )
     try:
@@ -353,8 +356,6 @@ def demander_rectificative(
     )
 
 
-
-
 class Satisfaction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -367,8 +368,11 @@ def satisfaire(acces: AccesRequis, identifiant: str, corps: Satisfaction) -> Dem
     demande_du_perimetre(acces, identifiant, Permission.IDENTIFIER_PIECE)
     try:
         return satisfaire_une_demande(
-            identifiant, piece=corps.piece, le=aujourd_hui(),
-            pieces=depot_pieces(), demandes=depot_demandes(),
+            identifiant,
+            piece=corps.piece,
+            le=aujourd_hui(),
+            pieces=depot_pieces(),
+            demandes=depot_demandes(),
         )
     except DemandeIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
@@ -429,14 +433,10 @@ def tracer_relance(acces: AccesRequis, identifiant: str, corps: RelanceTracee) -
         "responsable de portefeuille et non plus d'un automate."
     ),
 )
-def lister_relances(
-    acces: AccesRequis, a_la_date: date = Query(...)
-) -> list[RelancePiece]:
+def lister_relances(acces: AccesRequis, a_la_date: date = Query(...)) -> list[RelancePiece]:
     exiger(acces, Permission.RELANCER_ADHERENT)
     return restreindre(acces, _relances(a_la_date), lambda r: r.entreprise)
 
 
 def _relances(a_la_date: date) -> list[RelancePiece]:
     return relances_du_jour(depot_demandes().ouvertes(), a_la_date)
-
-

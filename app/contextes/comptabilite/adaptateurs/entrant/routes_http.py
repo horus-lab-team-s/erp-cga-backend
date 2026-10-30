@@ -104,7 +104,7 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.infrastructure.config import configuration
+from app.infrastructure.config import configuration, moteur_ia
 from app.partage.erreurs import message_lisible
 from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
@@ -210,9 +210,7 @@ def lire_balance(
     acces: AccesRequis,
     entreprise: str,
     exercice: str = Query(...),
-    jusqu_au: date | None = Query(
-        None, description="Arrête la balance à cette date incluse"
-    ),
+    jusqu_au: date | None = Query(None, description="Arrête la balance à cette date incluse"),
     du: date | None = Query(
         None,
         description=(
@@ -934,7 +932,6 @@ def _moteur_de_conformite():
     return moteur_par_defaut()
 
 
-
 # ── Les soldes à regarder, et la relecture par l'agent (18 octobre 2026, point 15) ──
 
 
@@ -992,13 +989,16 @@ class RelectureDeLaBalanceLue(BaseModel):
 def service_de_relecture_de_balance():
     """L'agent comptable, ou `None` sans clé."""
     reglages = configuration()
-    if not reglages.anthropic_cle_api:
+    moteur = moteur_ia(reglages)
+    if moteur is None:
         return None
     from app.contextes.comptabilite.adaptateurs.sortant.relecture_balance_claude import (
         RelectureDeLaBalance,
     )
 
-    return RelectureDeLaBalance(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+    return RelectureDeLaBalance(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
 
 
 def _balance_pour_l_agent(entreprise: str, exercice: str) -> str:

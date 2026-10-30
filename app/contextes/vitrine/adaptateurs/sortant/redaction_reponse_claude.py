@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.partage.agent_claude import Incident, client_anthropic, demander_en_json
+from app.partage.agent_claude import Incident, client_du_fournisseur, demander_en_json
 
 __all__ = ["RedactionDeReponse"]
 
@@ -38,9 +38,15 @@ _SCHEMA = {
 
 
 class RedactionDeReponse:
-    def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
+    def __init__(
+        self, *, cle_api: str, modele: str, client: Any = None, fournisseur: str = "anthropic"
+    ) -> None:
         self._modele = modele
-        self._client = client if client is not None else client_anthropic(cle_api, delai_s=60.0)
+        self._client = (
+            client
+            if client is not None
+            else client_du_fournisseur(fournisseur, cle_api, delai_s=60.0)
+        )
 
     def proposer(
         self,

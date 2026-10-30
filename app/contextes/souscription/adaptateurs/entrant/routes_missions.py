@@ -59,7 +59,7 @@ from app.contextes.transverse.api import (
     permissions_de,
     session_de_travail,
 )
-from app.infrastructure.config import configuration
+from app.infrastructure.config import configuration, moteur_ia
 from app.partage.en_tetes import disposition_en_ligne
 from app.partage.erreurs import message_lisible
 from app.partage.horloge import aujourd_hui, maintenant
@@ -90,21 +90,27 @@ def _magasin() -> MagasinFichiersLocal:
 def service_de_redaction():
     """L'agent de rédaction, ou `None` sans clé."""
     config = configuration()
-    if not config.anthropic_cle_api:
+    moteur = moteur_ia(config)
+    if moteur is None:
         return None
     from app.contextes.souscription.adaptateurs.sortant.redaction_claude import RedactionClaude
 
-    return RedactionClaude(cle_api=config.anthropic_cle_api, modele=config.lecture_modele)
+    return RedactionClaude(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
 
 
 def service_d_analyse():
     """L'agent d'analyse, ou `None` sans clé : aucun document ne sort alors du serveur."""
     config = configuration()
-    if not config.anthropic_cle_api:
+    moteur = moteur_ia(config)
+    if moteur is None:
         return None
     from app.contextes.souscription.adaptateurs.sortant.analyse_claude import AnalyseClaude
 
-    return AnalyseClaude(cle_api=config.anthropic_cle_api, modele=config.lecture_modele)
+    return AnalyseClaude(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
 
 
 def _mission(identifiant: str) -> Mission:
@@ -480,8 +486,7 @@ def ouvrir(acces: AccesRequis, demande: Ouverture) -> Mission:
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        f"la commande {commande.reference} a déjà sa mission : "
-                        f"{deja.identifiant}."
+                        f"la commande {commande.reference} a déjà sa mission : {deja.identifiant}."
                     ),
                 )
             client = client or _client_de_la_commande(commande)
@@ -692,8 +697,7 @@ def partir_d_un_modele(acces: AccesRequis, identifiant: str, demande: ModeleChoi
             lambda: mission.ecrire_le_cahier(type_de_contrat=modele.libelle, cahier=modele.cahier)
         )
     articles = [
-        {"rubrique": Rubrique.ARTICLE, "titre": a.titre, "texte": a.texte}
-        for a in modele.articles
+        {"rubrique": Rubrique.ARTICLE, "titre": a.titre, "texte": a.texte} for a in modele.articles
     ]
     mise_a_jour = _refus(lambda: mission.ajouter(articles, origine=OrigineProposition.MODELE))
     return _enregistrer(

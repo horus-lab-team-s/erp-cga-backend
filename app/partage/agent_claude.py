@@ -1,5 +1,10 @@
 """L'appel à Claude, en un seul endroit, pour les agents qui PROPOSENT (16 octobre 2026).
 
+⚠️ 30 octobre 2026 : ChatGPT (OpenAI) répond aussi, au choix du cabinet (`CGA_IA_FOURNISSEUR`,
+voir `moteur_ia` dans la configuration). Les agents ne changent pas : ils construisent leur
+demande au format de Claude, et `demander_en_json` la traduit pour OpenAI quand le client est
+un `ClientOpenAI`. Les PDF et les photos partent tels quels : l'OCR, c'est le modèle qui le fait.
+
 ─────────────────────────────────────────────────────────────────────────────────
 POURQUOI CE MODULE
 
@@ -28,7 +33,14 @@ from typing import Any
 
 from app.partage.magasin_de_fichiers import detecter_le_type
 
-__all__ = ["Incident", "bloc_du_document", "client_anthropic", "demander_en_json"]
+__all__ = [
+    "ClientOpenAI",
+    "Incident",
+    "bloc_du_document",
+    "client_anthropic",
+    "client_du_fournisseur",
+    "demander_en_json",
+]
 
 _journal = logging.getLogger(__name__)
 
@@ -52,6 +64,29 @@ def client_anthropic(cle_api: str, *, delai_s: float) -> Any:
     return anthropic.Anthropic(
         api_key=cle_api, timeout=anthropic.Timeout(delai_s, connect=10.0), max_retries=2
     )
+
+
+@dataclass(frozen=True)
+class ClientOpenAI:
+    """Le client d'OpenAI, enveloppé pour que `demander_en_json` sache à qui il parle."""
+
+    sdk: Any
+
+
+def client_openai(cle_api: str, *, delai_s: float) -> ClientOpenAI:
+    """Le client d'OpenAI, avec le même délai et les mêmes deux nouvelles tentatives."""
+    import openai
+
+    return ClientOpenAI(
+        openai.OpenAI(api_key=cle_api, timeout=openai.Timeout(delai_s, connect=10.0), max_retries=2)
+    )
+
+
+def client_du_fournisseur(fournisseur: str, cle_api: str, *, delai_s: float) -> Any:
+    """Le client du fournisseur retenu par la configuration (`anthropic` ou `openai`)."""
+    if fournisseur == "openai":
+        return client_openai(cle_api, delai_s=delai_s)
+    return client_anthropic(cle_api, delai_s=delai_s)
 
 
 def bloc_du_document(contenu: bytes) -> dict | None:
@@ -86,6 +121,17 @@ def demander_en_json(
     La pensée adaptative l'accompagne : une analyse est un raisonnement, une lecture de
     facture n'en est pas un. `objet` nomme la demande dans le journal technique.
     """
+    if isinstance(client, ClientOpenAI):
+        return _demander_a_openai(
+            client.sdk,
+            modele=modele,
+            consigne=consigne,
+            contenu=contenu,
+            schema=schema,
+            effort=effort,
+            max_tokens=max_tokens,
+            objet=objet,
+        )
     import anthropic
 
     demande: dict[str, Any] = {
@@ -121,5 +167,81 @@ def demander_en_json(
     texte = next((b.text for b in reponse.content if getattr(b, "type", None) == "text"), None)
     try:
         return json.loads(texte or "")
+    except json.JSONDecodeError:
+        return Incident("ILLISIBLE")
+
+
+def _en_entree_openai(contenu: str | list[dict]) -> list[dict]:
+    """Les blocs de Claude (texte, image, document en base64) au format des Responses d'OpenAI."""
+    if isinstance(contenu, str):
+        return [{"type": "input_text", "text": contenu}]
+    parties: list[dict] = []
+    for bloc in contenu:
+        if bloc.get("type") == "text":
+            parties.append({"type": "input_text", "text": bloc["text"]})
+            continue
+        source = bloc.get("source", {})
+        donnees = f"data:{source.get('media_type')};base64,{source.get('data')}"
+        if bloc.get("type") == "image":
+            parties.append({"type": "input_image", "image_url": donnees, "detail": "high"})
+        elif bloc.get("type") == "document":
+            parties.append({"type": "input_file", "filename": "piece.pdf", "file_data": donnees})
+    return parties
+
+
+def _demander_a_openai(
+    sdk: Any,
+    *,
+    modele: str,
+    consigne: str,
+    contenu: str | list[dict],
+    schema: dict,
+    effort: str,
+    max_tokens: int,
+    objet: str,
+) -> Any:
+    """La même demande, posée à OpenAI : mêmes incidents, même JSON en retour."""
+    import openai
+
+    try:
+        reponse = sdk.responses.create(
+            model=modele,
+            instructions=consigne,
+            input=[{"role": "user", "content": _en_entree_openai(contenu)}],
+            max_output_tokens=max_tokens,
+            reasoning={"effort": effort},
+            # `strict` exigerait de réécrire chaque schéma (tout requis, rien d'additionnel) :
+            # la réponse est de toute façon relue par le modèle de domaine de l'agent.
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "reponse",
+                    "schema": schema,
+                    "strict": False,
+                }
+            },
+        )
+    except openai.RateLimitError:
+        return Incident("SATURE")
+    except openai.APITimeoutError:
+        return Incident("DELAI")
+    except openai.APIConnectionError:
+        return Incident("RESEAU")
+    except openai.APIStatusError as echec:
+        _journal.warning(
+            "%s refusée par l'API OpenAI : %s %s", objet, echec.status_code, echec.message
+        )
+        return Incident("INDISPONIBLE", echec.status_code)
+
+    if getattr(reponse, "status", None) == "incomplete":
+        raison = getattr(getattr(reponse, "incomplete_details", None), "reason", None)
+        return Incident("REFUS" if raison == "content_filter" else "LONGUE")
+    for sortie in getattr(reponse, "output", None) or []:
+        if getattr(sortie, "type", None) == "message" and any(
+            getattr(c, "type", None) == "refusal" for c in getattr(sortie, "content", None) or []
+        ):
+            return Incident("REFUS")
+    try:
+        return json.loads(reponse.output_text or "")
     except json.JSONDecodeError:
         return Incident("ILLISIBLE")

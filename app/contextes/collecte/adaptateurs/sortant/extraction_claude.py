@@ -42,7 +42,7 @@ from app.contextes.collecte.domaine.pieces import TypePiece
 from app.partage.agent_claude import (
     Incident,
     bloc_du_document,
-    client_anthropic,
+    client_du_fournisseur,
     demander_en_json,
 )
 from app.partage.horloge import maintenant
@@ -160,11 +160,19 @@ class ExtractionClaude:
 
     MOTEUR = "claude"
 
-    def __init__(self, *, cle_api: str, modele: str, client: Any = None) -> None:
+    def __init__(
+        self, *, cle_api: str, modele: str, client: Any = None, fournisseur: str = "anthropic"
+    ) -> None:
         self._modele = modele
+        # Le moteur inscrit sur ce qui a été lu ou rédigé : qui l'a fait, pour la trace.
+        self.MOTEUR = "chatgpt" if fournisseur == "openai" else "claude"
         # Une page se lit en quelques secondes ; au-delà de deux minutes, le collaborateur
         # est mieux servi par la saisie que par une attente.
-        self._client = client if client is not None else client_anthropic(cle_api, delai_s=120.0)
+        self._client = (
+            client
+            if client is not None
+            else client_du_fournisseur(fournisseur, cle_api, delai_s=120.0)
+        )
 
     def extraire(self, contenu: bytes, *, piece: str, type_attendu: TypePiece) -> ExtractionOCR:
         instant = maintenant()

@@ -334,11 +334,7 @@ def etat_du_format_dgi_de_l_exercice(
     summary="Le modèle Excel officiel de la DGI, bilan et compte de résultat remplis",
     response_class=Response,
     responses={
-        200: {
-            "content": {
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
-            }
-        },
+        200: {"content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}},
         409: {"description": "Exercice ouvert, compte sans ligne officielle, bilan déséquilibré"},
     },
 )
@@ -467,14 +463,17 @@ class RelectureDeLAgent(BaseModel):
 
 def service_de_relecture():
     """L'agent de relecture, ou `None` sans clé."""
-    from app.infrastructure.config import configuration
+    from app.infrastructure.config import configuration, moteur_ia
 
     reglages = configuration()
-    if not reglages.anthropic_cle_api:
+    moteur = moteur_ia(reglages)
+    if moteur is None:
         return None
     from app.contextes.cloture.adaptateurs.sortant.relecture_dsf_claude import RelectureDeLaDsf
 
-    return RelectureDeLaDsf(cle_api=reglages.anthropic_cle_api, modele=reglages.lecture_modele)
+    return RelectureDeLaDsf(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
 
 
 def _dossier_pour_l_agent(entreprise: str, exercice: str) -> str:
@@ -536,9 +535,7 @@ def _dossier_pour_l_agent(entreprise: str, exercice: str) -> str:
     "/dossiers/{entreprise}/dsf/{exercice}/relecture-de-l-agent",
     summary="Demander à l'agent une relecture du dossier de la DSF (il propose, ne bloque rien)",
 )
-def demander_une_relecture(
-    acces: AccesRequis, entreprise: str, exercice: str
-) -> RelectureDeLAgent:
+def demander_une_relecture(acces: AccesRequis, entreprise: str, exercice: str) -> RelectureDeLAgent:
     exiger_dossier(acces, Permission.PREPARER_DSF, entreprise)
     service = service_de_relecture()
     if service is None:
