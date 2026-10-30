@@ -220,4 +220,13 @@ def ecritures_demo(entreprise: str) -> list[EcritureComptable]:
         for piece in PIECES_DEMO.values()
         if piece.entreprise == entreprise
     }
-    return [e for e in _toutes() if e.piece_justificative in du_dossier]
+    # 14 octobre 2026 : plus, pour le seul dossier concerné, l'exercice 2025 repris du
+    # logiciel précédent et son à-nouveau. Voir `exercice_repris_demo.py`.
+    from app.contextes.comptabilite.adaptateurs.sortant.exercice_repris_demo import (
+        ecritures_reprises,
+    )
+
+    return [
+        *(e for e in _toutes() if e.piece_justificative in du_dossier),
+        *ecritures_reprises(entreprise),
+    ]

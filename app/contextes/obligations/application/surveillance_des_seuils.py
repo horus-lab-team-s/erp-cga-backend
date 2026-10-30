@@ -127,6 +127,12 @@ class SurveillanceDuDossier(BaseModel):
     #: l'ignorer, et il ignore aussi la vraie.
     reclassement_inscrit_au: date | None = None
 
+    #: 15 octobre 2026 : le secteur qui place le dossier au réel QUEL QUE SOIT son
+    #: chiffre d'affaires (CGI art. 93 quater (2) b), et son régime en vigueur. À
+    #: l'IGS dans un tel secteur, le reclassement est dû sans attendre aucun seuil.
+    reel_d_office: str | None = None
+    au_regime_igs: bool = False
+
     # ⚠️ **`computed_field`, et non `property` seule.** Une propriété ordinaire ne
     # sort pas en JSON : l'écran recevrait le diagnostic sans la conclusion, et
     # devrait refaire le raisonnement chez lui — c'est-à-dire l'écrire une seconde
@@ -138,12 +144,13 @@ class SurveillanceDuDossier(BaseModel):
     @computed_field
     @property
     def reclassement_du(self) -> bool:
-        """Le franchissement est acquis sur un exercice clos, et rien n'a été inscrit."""
-        return (
-            self.reclassement_inscrit_au is None
-            and self.acquis is not None
-            and self.acquis.diagnostic.reclassement_requis
-        )
+        """Le franchissement est acquis sur un exercice clos, ou le secteur impose le
+        réel, et rien n'a été inscrit."""
+        if self.reclassement_inscrit_au is not None:
+            return False
+        if self.reel_d_office is not None and self.au_regime_igs:
+            return True
+        return self.acquis is not None and self.acquis.diagnostic.reclassement_requis
 
     @computed_field
     @property
@@ -192,6 +199,8 @@ def surveiller_un_dossier(
         acquis=acquis,
         en_cours=en_cours,
         reclassement_inscrit_au=_reel_a_venir(entreprise, a_la_date),
+        reel_d_office=entreprise.reel_d_office,
+        au_regime_igs=entreprise.regime_au(a_la_date) is RegimeFiscal.IGS,
     )
 
 
@@ -202,23 +211,30 @@ def surveiller_le_portefeuille(
     seuil: Decimal,
     borne: Borne,
     a_la_date: date,
+    seuil_de: Callable[[Entreprise], tuple[Decimal, Borne]] | None = None,
 ) -> list[SurveillanceDuDossier]:
     """La revue du portefeuille, triée par urgence décroissante.
 
     ⚠️ **L'ordre est le produit.** Un tableau de cent dossiers dans l'ordre des NIU
     ne se lit pas : le collaborateur le parcourt une fois, puis plus jamais. Les
     reclassements dus viennent en tête, puis les approches les plus avancées.
+
+    ⚠️ `seuil_de` (15 octobre 2026) : le seuil de CHAQUE dossier, quand il dépend de
+    sa nature d'activité (CGI art. 93 quater : 30 M pour une profession libérale,
+    50 M sinon). À défaut, `seuil` et `borne` valent pour tous.
     """
-    vues = [
-        surveiller_un_dossier(
-            entreprise,
-            soldes_de=lambda exercice, niu=entreprise.niu: soldes_de(niu, exercice),
-            seuil=seuil,
-            borne=borne,
-            a_la_date=a_la_date,
+    vues = []
+    for entreprise in dossiers:
+        le_seuil, la_borne = seuil_de(entreprise) if seuil_de else (seuil, borne)
+        vues.append(
+            surveiller_un_dossier(
+                entreprise,
+                soldes_de=lambda exercice, niu=entreprise.niu: soldes_de(niu, exercice),
+                seuil=le_seuil,
+                borne=la_borne,
+                a_la_date=a_la_date,
+            )
         )
-        for entreprise in dossiers
-    ]
     return sorted(vues, key=_urgence, reverse=True)
 
 

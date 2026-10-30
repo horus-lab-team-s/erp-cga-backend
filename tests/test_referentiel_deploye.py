@@ -44,10 +44,10 @@ def referentiel_deplace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     )
     monkeypatch.setenv("CGA_DOSSIER_REFERENTIEL", str(copie))
     config.configuration.cache_clear()
-    R._referentiel_d_acquisition.cache_clear()
+    R.recharger_le_referentiel()
     yield copie
     config.configuration.cache_clear()
-    R._referentiel_d_acquisition.cache_clear()
+    R.recharger_le_referentiel()
 
 
 def test_le_referentiel_se_lit_dans_le_dossier_configure(referentiel_deplace: Path):

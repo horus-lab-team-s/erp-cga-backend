@@ -26,9 +26,11 @@ from decimal import Decimal
 import pytest
 
 from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-    _dossiers,
-    _proformas,
     reinitialiser_dossiers,
+)
+from app.contextes.souscription.adaptateurs.entrant.sources import (
+    depot_dossiers,
+    depot_proformas,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     DepotPaiementsMemoire,
@@ -85,14 +87,12 @@ def _suite(journal) -> SuiteDeProforma:
     rien chercher elle-même, sans quoi la couche application dépendrait des
     adaptateurs. Le test d'architecture a refusé la première version.
     """
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _boite_du_parcours,
-    )
+    from app.contextes.souscription.adaptateurs.entrant.sources import boite_du_parcours
 
     return SuiteDeProforma(
-        dossiers=_dossiers(),
-        proformas=_proformas(),
-        boite=_boite_du_parcours(),
+        dossiers=depot_dossiers(),
+        proformas=depot_proformas(),
+        boite=boite_du_parcours(),
         journal=journal,
     )
 
@@ -127,15 +127,14 @@ def parcours_neuf():
     reinitialiser_dossiers()
 
 
-@pytest.fixture
-def dossier_accepte():
+def _poser_un_dossier_accepte(service: str):
     """Un dossier jusqu'à l'acceptation, **sans adresse retenue**."""
     demande = DemandeDeContact(
         identifiant="dc-suite",
         deposee_le=T0,
         nom="Boulangerie du Wouri",
         telephone="+237690112233",
-        service_souhaite="CREATION",
+        service_souhaite=service,
         canal_prefere=Canal.APPEL,
         consentement=Consentement(
             accorde=False, recueilli_le=T0, version_du_texte="v1"
@@ -145,7 +144,7 @@ def dossier_accepte():
     dossier = dossier.affecter("mballa", T0, motif="essai")
     dossier = dossier.premier_contact(T0).qualifier(T0)
     dossier = dossier.chiffrer(T0).emettre_la_proforma(T0).accepter(T0)
-    _dossiers().enregistrer(dossier)
+    depot_dossiers().enregistrer(dossier)
 
     tarif = TarifArrete(
         montant=Decimal("250000"),
@@ -157,11 +156,11 @@ def dossier_accepte():
         valide_par="direction",
         arrete_le=T0,
     )
-    _proformas().enregistrer(
+    depot_proformas().enregistrer(
         emettre(
             numero=NUMERO,
             dossier=REFERENCE,
-            service="CREATION",
+            service=service,
             tarif=tarif,
             contenu=b"%PDF",
             modele="CREATION",
@@ -170,6 +169,24 @@ def dossier_accepte():
         ).transmise(T0)
     )
     return dossier
+
+
+@pytest.fixture
+def dossier_accepte():
+    """La vente d'un espace de plateforme, acceptée, **sans adresse retenue**.
+
+    ⚠️ `PLATEFORME`, et non plus `CREATION`. Ces cas gardent ce qui arrive quand
+    un règlement tombe sur un espace que personne n'a préparé. Ils portaient sur
+    une création d'entreprise, qui n'ouvre plus d'espace depuis le 27 septembre
+    2026 : ils ne tenaient que parce que l'adresse était exigée de toute vente.
+    Depuis le 13 octobre, elle ne l'est que là où il y a un espace à adresser.
+    """
+    return _poser_un_dossier_accepte("PLATEFORME")
+
+
+@pytest.fixture
+def creation_acceptee():
+    return _poser_un_dossier_accepte("CREATION")
 
 
 class TestQuandLAdresseNAPasEteRetenue:
@@ -193,7 +210,7 @@ class TestQuandLAdresseNAPasEteRetenue:
         assert "aucune adresse retenue" in aboutissement.message
         # ⚠️ Le dossier reste à l'acceptation : rien n'a été encaissé côté métier,
         # et il reste donc visible dans la file des impayées.
-        assert _dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
 
     def test_l_echec_se_cherche_en_une_requete(self, dossier_accepte):
         """⚠️ L'argent est arrivé et rien ne s'est ouvert : c'est exactement le cas
@@ -203,16 +220,35 @@ class TestQuandLAdresseNAPasEteRetenue:
 
         assert journal.actions() == ["paiement.ouverture_impossible"]
 
+    def test_une_creation_sans_adresse_est_encaissee(self, creation_acceptee):
+        """⚠️ **L'autre moitié de la règle, et le défaut du 13 octobre 2026.**
+
+        Une création d'entreprise n'ouvre pas d'espace. Exiger d'elle une adresse
+        laissait un règlement notifié par l'opérateur en échec, « l'ouverture
+        attend un humain », alors qu'il n'y avait rien à ouvrir : la cliente avait
+        payé, et son dossier de formalité ne naissait pas.
+        """
+        journal = _JournalFactice()
+
+        aboutissement = _suite(journal).encaisser(_paiement(), T0)
+
+        assert aboutissement.abouti is True, aboutissement.message
+        assert "n'ouvre pas d'espace" in aboutissement.message
+        dossier = depot_dossiers().lire(REFERENCE)
+        assert dossier.etat.value == "PAYEE"
+        assert dossier.slug_retenu is None
+        assert journal.actions() == []
+
     def test_avec_une_adresse_retenue_le_dossier_est_encaisse(self, dossier_accepte):
         """⚠️ La contre-épreuve. Sans elle, une suite qui échouerait toujours
         passerait les deux cas précédents sans broncher."""
-        _dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
+        depot_dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
         journal = _JournalFactice()
 
         aboutissement = _suite(journal).encaisser(_paiement(), T0)
 
         assert aboutissement.abouti is True
-        assert _dossiers().lire(REFERENCE).etat.value == "PAYEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "PAYEE"
         assert journal.actions() == []
 
 
@@ -234,6 +270,7 @@ class TestQuandUneNatureNAPasDeSuite:
             suites={},
             journal=journal,
             a_l_instant=T0,
+            confirmer=False,
         )
 
         assert resultat.rapproche is False
@@ -255,6 +292,7 @@ class TestQuandUneNatureNAPasDeSuite:
             suites={},
             journal=_JournalFactice(),
             a_l_instant=T0,
+            confirmer=False,
         )
 
         assert paiements.lire("pay-essai").statut.value == "EN_ATTENTE"
@@ -273,7 +311,7 @@ class TestLeRefusDUneProforma:
 
         suite.refuser(_paiement(), "code expiré", T0)
 
-        assert _dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "ACCEPTEE"
         assert journal.actions() == ["paiement.proforma_refusee"]
 
     def test_un_refus_ne_lance_aucune_exception_meme_sans_proforma(self):
@@ -297,7 +335,7 @@ class TestLesDeuxCheminsSontLeMeme:
         elle qui porte désormais l'effet, et la partager à moitié serait pire que
         pas du tout.
         """
-        _dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
+        depot_dossiers().enregistrer(dossier_accepte.retenir_le_slug("boulangerie-wouri"))
         paiements = DepotPaiementsMemoire()
         paiements.enregistrer(_paiement())
         journal = _JournalFactice()
@@ -314,4 +352,4 @@ class TestLesDeuxCheminsSontLeMeme:
 
         assert resultat.statut.value == "VALIDE"
         assert resultat.reference_reglee == NUMERO
-        assert _dossiers().lire(REFERENCE).etat.value == "PAYEE"
+        assert depot_dossiers().lire(REFERENCE).etat.value == "PAYEE"

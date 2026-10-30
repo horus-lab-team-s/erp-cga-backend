@@ -37,7 +37,7 @@ from app.contextes.comptabilite.api import (
     valider_une_ecriture,
 )
 from app.partage.horloge import horloge_figee
-from tests.conftest import exige_postgresql, ouvrir_une_session
+from tests.conftest import exige_postgresql, ouvrir_une_session, tolerer_les_retards_d_honoraires
 from tests.test_cloture_exercice import COMPTABLE, DOSSIER, REVISEUR, _clore
 from tests.test_comptabilite_saisie import (  # noqa: F401
     OUVERT,
@@ -169,6 +169,7 @@ class TestParLaRoute:
 
     def test_le_brouillon_oublie_se_corrige_et_la_cloture_passe(self, plateforme):
         client = plateforme
+        tolerer_les_retards_d_honoraires()
         with horloge_figee(datetime(2026, 11, 2, 9, 0)):
             ouvrir_une_session(client, COMPTABLE)
             saisie = client.post(f"/comptabilite/dossiers/{DOSSIER}/ecritures", json={

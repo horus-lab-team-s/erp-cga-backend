@@ -79,6 +79,7 @@ __all__ = [
     "ReponseInvalide",
     "SourceReponse",
     "ouvrir_une_qualification",
+    "preremplir",
 ]
 
 #: Le champ libre. Assez pour une nuance, trop peu pour un compte rendu : ce qui
@@ -131,6 +132,33 @@ class Question(BaseModel):
     #: Ce que le responsable lit à l'écran quand il hésite. Une question mal
     #: comprise se remplit quand même, et de travers.
     aide: str = ""
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ CE QUE LE VISITEUR PEUT DIRE LUI-MÊME, SUR LE SITE (14 octobre 2026).
+    #
+    # Le cabinet l'a formulé ainsi : « il ne faut pas qu'une information soit
+    # saisie deux fois ». Le visiteur donnait son nom et un message libre, puis
+    # le responsable lui redemandait au téléphone sa forme juridique, son
+    # capital et son siège, pour les retaper dans la qualification.
+    #
+    # Une question marquée `visiteur` est proposée sur le site, facultative, et
+    # sa réponse ouvre la qualification déjà remplie — voir `preremplir`.
+    #
+    # ⚠️ C'EST UN DRAPEAU DU RÉFÉRENTIEL, ET NON UN SECOND FORMULAIRE. Le site
+    # demande ses questions au serveur ; une liste recopiée dans la vitrine
+    # divergerait du questionnaire à la première question ajoutée.
+    #
+    # ⚠️ ET C'EST UNE LISTE BLANCHE. Une réponse du visiteur à une question qui
+    # ne lui est pas posée est ignorée : sans cela, n'importe qui remplirait
+    # depuis l'extérieur des champs que seul le responsable doit tenir.
+    # ─────────────────────────────────────────────────────────────────────────
+    visiteur: bool = False
+    #: La question, dite au client et non au juriste : « Combien serez-vous
+    #: d'associés ? » plutôt que « Nombre d'associés ». Vide : le libellé sert.
+    libelle_visiteur: str = ""
+    aide_visiteur: str = ""
+    #: Le nom lisible de chaque valeur d'un ENUM : `DE_10M_A_50M` ne se lit pas.
+    libelles_valeurs: dict[str, str] = Field(default_factory=dict)
 
     @property
     def fait(self) -> Fait:
@@ -186,6 +214,11 @@ class Questionnaire(BaseModel):
     @property
     def ordonnees(self) -> tuple[Question, ...]:
         return tuple(sorted(self.questions, key=lambda q: (q.rang, q.code)))
+
+    @property
+    def pour_le_visiteur(self) -> tuple[Question, ...]:
+        """Les questions que le site propose, dans l'ordre de l'entretien."""
+        return tuple(q for q in self.ordonnees if q.visiteur)
 
     @property
     def obligatoires(self) -> tuple[str, ...]:
@@ -476,3 +509,57 @@ def ouvrir_une_qualification(
         service=questionnaire.service,
         version_questionnaire=questionnaire.version,
     )
+
+
+def preremplir(
+    qualification: Qualification,
+    questionnaire: Questionnaire,
+    declarations: Mapping[str, str],
+    a_l_instant: datetime,
+) -> tuple[Qualification, tuple[str, ...]]:
+    """Verse dans la qualification ce que le visiteur a déclaré sur le site.
+
+    Rend la qualification enrichie et les codes **écartés**, pour que l'appelant
+    puisse les consigner.
+
+    ─────────────────────────────────────────────────────────────────────────
+    TROIS RÈGLES, ET AUCUNE N'EST UNE PRÉCAUTION DE PRINCIPE
+
+    **Seules les questions posées au visiteur sont reçues.** C'est la liste
+    blanche : une réponse à `pages_statuts`, que le site ne pose pas, est
+    écartée quelle que soit sa valeur.
+
+    **Une réponse inexploitable est écartée, jamais levée.** « Je ne sais pas
+    encore » dans le champ du capital ne se convertit pas en nombre. Refuser le
+    dépôt pour cela ferait perdre une demande au cabinet à cause d'un champ
+    facultatif ; ce que le visiteur a écrit reste lisible sur sa demande, et le
+    responsable le lui redemandera.
+
+    **Ce que le responsable a déjà saisi n'est jamais écrasé.** Un visiteur qui
+    redépose une demande pendant l'échange se rattache au même dossier ; ses
+    nouvelles déclarations ne comblent que les questions encore sans réponse.
+    Le responsable a entendu le client, le formulaire non.
+
+    La source est `DECLAREE` : le client l'a dit, et rien n'a été vérifié.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    posees = {q.code for q in questionnaire.pour_le_visiteur}
+    ecartees: list[str] = []
+    for question in questionnaire.pour_le_visiteur:
+        if question.code not in declarations:
+            continue
+        brute = str(declarations[question.code]).strip()
+        if not brute or qualification.reponse(question.code) is not None:
+            continue
+        try:
+            qualification = qualification.repondre(
+                questionnaire,
+                question.code,
+                brute,
+                a_l_instant,
+                source=SourceReponse.DECLAREE,
+            )
+        except ReponseInvalide:
+            ecartees.append(question.code)
+    ecartees.extend(sorted(code for code in declarations if code not in posees))
+    return qualification, tuple(ecartees)

@@ -93,9 +93,12 @@ class TestFormulairePublic:
     def test_la_reponse_ne_dit_pas_s_il_y_a_eu_rattachement(self, client):
         """Annoncer « vous avez déjà écrit » n'apporte rien au visiteur et laisse
         croire à un refus. La réponse est la même dans les deux cas."""
-        premiere = client.post("/acquisition/demandes", json=_demande())
-        seconde = client.post("/acquisition/demandes", json=_demande())
-        assert premiere.json() == seconde.json()
+        premiere = client.post("/acquisition/demandes", json=_demande()).json()
+        seconde = client.post("/acquisition/demandes", json=_demande()).json()
+        # ⚠️ 19 octobre 2026 : le jeton des pièces diffère à chaque dépôt (il est tiré au
+        # sort) et ne dit rien du rattachement : il est opaque. Tout le reste est égal.
+        assert premiere.pop("jeton_de_pieces") and seconde.pop("jeton_de_pieces")
+        assert premiere == seconde
 
     def test_la_reference_du_dossier_ne_circule_pas(self, client):
         """C'est une donnée interne. La faire circuler dans une réponse publique
@@ -125,6 +128,8 @@ class TestConsoleProtegee:
             "/acquisition/dossiers",
             "/acquisition/dossiers/dos-1",
             "/acquisition/dossiers/en-souffrance",
+            "/acquisition/dossiers/dos-1/inscription",
+            "/acquisition/inscriptions/en-attente",
             "/acquisition/motifs-de-classement",
             "/acquisition/questionnaires/CREATION",
         ],
@@ -225,22 +230,32 @@ class TestMontage:
         chemins = client.get("/openapi.json").json()["paths"]
         acquisition = sorted(c for c in chemins if c.startswith("/acquisition"))
         assert acquisition == [
+            # 14 octobre 2026 : PROTÉGÉE par `ENCAISSER`. Ce que la responsable
+            # de caisse voit : les règlements dus et ceux qui sont constatés.
+            "/acquisition/caisse",
             "/acquisition/canaux",
             # Pas 148 : le catalogue des documents de proforma, pour que
             # l'écran ne recopie pas la liste des compositions.
             "/acquisition/compositions-proforma",
             "/acquisition/demandes",
+            # 19 octobre 2026 (point 22) : PUBLIQUE, par le jeton opaque de l'accusé.
+            "/acquisition/demandes/pieces",
             "/acquisition/devis/{reference}/rappel",
             "/acquisition/dossiers",
             "/acquisition/dossiers/en-souffrance",
             "/acquisition/dossiers/{reference}",
             "/acquisition/dossiers/{reference}/affectation",
             "/acquisition/dossiers/{reference}/chiffrage",
+            # 16 octobre 2026 : PROTÉGÉE par `INSCRIRE_STATUT`, avec motif. L'entreprise
+            # existante d'un dossier payé entre au portefeuille.
+            "/acquisition/dossiers/{reference}/inscription",
             # Pas 93 : PROTÉGÉE, comme tout ce qui touche à un dossier nommé.
             # Elle dit si l'espace du client est réellement utilisable — donc si
             # le compte administrateur existe. C'est une information
             # d'exploitation sur un client identifié : `LIRE_PROSPECT`.
             "/acquisition/dossiers/{reference}/ouverture",
+            # 19 octobre 2026 (point 22) : PROTÉGÉE par `LIRE_PROSPECT`.
+            "/acquisition/dossiers/{reference}/pieces/{empreinte}",
             # Pas 137 : le seul geste qui engage l'échange sans qualification.
             "/acquisition/dossiers/{reference}/premier-contact",
             "/acquisition/dossiers/{reference}/proforma",
@@ -249,6 +264,8 @@ class TestMontage:
             # Pas 150 : corriger le service après l'échange, sans réécrire ce
             # que la visiteuse a demandé.
             "/acquisition/dossiers/{reference}/service",
+            # 16 octobre 2026 : PROTÉGÉE par `INSCRIRE_STATUT`. Les payées à inscrire.
+            "/acquisition/inscriptions/en-attente",
             "/acquisition/motifs-de-classement",
             "/acquisition/proformas/{numero}/acceptation",
             "/acquisition/proformas/{numero}/consultation",
@@ -259,9 +276,17 @@ class TestMontage:
             "/acquisition/proformas/{numero}/encaissement",
             # Pas 136 : relire le lien pour le renvoyer, sans noter de transmission.
             "/acquisition/proformas/{numero}/lien",
+            # 14 octobre 2026 : PUBLIQUE et scellée. Le client règle lui-même sa
+            # proposition acceptée par mobile money, depuis son lien personnel.
+            "/acquisition/proformas/{numero}/paiement-en-ligne",
             "/acquisition/proformas/{numero}/reglement",
             "/acquisition/proformas/{numero}/transmission",
             "/acquisition/questionnaires/{service}",
+            # 14 octobre 2026 : PUBLIQUE, et pauvre. Les questions que le site pose
+            # au visiteur, pour que ses réponses ouvrent sa qualification déjà
+            # remplie. Elle ne rend ni l'aide du juriste, ni le rang, ni les
+            # questions internes.
+            "/acquisition/questionnaires/{service}/visiteur",
             "/acquisition/rappels",
             "/acquisition/rappels/{identifiant}/fait",
             # Pas 93 : protégée par LIRE_PROSPECT, source de la recherche globale.
@@ -909,3 +934,90 @@ class TestPasserLaMainParLApi:
         )
         assert reponse.status_code == 409, reponse.text
         assert "EN_CONVERSATION" in reponse.json()["detail"]
+
+
+# ── Les pièces jointes à une demande (19 octobre 2026, point 22) ─────────────
+
+
+PDF = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
+
+
+class TestLesPiecesJointesALaDemande:
+    """Le visiteur joignait son bail ou ses statuts par WhatsApp, à part : le cabinet
+    recevait une demande muette, puis un fichier sans demande."""
+
+    @staticmethod
+    def _deposer(client, **surcharges) -> str:
+        reponse = client.post(
+            "/acquisition/demandes", json=_demande(service_souhaite="PONCTUEL", **surcharges)
+        )
+        assert reponse.status_code == 201, reponse.text
+        jeton = reponse.json()["jeton_de_pieces"]
+        assert jeton and "dos-" not in jeton, "le jeton ne laisse pas voir la référence"
+        return jeton
+
+    @staticmethod
+    def _joindre(client, jeton, contenu=PDF, nom="bail-commercial.pdf"):
+        return client.post(
+            "/acquisition/demandes/pieces",
+            data={"jeton": jeton},
+            files={"fichier": (nom, contenu, "application/pdf")},
+        )
+
+    def test_la_piece_rejoint_la_demande_et_le_cabinet_la_lit(self, client):
+        jeton = self._deposer(client, nom="Ekane Joseph")
+        reponse = self._joindre(client, jeton)
+        assert reponse.status_code == 201, reponse.text
+        assert reponse.json()["pieces"] == 1
+        # La même pièce, renvoyée, n'est gardée qu'une fois.
+        assert self._joindre(client, jeton).json()["pieces"] == 1
+
+        client.post(
+            "/transverse/session",
+            json={"courriel": "b.mballa@cga-brcg.cm", "mot_de_passe": MOT_DE_PASSE_DEMO},
+        )
+        dossiers = client.get("/acquisition/dossiers").json()
+        reference = next(d["reference"] for d in dossiers if d["nom"] == "Ekane Joseph")
+        fiche = client.get(f"/acquisition/dossiers/{reference}").json()
+        (piece,) = fiche["pieces_jointes"]
+        assert piece["nom"] == "bail-commercial.pdf"
+        lue = client.get(f"/acquisition/dossiers/{reference}/pieces/{piece['empreinte']}")
+        assert lue.status_code == 200 and lue.content == PDF
+
+    def test_un_jeton_faux_ou_bricole_est_refuse(self, client):
+        jeton = self._deposer(client)
+        assert self._joindre(client, "faux").status_code == 404
+        bricole = jeton[:-2] + ("AA" if not jeton.endswith("AA") else "BB")
+        assert self._joindre(client, bricole).status_code == 404
+
+    def test_le_type_est_lu_dans_le_contenu(self, client):
+        jeton = self._deposer(client)
+        assert self._joindre(client, jeton, contenu=b"<html>", nom="faux.pdf").status_code == 415
+
+    def test_une_demande_porte_au_plus_cinq_pieces(self, client):
+        jeton = self._deposer(client)
+        for rang in range(5):
+            assert self._joindre(client, jeton, contenu=PDF + bytes([rang])).status_code == 201
+        assert self._joindre(client, jeton, contenu=PDF + b"x").status_code == 409
+
+    def test_sans_session_le_cabinet_ne_livre_pas_la_piece(self, client):
+        reponse = client.get(f"/acquisition/dossiers/dos-1/pieces/{'a' * 64}")
+        assert reponse.status_code == 401
+
+    def test_passe_sept_jours_la_demande_n_accepte_plus_de_piece(self, client):
+        from datetime import timedelta
+
+        from app.contextes.souscription.adaptateurs.entrant.sources import depot_dossiers
+        from app.contextes.souscription.api import PieceJointe, PieceRefusee
+
+        self._deposer(client, nom="Mbia Louise")
+        dossier = next(d for d in depot_dossiers().ouverts() if d.demande.nom == "Mbia Louise")
+        piece = PieceJointe(
+            empreinte="a" * 64,
+            nom="statuts.pdf",
+            type_mime="application/pdf",
+            taille=10,
+            recue_le=dossier.demande.deposee_le + timedelta(days=8),
+        )
+        with pytest.raises(PieceRefusee, match="délai"):
+            dossier.joindre(piece)

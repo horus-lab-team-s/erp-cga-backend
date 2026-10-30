@@ -110,6 +110,21 @@ class TypeObligation(BaseModel):
     #: restent à obtenir du fiscaliste.
     decalage_par_centre: dict[CentreRattachement, int] = Field(default_factory=dict)
 
+    #: ⚠️ 15 OCTOBRE 2026 : LA DATE CIVILE PAR CENTRE, FIXÉE PAR LE CGI. Pour une
+    #: obligation rattachée à l'exercice, le (mois, jour) de l'année qui suit la
+    #: clôture, selon le centre du dossier. Le CGI 2026 (art. 18 et C 44 (3)) fixe la
+    #: DSF au 15 mars (DGE), au 15 avril (CIME et centres spécialisés) et au 15 mai
+    #: (centres de fiscalité locale) : la question que `decalage_par_centre` attendait
+    #: est tranchée par le texte, et ce n'est pas un décalage, c'est une date.
+    date_civile_par_centre: dict[CentreRattachement, tuple[int, int]] = Field(
+        default_factory=dict
+    )
+
+    #: Pour une obligation annuelle civile : due l'année QUI SUIT celle qu'elle couvre
+    #: (la déclaration annuelle de l'IGS, au 15 mars pour l'année écoulée, CGI art.
+    #: C 41), et non pendant l'année, comme la patente payée d'avance.
+    l_annee_suivante: bool = False
+
     #: À qui l'obligation s'applique. `None` = à tous les régimes.
     regimes_concernes: list[RegimeFiscal] | None = None
 
@@ -235,11 +250,15 @@ def calculer_echeance(
                 "de l'exercice, qui doit être fournie. C'est précisément pourquoi la date "
                 "ne peut pas être une constante."
             )
+        civile = type_obligation.date_civile_par_centre.get(centre)
+        if civile is not None:
+            mois, jour = civile
+            return _jour_valide(cloture_exercice.year + 1, mois, jour)
         base = cloture_exercice + timedelta(days=type_obligation.delai_jours_apres_cloture or 0)
 
     elif type_obligation.periodicite is Periodicite.ANNUELLE_CIVILE:
         base = _jour_valide(
-            fin_de_periode.year,
+            fin_de_periode.year + (1 if type_obligation.l_annee_suivante else 0),
             type_obligation.mois_civil or 1,
             type_obligation.jour_civil or 1,
         )

@@ -21,6 +21,7 @@ from app.contextes.creation_entreprise.domaine.checklist import (
     code_du_capital_minimum,
 )
 from app.contextes.creation_entreprise.domaine.entites import (
+    CanalDeLaPiece,
     DossierCreation,
     EtapeCreation,
     Fondateur,
@@ -38,6 +39,7 @@ from app.contextes.referentiel.api import (
 )
 
 __all__ = [
+    "CODE_PIECE_HORS_LISTE",
     "ConstatConstitution",
     "Diagnostic",
     "abandonner",
@@ -222,12 +224,20 @@ def _constater_le_capital(
     return []
 
 
+#: Le code demandé pour une pièce que la liste n'a pas prévue (18 octobre 2026) : le
+#: dossier lui attribue `AUTRE-1`, `AUTRE-2`… Le collaborateur n'invente pas de code.
+CODE_PIECE_HORS_LISTE = "AUTRE"
+
+
 def fournir_piece(
     dossier: DossierCreation,
     code_piece: str,
     a_la_date: date,
     *,
     empreinte: str | None = None,
+    canal: CanalDeLaPiece | None = None,
+    versee_par: str | None = None,
+    libelle: str | None = None,
 ) -> DossierCreation:
     """Marque une pièce comme reçue.
 
@@ -235,11 +245,34 @@ def fournir_piece(
     guichet réclame parfois une pièce que la liste n'a pas prévue, et le dossier
     doit pouvoir en garder la trace. La liste dit ce qu'il faut préparer, elle ne
     prétend pas régenter ce que le greffe accepte.
+
+    ⚠️ UN NOUVEAU DOCUMENT REMPLACE L'ANCIEN ; SON ABSENCE NE L'EFFACE PAS.
+
+    Une pièce marquée reçue sans fichier gardait jusqu'ici… rien : l'empreinte
+    était remise à `None`. Le juriste qui cochait « reçue » sur la carte
+    d'identité que la cliente avait déjà envoyée faisait disparaître son document
+    du dossier. Constaté le 14 octobre 2026 en relisant ce code.
+
+    18 octobre 2026 : `libelle` nomme la pièce ajoutée (« Plan de localisation ») ; il ne
+    renomme jamais une pièce de la liste. Le code `CODE_PIECE_HORS_LISTE` reçoit un rang
+    libre, pour que deux pièces hors liste ne s'écrasent pas.
     """
+    if code_piece == CODE_PIECE_HORS_LISTE:
+        rang = 1
+        while any(p.code == f"{CODE_PIECE_HORS_LISTE}-{rang}" for p in dossier.pieces):
+            rang += 1
+        code_piece = f"{CODE_PIECE_HORS_LISTE}-{rang}"
     connue = any(p.code == code_piece for p in dossier.pieces)
     if connue:
         pieces = tuple(
-            p.model_copy(update={"fournie_le": a_la_date, "empreinte": empreinte})
+            p.model_copy(
+                update={
+                    "fournie_le": a_la_date,
+                    "empreinte": empreinte or p.empreinte,
+                    "canal": canal or p.canal,
+                    "versee_par": versee_par or p.versee_par,
+                }
+            )
             if p.code == code_piece
             else p
             for p in dossier.pieces
@@ -248,10 +281,12 @@ def fournir_piece(
         pieces = dossier.pieces + (
             PieceConstitution(
                 code=code_piece,
-                libelle=f"Pièce complémentaire {code_piece}",
+                libelle=libelle or f"Pièce complémentaire {code_piece}",
                 obligatoire=False,
                 fournie_le=a_la_date,
                 empreinte=empreinte,
+                canal=canal,
+                versee_par=versee_par,
             ),
         )
     return dossier.model_copy(update={"pieces": pieces})

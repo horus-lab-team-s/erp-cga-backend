@@ -340,6 +340,8 @@ class Bulletin(BaseModel):
     #: Les avantages en nature, évalués au forfait sur le brut taxable.
     avantages_evalues: Decimal
     lignes: tuple[LigneRetenue, ...] = ()
+    #: Ce que le bulletin signale sans le refuser : un salaire sous le SMIG (15 octobre 2026).
+    alertes: tuple[str, ...] = ()
 
     # ⚠️ Pas 89 : les six montants ci-dessous sont des champs calculés, **rendus** dans la
     # réponse. Ils étaient de simples propriétés : la route du bulletin les calculait sans

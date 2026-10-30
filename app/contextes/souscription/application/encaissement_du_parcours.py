@@ -59,6 +59,7 @@ __all__ = [
     "SuiteDeProforma",
     "NOM_EVENEMENT",
     "SERVICES_OUVRANT_UN_LOCATAIRE",
+    "ouvre_un_locataire",
     "BoiteOuDeposer",
     "EncaissementRefuse",
     "ResultatEncaissementDuParcours",
@@ -100,6 +101,27 @@ NOM_EVENEMENT = "PaiementEncaissé"
 #: pour une même prestation avaient rendu le tunnel commercial sans issue.
 #: ─────────────────────────────────────────────────────────────────────────────
 SERVICES_OUVRANT_UN_LOCATAIRE: frozenset[str] = frozenset({"PLATEFORME"})
+
+
+def ouvre_un_locataire(service: str) -> bool:
+    """Cette vente ouvre-t-elle un espace de plateforme ?
+
+    ─────────────────────────────────────────────────────────────────────────
+    ⚠️ **UNE SEULE RÉPONSE, POSÉE EN UN SEUL ENDROIT.**
+
+    Le 13 octobre 2026, la règle ci-dessus était appliquée par l'événement et
+    ignorée par tout le reste du tunnel. Pour une création d'entreprise, la
+    route d'encaissement exigeait encore une « adresse de l'espace », la console
+    promettait que « la confirmation ouvre l'espace du client », et la fiche
+    affichait ensuite, pour toujours, un sablier « l'ouverture n'a pas encore
+    démarré ». Le serveur avait raison de ne rien ouvrir ; c'est le parcours qui
+    annonçait le contraire.
+
+    Les routes, la notification du prestataire, la route d'état et la console
+    lisent désormais cette fonction, ou ce qu'elle a rendu.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    return service in SERVICES_OUVRANT_UN_LOCATAIRE
 
 
 class EncaissementRefuse(ValueError):
@@ -182,10 +204,21 @@ def encaisser_l_acceptation(
     #
     # `retenir_le_slug` refuse une adresse différente de celle déjà retenue, et retient
     # celle-ci quand aucune ne l'était : le dossier dit ensuite laquelle a été ouverte.
-    try:
-        dossier = dossier.retenir_le_slug(slug)
-    except TransitionDossierRefusee as refus:
-        raise EncaissementRefuse(str(refus)) from refus
+    # ⚠️ L'adresse n'est retenue que si la vente ouvre un espace. Pour une
+    # prestation, il n'y a pas d'espace à adresser : en retenir une ferait
+    # afficher « espace « … » » sur un dossier qui n'en aura jamais.
+    if ouvre_un_locataire(proforma.service):
+        if not slug:
+            raise EncaissementRefuse(
+                f"proforma {proforma.numero} : le service {proforma.service} ouvre "
+                "un espace de plateforme, et aucune adresse n'a été choisie pour lui."
+            )
+        try:
+            dossier = dossier.retenir_le_slug(slug)
+        except TransitionDossierRefusee as refus:
+            raise EncaissementRefuse(str(refus)) from refus
+    else:
+        slug, tenant = "", ""
 
     paye = dossier.encaisser(a_l_instant)
     evenement = deposer(
@@ -257,7 +290,7 @@ def _charge(
         # L'abonné qui ouvre le locataire lève sur une charge incomplète, et il a
         # raison : un champ manquant est un défaut, pas une consigne. « Cette
         # vente n'ouvre pas de locataire » est une consigne, et elle s'écrit.
-        "ouvre_un_locataire": proforma.service in SERVICES_OUVRANT_UN_LOCATAIRE,
+        "ouvre_un_locataire": ouvre_un_locataire(proforma.service),
     }
     # ⚠️ LES FAITS FONDATEURS, ET EUX SEULS.
     #
@@ -357,7 +390,8 @@ class SuiteDeProforma:
                 paiement, f"{type(echec).__name__}: {echec}", a_l_instant
             )
 
-        if not dossier.slug_retenu:
+        ouvre = ouvre_un_locataire(proforma.service)
+        if ouvre and not dossier.slug_retenu:
             return self._echec(
                 paiement,
                 "aucune adresse retenue pour ce dossier : le règlement a été "
@@ -371,8 +405,8 @@ class SuiteDeProforma:
                 dossier,
                 proforma,
                 boite=self._boite,
-                slug=dossier.slug_retenu,
-                tenant=f"tnt-{dossier.slug_retenu}",
+                slug=dossier.slug_retenu or "",
+                tenant=f"tnt-{dossier.slug_retenu}" if dossier.slug_retenu else "",
                 a_l_instant=a_l_instant,
                 # ⚠️ Dérivé du **dossier**, comme pour la confirmation manuelle :
                 # les deux chemins doivent produire le même identifiant, sans quoi
@@ -398,6 +432,8 @@ class SuiteDeProforma:
             abouti=True,
             message=(
                 f"règlement encaissé ; l'espace « {dossier.slug_retenu} » s'ouvre"
+                if ouvre
+                else "règlement encaissé ; cette vente n'ouvre pas d'espace"
             ),
         )
 

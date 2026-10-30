@@ -42,7 +42,9 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from app.contextes.collecte.domaine.facture_lue import FactureLue
 from app.partage.copie import transiter
+from app.partage.horloge import a_douala
 
 __all__ = [
     "CanalDepot",
@@ -198,12 +200,23 @@ class PieceJustificative(BaseModel):
     motif_archivage: str | None = None
     depose_par: str | None = None
     commentaire: str | None = None
+    #: 14 octobre 2026 : la facture lue et confirmée (lignes, HT, TVA, NIU du fournisseur),
+    #: d'où l'écriture se propose. Voir `facture_lue.py`.
+    facture: FactureLue | None = None
+
+    @property
+    def jour_de_reception(self) -> date:
+        """Le jour de réception à Douala (`recue_le` est en UTC)."""
+        return a_douala(self.recue_le).date()
 
     @model_validator(mode="after")
     def _coherence(self) -> PieceJustificative:
-        if self.recue_le.date() < self.depose_le:
+        # ⚠️ 16 octobre 2026 : `recue_le` est un instant UTC, `depose_le` une date à Douala.
+        # Comparer le jour UTC refusait, entre minuit et une heure, une pièce déposée le jour
+        # même. Le jour de réception se lit à Douala, comme la date déclarée.
+        if self.jour_de_reception < self.depose_le:
             raise ValueError(
-                f"{self.identifiant} : réception {self.recue_le.date()} antérieure au "
+                f"{self.identifiant} : réception {self.jour_de_reception} antérieure au "
                 f"dépôt déclaré {self.depose_le}. Une pièce ne peut pas arriver avant "
                 "d'avoir été envoyée — soit l'horloge du terminal est fausse, soit la "
                 "date de dépôt est saisie à la main et invraisemblable."
@@ -274,11 +287,11 @@ class PieceJustificative(BaseModel):
         capture hors ligne synchronisée plus tard. C'est cet écart, et non la date
         de la facture, qui mesure la friction du canal.
         """
-        return (self.recue_le.date() - self.depose_le).days
+        return (self.jour_de_reception - self.depose_le).days
 
     def anciennete(self, a_la_date: date) -> int:
         """Jours écoulés depuis la réception. Le vrai indicateur d'enlisement."""
-        return (a_la_date - self.recue_le.date()).days
+        return (a_la_date - self.jour_de_reception).days
 
     def retard_de_remise(self) -> int | None:
         """Jours entre l'émission du document et sa remise au cabinet.
@@ -290,7 +303,7 @@ class PieceJustificative(BaseModel):
         """
         if self.date_document is None:
             return None
-        return (self.recue_le.date() - self.date_document).days
+        return (self.jour_de_reception - self.date_document).days
 
     # ── Transitions ─────────────────────────────────────────────────────────
 

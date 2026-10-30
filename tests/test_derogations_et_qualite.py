@@ -172,12 +172,24 @@ class TestLeJournal:
 # ── La qualité et le signalement ──────────────────────────────────────────────
 
 
+# ⚠️ UNE PÉRIODE ÉCRITE, PAS « LES 90 DERNIERS JOURS » (30 octobre 2026). La mesure se lit par
+# défaut sur les 90 jours qui précèdent aujourd'hui ; les pièces de la démonstration sont de
+# juillet 2026. Ces essais passaient jusqu'à la mi-octobre, puis échouaient sans que rien ait
+# changé dans le code : la fenêtre avait glissé au-delà des pièces.
+PERIODE_DES_PIECES = {"du": "2026-07-01", "au": "2026-09-30"}
+
+
 class TestLaQualiteDesRegles:
     def test_les_ecarts_du_cabinet_se_lisent_dans_la_mesure(self):
         reviseur = _client(REVISEUR)
-        avant = {r["code"]: r for r in reviseur.get("/conformite/regles/qualite").json()["regles"]}
+        avant = {
+            r["code"]: r
+            for r in reviseur.get("/conformite/regles/qualite", params=PERIODE_DES_PIECES).json()[
+                "regles"
+            ]
+        }
         _ecarter(reviseur, "F-2026-0415", "FAC-DOC-011")
-        apres = reviseur.get("/conformite/regles/qualite").json()
+        apres = reviseur.get("/conformite/regles/qualite", params=PERIODE_DES_PIECES).json()
         par_code = {r["code"]: r for r in apres["regles"]}
         assert par_code["FAC-DOC-011"]["constats"] == avant["FAC-DOC-011"]["constats"]
         assert par_code["FAC-DOC-011"]["ecartes"] == avant["FAC-DOC-011"]["ecartes"] + 1
@@ -198,9 +210,15 @@ class TestLaQualiteDesRegles:
         )
 
     def test_le_perimetre_borne_les_pieces(self):
-        tout = _client(REVISEUR).get("/conformite/regles/qualite").json()["pieces_controlees"]
+        tout = (
+            _client(REVISEUR)
+            .get("/conformite/regles/qualite", params=PERIODE_DES_PIECES)
+            .json()["pieces_controlees"]
+        )
         portefeuille = (
-            _client(COMPTABLE).get("/conformite/regles/qualite").json()["pieces_controlees"]
+            _client(COMPTABLE)
+            .get("/conformite/regles/qualite", params=PERIODE_DES_PIECES)
+            .json()["pieces_controlees"]
         )
         assert 0 < portefeuille < tout
 

@@ -81,7 +81,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.contextes.souscription.domaine.demande_de_contact import DemandeDeContact
 
 __all__ = [
+    "JOURS_POUR_JOINDRE",
+    "PIECES_PAR_DEMANDE",
     "DossierCommercial",
+    "PieceJointe",
+    "PieceRefusee",
     "EtatDossier",
     "ETATS_NOMINAUX",
     "REAFFECTATIONS_MAXIMALES",
@@ -186,6 +190,33 @@ _AVANT_QUALIFICATION: frozenset[EtatDossier] = frozenset(
 )
 
 
+#: Combien de pièces une demande peut porter, et pendant combien de jours on peut en
+#: joindre. Au-delà, c'est une conversation avec le cabinet, plus un formulaire.
+PIECES_PAR_DEMANDE = 5
+JOURS_POUR_JOINDRE = 7
+
+
+class PieceRefusee(ValueError):
+    """La pièce ne peut pas rejoindre ce dossier."""
+
+
+class PieceJointe(BaseModel):
+    """Un document que le visiteur a joint à sa demande (19 octobre 2026, point 22).
+
+    ⚠️ Le fichier vit au magasin, sous son empreinte ; le dossier n'en garde que la
+    référence. Le nom est celui du visiteur, assaini, pour que le cabinet reconnaisse
+    « bail-commercial.pdf » plutôt qu'une empreinte.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    empreinte: str = Field(pattern=r"^[0-9a-f]{64}$")
+    nom: str = Field(min_length=1, max_length=200)
+    type_mime: str
+    taille: int = Field(ge=1)
+    recue_le: datetime
+
+
 class DossierCommercial(BaseModel):
     """Ce que le cabinet fait d'une demande, de son dépôt à son paiement."""
 
@@ -242,6 +273,9 @@ class DossierCommercial(BaseModel):
     motif_affectation: str | None = None
 
     reaffectations: int = Field(default=0, ge=0)
+    #: Le NIU sous lequel le cabinet a inscrit l'entreprise au portefeuille, une fois
+    #: payée (16 octobre 2026). Une entreprise s'inscrit une fois.
+    inscrit_sous: str | None = None
 
     #: Ceux qui ont tenu ce dossier et l'ont laissé partir sans rien enregistrer.
     #:
@@ -331,7 +365,34 @@ class DossierCommercial(BaseModel):
     #: ─────────────────────────────────────────────────────────────────────────
     accuse_de_depot_le: datetime | None = None
 
+    #: Les documents joints par le visiteur au moment de sa demande (point 22).
+    #: ⚠️ Non promu en colonne : lu sur le dossier déjà chargé, comme `signale_le`.
+    pieces_jointes: tuple[PieceJointe, ...] = ()
+
     # ── Ce que le dossier sait dire de lui-même ─────────────────────────────
+
+    def joindre(self, piece: PieceJointe) -> DossierCommercial:
+        """Ajoute une pièce jointe, ou lève `PieceRefusee`.
+
+        ⚠️ Seulement tant que la demande est fraîche et que le cabinet ne l'a pas
+        encore traitée : passé ce temps, un fichier qui arrive par cette porte
+        publique ne serait lu par personne, et la porte resterait ouverte pour rien.
+        Une même pièce envoyée deux fois n'est gardée qu'une fois.
+        """
+        if any(p.empreinte == piece.empreinte for p in self.pieces_jointes):
+            return self
+        if not self.ouvert or self.etat in (
+            EtatDossier.PROFORMA_EMISE,
+            EtatDossier.ACCEPTEE,
+        ):
+            raise PieceRefusee("Cette demande n'accepte plus de pièce : écrivez au cabinet.")
+        if (piece.recue_le - self.demande.deposee_le).days >= JOURS_POUR_JOINDRE:
+            raise PieceRefusee(
+                "Le délai pour joindre une pièce à cette demande est passé : écrivez au cabinet."
+            )
+        if len(self.pieces_jointes) >= PIECES_PAR_DEMANDE:
+            raise PieceRefusee(f"Une demande porte au plus {PIECES_PAR_DEMANDE} pièces.")
+        return self.model_copy(update={"pieces_jointes": (*self.pieces_jointes, piece)})
 
     @property
     def ouvert(self) -> bool:

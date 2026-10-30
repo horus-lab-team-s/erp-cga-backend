@@ -14,20 +14,45 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.contextes.cloture.adaptateurs.entrant.routes_dsf import (
+    routeur as routeur_dsf,
+)
 from app.contextes.cloture.adaptateurs.entrant.routes_http import (
     routeur as routeur_cloture,
+)
+from app.contextes.cloture.adaptateurs.entrant.routes_pieces_dsf import (
+    routeur as routeur_pieces_dsf,
+)
+from app.contextes.collecte.adaptateurs.entrant.routes_facture_lue import (
+    routeur as routeur_facture_lue,
 )
 from app.contextes.collecte.adaptateurs.entrant.routes_http import (
     routeur as routeur_collecte,
 )
+from app.contextes.collecte.adaptateurs.entrant.routes_lecture_au_depot import (
+    lire_les_pieces_deposees,
+    travail_de_lecture_au_depot,
+)
+from app.contextes.collecte.adaptateurs.entrant.routes_lecture_au_depot import (
+    routeur as routeur_lecture_au_depot,
+)
+from app.contextes.comptabilite.adaptateurs.entrant.routes_annexes_dsf import (
+    routeur as routeur_annexes_dsf,
+)
 from app.contextes.comptabilite.adaptateurs.entrant.routes_cloture_mensuelle import (
     routeur as routeur_cloture_mensuelle,
+)
+from app.contextes.comptabilite.adaptateurs.entrant.routes_echange import (
+    routeur as routeur_echange,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_fiche_ecriture import (
     routeur as routeur_fiche_ecriture,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_http import (
     routeur as routeur_comptabilite,
+)
+from app.contextes.comptabilite.adaptateurs.entrant.routes_immobilisations import (
+    routeur as routeur_immobilisations,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_lettrage import (
     routeur as routeur_lettrage,
@@ -40,6 +65,9 @@ from app.contextes.comptabilite.adaptateurs.entrant.routes_revue import (
 )
 from app.contextes.conformite.adaptateurs.entrant.routes_http import (
     routeur as routeur_conformite,
+)
+from app.contextes.conformite.adaptateurs.entrant.routes_regles_du_cabinet import (
+    routeur as routeur_regles_du_cabinet,
 )
 from app.contextes.creation_entreprise.adaptateurs.entrant.routes_http import (
     routeur as routeur_creations,
@@ -83,6 +111,9 @@ from app.contextes.portefeuille.adaptateurs.entrant.routes_espace_adherent impor
 from app.contextes.portefeuille.adaptateurs.entrant.routes_http import (
     routeur as routeur_portefeuille,
 )
+from app.contextes.portefeuille.adaptateurs.entrant.routes_registre_des_tiers import (
+    routeur as routeur_registre_des_tiers,
+)
 from app.contextes.referentiel.adaptateurs.entrant.routes_http import (
     routeur as routeur_referentiel,
 )
@@ -95,11 +126,29 @@ from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
 from app.contextes.souscription.adaptateurs.entrant.routes_http import (
     routeur as routeur_souscription,
 )
+from app.contextes.souscription.adaptateurs.entrant.routes_inscription import (
+    routeur as routeur_inscription_au_portefeuille,
+)
+from app.contextes.souscription.adaptateurs.entrant.routes_missions import (
+    routeur as routeur_missions,
+)
+from app.contextes.souscription.adaptateurs.entrant.routes_proforma import (
+    routeur as routeur_proforma,
+)
 from app.contextes.transverse.adaptateurs.entrant.limitation import (
     IntergicielLimitationDebit,
 )
+from app.contextes.transverse.adaptateurs.entrant.routes_comptes import (
+    routeur as routeur_comptes,
+)
 from app.contextes.transverse.adaptateurs.entrant.routes_http import (
     routeur as routeur_transverse,
+)
+from app.contextes.transverse.adaptateurs.entrant.routes_mandats import (
+    routeur as routeur_mandats,
+)
+from app.contextes.transverse.adaptateurs.entrant.routes_matrice_des_roles import (
+    routeur as routeur_matrice_des_roles,
 )
 from app.contextes.transverse.adaptateurs.entrant.routes_orchestration import (
     routeur as routeur_orchestration,
@@ -110,14 +159,21 @@ from app.contextes.transverse.adaptateurs.entrant.routes_referentiel import (
 from app.contextes.transverse.adaptateurs.entrant.routes_registre import (
     routeur as routeur_registre,
 )
+from app.contextes.transverse.adaptateurs.entrant.routes_second_facteur import (
+    routeur as routeur_second_facteur,
+)
 from app.contextes.transverse.api import IntergicielUniteDeTravail, garnir_le_repertoire
 from app.contextes.vitrine.adaptateurs.entrant.routes_http import (
     routeur as routeur_vitrine,
+)
+from app.contextes.vitrine.adaptateurs.entrant.routes_recrutement import (
+    routeur as routeur_recrutement,
 )
 from app.infrastructure.base_de_donnees import moteur
 from app.infrastructure.charge import IntergicielMesureDeCharge
 from app.infrastructure.config import configuration
 from app.infrastructure.entetes import IntergicielEntetesDeSecurite
+from app.infrastructure.origine import IntergicielOrigine
 from app.infrastructure.roles import DiagnosticDuRole, diagnostiquer
 
 _journal = logging.getLogger("cga.sante")
@@ -477,6 +533,10 @@ def _inscrire_les_travaux_periodiques() -> None:
 
     inscrire_un_travail(travail_de_relance(), lambda: balayer(Atelier().boite))
 
+    # 18 octobre 2026 (point 13) : la lecture préparée des pièces que déposent les
+    # adhérents consentants. Elle appelle le réseau ; le dépôt, lui, ne l'attend jamais.
+    inscrire_un_travail(travail_de_lecture_au_depot(), lire_les_pieces_deposees)
+
     # ⚠️ **Et l'abonné qui referme la boucle.** Le balayage dépose un `RelanceDue`,
     # le relais le publie, celui-ci le poste. Sans cette ligne, les trois pièces
     # existent et l'événement part en « publié sans abonné » : compté, jamais remis,
@@ -536,6 +596,40 @@ def _inscrire_les_travaux_periodiques() -> None:
 
     inscrire_un_abonne(NOM_ENTREPRISE_CREEE, abonne_d_acces_adherent)
 
+    # ⚠️ 14 octobre 2026 : les fonds de tiers. La caisse et le mobile money vivent à la
+    # Souscription, l'échéance de l'adhérent aux Obligations : les deux faits traversent par
+    # la boîte d'envoi. Sans ces lignes, l'adhérent remettrait ses fonds et lirait toujours
+    # « en retard ».
+    from app.contextes.obligations.adaptateurs.entrant.abonne_fonds_de_tiers import (
+        abonne_fonds_recus,
+        abonne_fonds_reverses,
+    )
+    from app.contextes.souscription.application.fonds_de_tiers import (
+        NOM_FONDS_RECUS,
+        NOM_FONDS_REVERSES,
+    )
+
+    inscrire_un_abonne(NOM_FONDS_RECUS, abonne_fonds_recus)
+    inscrire_un_abonne(NOM_FONDS_REVERSES, abonne_fonds_reverses)
+
+    # ⚠️ 15 octobre 2026 : un règlement d'honoraires propose son écriture (brouillon) dans
+    # les livres de l'adhérent. Pas de double saisie. Voir `abonne_honoraires.py`.
+    from app.contextes.comptabilite.adaptateurs.entrant.abonne_honoraires import (
+        abonne_honoraires_regles,
+    )
+    from app.contextes.souscription.application.reglement_des_honoraires import (
+        NOM_HONORAIRES_REGLES,
+    )
+
+    inscrire_un_abonne(NOM_HONORAIRES_REGLES, abonne_honoraires_regles)
+    # Et l'avis à l'adhérent, par un abonné à part : un courriel en panne n'empêche pas
+    # l'écriture, ni l'inverse.
+    from app.contextes.souscription.adaptateurs.entrant.abonne_avis_honoraires import (
+        abonne_avis_honoraires,
+    )
+
+    inscrire_un_abonne(NOM_HONORAIRES_REGLES, abonne_avis_honoraires)
+
     # ⚠️ **La veille des dossiers, et volontairement sans abonné.** Elle dépose des
     # `DossierEnSouffrance` que le relais publiera, et aucun code ne s'y abonne
     # aujourd'hui : l'alerte reste dans la boîte, en « publié sans abonné », et se
@@ -572,11 +666,18 @@ def _inscrire_les_travaux_periodiques() -> None:
 
 def creer_application() -> FastAPI:
     config = configuration()
+    # ⚠️ 19 octobre 2026 (audit de sécurité) : la documentation interactive livrait la
+    # carte complète des routes (un Mo de schéma) à qui la demandait. En production,
+    # elle n'est pas servie ; elle se lit sur un poste ou en recette interne.
+    documentation = not config.en_production
     application = FastAPI(
         title=config.nom_application,
         description=DESCRIPTION,
         version="0.1.0",
         lifespan=_cycle_de_vie,
+        docs_url="/docs" if documentation else None,
+        redoc_url="/redoc" if documentation else None,
+        openapi_url="/openapi.json" if documentation else None,
     )
     # L'unité de travail avant CORS : les intergiciels s'appliquent dans l'ordre
     # inverse de leur déclaration, et l'on veut que la transaction enveloppe le
@@ -590,6 +691,9 @@ def creer_application() -> FastAPI:
     # ouvrir de transaction, ni atteindre la vérification Argon2 dont elle
     # cherche justement à saturer le processeur. Voir `limitation.py`.
     application.add_middleware(IntergicielLimitationDebit)
+    # 19 octobre 2026 : une modification portant la session et venue d'une origine
+    # étrangère est refusée avant même d'être comptée. Voir `infrastructure/origine.py`.
+    application.add_middleware(IntergicielOrigine)
     # ⚠️ Les en-têtes de sécurité en DERNIER déclarés, donc posés en premier sur
     # le chemin de la réponse : ils doivent accompagner TOUTE réponse, y compris
     # le refus de la limitation de débit et les erreurs. Voir `entetes.py`.
@@ -611,6 +715,10 @@ def creer_application() -> FastAPI:
     # le transverse dit qui parle et ce qu'il a le droit de faire, le référentiel
     # dit ce que la loi prévoit.
     application.include_router(routeur_transverse)
+    application.include_router(routeur_comptes)
+    application.include_router(routeur_matrice_des_roles)
+    application.include_router(routeur_second_facteur)
+    application.include_router(routeur_mandats)
     # Le registre des services, sous le même préfixe : c'est une surface
     # d'administration de la plateforme, au même titre que le journal d'audit.
     application.include_router(routeur_registre)
@@ -623,14 +731,28 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_referentiel)
     application.include_router(routeur_portefeuille)
     application.include_router(routeur_collecte)
+    application.include_router(routeur_facture_lue)
+    # 20 octobre 2026 : la conformité contrôle les factures réelles, lues et confirmées,
+    # que la collecte lui branche ici. Voir `conformite/.../factures_a_controler.py`.
+    from app.contextes.collecte.adaptateurs.entrant.factures_pour_la_conformite import (
+        factures_des_pieces_lues,
+    )
+    from app.contextes.conformite.api import brancher_la_source_des_factures
+
+    brancher_la_source_des_factures(factures_des_pieces_lues)
+    application.include_router(routeur_lecture_au_depot)
     application.include_router(routeur_conformite)
+    application.include_router(routeur_regles_du_cabinet)
     application.include_router(routeur_comptabilite)
+    application.include_router(routeur_echange)
+    application.include_router(routeur_annexes_dsf)
     # Pas 101 : le rapprochement bancaire, même préfixe, module à part.
     application.include_router(routeur_rapprochement)
     # Pas 102 : la revue d'un mois transmis, même préfixe, module à part.
     application.include_router(routeur_revue)
     application.include_router(routeur_cloture_mensuelle)
     application.include_router(routeur_lettrage)
+    application.include_router(routeur_immobilisations)
     application.include_router(routeur_fiche_ecriture)
     application.include_router(routeur_relance_des_pieces)
     application.include_router(routeur_accueil_de_l_adherent)
@@ -643,6 +765,11 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_creations)
     application.include_router(routeur_social)
     application.include_router(routeur_cloture)
+    application.include_router(routeur_dsf)
+    application.include_router(routeur_pieces_dsf)
+    application.include_router(routeur_registre_des_tiers)
+    application.include_router(routeur_inscription_au_portefeuille)
+    application.include_router(routeur_missions)
     # J · Pilotage vient en dernier des contextes métier : il les agrège tous.
     application.include_router(routeur_pilotage)
     # Pas 104 : le plan de travail des collaborateurs, qui réutilise les relevés du pilotage.
@@ -654,14 +781,52 @@ def creer_application() -> FastAPI:
     # La vitrine publique : contenu éditorial du site, en lecture seule et sans
     # authentification — tout ce qu'elle rend est déjà destiné à être affiché.
     application.include_router(routeur_vitrine)
+    application.include_router(routeur_recrutement)
     # La souscription : elle part du site public et aboutit dans l'ERP. Montée en
     # dernier parce qu'elle est le seul contexte à traverser la frontière entre
     # les deux — un visiteur y entre sans compte et en ressort avec.
     application.include_router(routeur_souscription)
+    # ⚠️ 14 octobre 2026 : les honoraires des adhérents, sous `/souscription/honoraires`.
+    # 18 octobre 2026 : le journal de caisse, par axe, pour la caisse et la direction.
+    from app.contextes.souscription.adaptateurs.entrant.routes_caisse import (
+        routeur as routeur_caisse,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.routes_honoraires import (
+        routeur as routeur_honoraires,
+    )
+
+    # 18 octobre 2026 : qui est en règle, la règle de dépassement, les grâces, les
+    # révisions de tarif. Monté ici, à côté des honoraires qu'il lit.
+    from app.contextes.souscription.adaptateurs.entrant.routes_reglement import (
+        routeur as routeur_reglement,
+    )
+
+    application.include_router(routeur_honoraires)
+    application.include_router(routeur_reglement)
+    # 18 octobre 2026 : l'identité fiscale du cabinet, que la facture définitive attend.
+    from app.contextes.souscription.adaptateurs.entrant.routes_facturation import (
+        routeur as routeur_facturation,
+    )
+
+    application.include_router(routeur_facturation)
+    application.include_router(routeur_caisse)
+    # 15 octobre 2026 : la cliente d'une création retrouve sa proforma et son reçu.
+    from app.contextes.souscription.adaptateurs.entrant.routes_mes_documents import (
+        routeur as routeur_mes_documents,
+    )
+
+    application.include_router(routeur_mes_documents)
+    # ⚠️ 14 octobre 2026 : les fonds de tiers, sous `/souscription/fonds-de-tiers`.
+    from app.contextes.souscription.adaptateurs.entrant.routes_fonds_de_tiers import (
+        routeur as routeur_fonds_de_tiers,
+    )
+
+    application.include_router(routeur_fonds_de_tiers)
     # Le parcours d'acquisition, en amont de la souscription : il part du
     # formulaire public et s'arrête au dossier qualifié. Monté à part parce qu'il
     # a son propre préfixe et sa propre étiquette, et parce qu'il grandira.
     application.include_router(routeur_acquisition)
+    application.include_router(routeur_proforma)
     # Le socle d'orchestration, monté en dernier : il n'appartient à aucun
     # contexte métier, et c'est lui qui les relie. Ses routes sont des gestes
     # d'exploitation, jamais du parcours client.
@@ -705,11 +870,10 @@ def creer_application() -> FastAPI:
         la production refuse de démarrer. Hors production, l'état se lit ici.
         ─────────────────────────────────────────────────────────────────────
         """
-        etat: dict[str, object] = {
-            "etat": "operationnel",
-            "environnement": config.environnement,
-            "persistance": config.persistance,
-        }
+        etat: dict[str, object] = {"etat": "operationnel"}
+        # ⚠️ 19 octobre 2026 (audit) : en production, la sonde ne décrit pas l'installation.
+        if not config.en_production:
+            etat |= {"environnement": config.environnement, "persistance": config.persistance}
         # ⚠️ Annoncé, et non tu. Un serveur qui fabrique des encaissements sans
         # argent et retient les courriels ne doit jamais être pris pour une
         # production. Trois façons de s'en apercevoir : ce champ, le bandeau
@@ -747,4 +911,22 @@ def creer_application() -> FastAPI:
     return application
 
 
+def configurer_les_journaux() -> None:
+    """Les journaux de l'application, horodatés, sur la sortie d'erreur (20 octobre 2026).
+
+    ⚠️ Constaté à l'audit avant la production : rien ne configurait la racine. Uvicorn ne
+    règle que ses propres journaux ; les `info` de l'application (le verdict du
+    cloisonnement au démarrage, entre autres) étaient jetés, et les erreurs sortaient
+    sans date ni origine. Une racine déjà configurée (pytest, un hôte) n'est pas touchée.
+    """
+    racine = logging.getLogger()
+    if racine.handlers:
+        return
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s : %(message)s",
+    )
+
+
+configurer_les_journaux()
 app = creer_application()

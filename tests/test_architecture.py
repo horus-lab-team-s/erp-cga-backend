@@ -600,3 +600,50 @@ class TestAucunTestNEstVide:
             "ces tests n'ont qu'une docstring et passent en ne prouvant rien : "
             f"{vides}"
         )
+
+
+class TestAucuneAidePriveeNeSortDeSonModule:
+    """16 octobre 2026 : 74 imports allaient chercher une aide privée (`_dossiers`,
+    `_sans_echouer`…) dans un autre module, le plus souvent un module de routes. Une
+    aide partagée est publique, dans un module de sources du contexte ; une aide privée
+    ne sert que son module. Sinon, renommer ou déplacer l'aide casse un fichier voisin
+    que rien ne désignait."""
+
+    def test_aucun_import_d_un_nom_prive(self):
+        import ast
+        import pathlib
+
+        fautes = []
+        for fichier in sorted(pathlib.Path("app").rglob("*.py")):
+            for noeud in ast.walk(ast.parse(fichier.read_text(encoding="utf-8"))):
+                if isinstance(noeud, ast.ImportFrom) and (noeud.module or "").startswith("app."):
+                    fautes += [
+                        f"{fichier}:{noeud.lineno} {noeud.module}.{a.name}"
+                        for a in noeud.names
+                        if a.name.startswith("_") and not a.name.startswith("__")
+                    ]
+        trouve = bool(fautes)
+        assert not trouve, "\n".join(fautes)
+
+
+class TestUnSeulChoixDuDepotDesEntreprises:
+    """16 octobre 2026 : dix modules recopiaient « session ? SQL : mémoire » pour le dépôt
+    des entreprises. Une copie qui oublie la session lit la démonstration en production,
+    sans qu'aucun écran ne le montre (c'est arrivé aux obligations). Le choix vit dans
+    `portefeuille.api.depot_entreprises`, et nulle part ailleurs hors du portefeuille."""
+
+    # L'amorçage et le jeu de présentation (20 octobre 2026) nomment leur locataire, hors requête.
+    PERMIS = {"app/amorcage.py", "app/jeu_de_presentation.py"}
+
+    def test_personne_ne_construit_le_depot_sql_hors_du_portefeuille(self):
+        import pathlib
+
+        fautes = [
+            str(f)
+            for f in sorted(pathlib.Path("app").rglob("*.py"))
+            if "DepotEntreprisesSql(" in f.read_text(encoding="utf-8")
+            and not f.as_posix().startswith("app/contextes/portefeuille/")
+            and f.as_posix() not in self.PERMIS
+        ]
+        trouve = bool(fautes)
+        assert not trouve, fautes

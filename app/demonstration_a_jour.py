@@ -80,7 +80,7 @@ from app.contextes.transverse.domaine.teledeclaration import (
     ModeDepot,
     Portail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 from app.partage.locataire import courant, etabli
 
 __all__ = [
@@ -307,4 +307,4 @@ def mettre_la_demonstration_a_jour(locataire: str = LOCATAIRE_PAR_DEFAUT) -> int
                 "la démonstration ne se met à jour qu'en persistance PostgreSQL : en "
                 "mémoire, elle repart de zéro à chaque démarrage."
             )
-        return consigner(boutique.session, locataire, maintenant().date())
+        return consigner(boutique.session, locataire, aujourd_hui())

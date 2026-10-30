@@ -9,6 +9,10 @@ différentes.
 source, le journal. Une balance persistée serait un second exemplaire de la vérité,
 et le jour où les deux divergeraient personne ne saurait lequel croire — alors
 qu'il n'y a rien à croire : la balance *est* la somme des écritures.
+
+⚠️ 16 octobre 2026 : l'échange avec le logiciel du client est dans `routes_echange.py`,
+les annexes de la DSF (balances auxiliaires, déclarations par tiers, livres légaux) dans
+`routes_annexes_dsf.py`, sous les mêmes chemins.
 """
 
 from __future__ import annotations
@@ -17,9 +21,8 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, computed_field
-from starlette.concurrency import run_in_threadpool
 
 from app.contextes.comptabilite.adaptateurs.sortant.cloture_mensuelle_yaml import (
     charger_les_reglages_de_la_cloture_mensuelle,
@@ -41,9 +44,6 @@ from app.contextes.comptabilite.adaptateurs.sortant.magasins_memoire import ecri
 from app.contextes.comptabilite.adaptateurs.sortant.plan_syscohada import (
     DepotJournauxMemoire,
     DepotPlanMemoire,
-)
-from app.contextes.comptabilite.adaptateurs.sortant.profils_echange import (
-    charger_les_profils,
 )
 from app.contextes.comptabilite.api import (
     BrouillonEcriture,
@@ -73,15 +73,10 @@ from app.contextes.comptabilite.api import (
     valider_une_ecriture,
 )
 from app.contextes.comptabilite.application.lettrage import lettrages_par_ligne
-from app.contextes.comptabilite.application.reprise import (
-    RapportDeReprise,
-    reprendre_un_lot,
-)
 from app.contextes.comptabilite.domaine.cloture_mensuelle import (
     PeriodeVerrouillee,
     periodes_verrouillees,
 )
-from app.contextes.comptabilite.domaine.echange import EchangeRefuse, lire, rendre
 from app.contextes.comptabilite.domaine.ports import DepotEcritures
 
 # ⚠️ L'arête `comptabilite → conformite` est déclarée au registre des services :
@@ -95,12 +90,11 @@ from app.contextes.conformite.api import (
     rapport_arbitre,
 )
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     Entreprise,
     EntrepriseIntrouvable,
     Exercice,
     StatutIntrouvable,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.transverse.api import (
     AccesRequis,
@@ -110,9 +104,9 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.infrastructure.config import configuration
+from app.infrastructure.config import configuration, moteur_ia
 from app.partage.erreurs import message_lisible
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 
@@ -126,8 +120,8 @@ class FiltreDeLettrage(StrEnum):
 
 routeur = APIRouter(prefix="/comptabilite", tags=["Comptabilité"])
 
-_plan = DepotPlanMemoire()
-_journaux = DepotJournauxMemoire()
+depot_du_plan = DepotPlanMemoire()
+depot_des_journaux = DepotJournauxMemoire()
 _imputation_memoire = DepotPlanImputationMemoire()
 
 
@@ -163,7 +157,7 @@ def lire_plan(
     classe: int | None = Query(None, ge=1, le=9, description="Filtrer sur une classe"),
 ) -> list[Compte]:
     exiger(acces, Permission.LIRE_COMPTABILITE)
-    comptes = _plan.charger()
+    comptes = depot_du_plan.charger()
     if classe is not None:
         comptes = [c for c in comptes if c.classe == classe]
     return sorted(comptes, key=lambda c: c.numero)
@@ -172,7 +166,7 @@ def lire_plan(
 @routeur.get("/journaux", summary="Les journaux du dossier")
 def lire_journaux(acces: AccesRequis) -> list[Journal]:
     exiger(acces, Permission.LIRE_COMPTABILITE)
-    return _journaux.charger()
+    return depot_des_journaux.charger()
 
 
 @routeur.get(
@@ -216,9 +210,7 @@ def lire_balance(
     acces: AccesRequis,
     entreprise: str,
     exercice: str = Query(...),
-    jusqu_au: date | None = Query(
-        None, description="Arrête la balance à cette date incluse"
-    ),
+    jusqu_au: date | None = Query(None, description="Arrête la balance à cette date incluse"),
     du: date | None = Query(
         None,
         description=(
@@ -388,20 +380,14 @@ def lire_plan_imputation(acces: AccesRequis, entreprise: str) -> PlanImputation:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _dossier_du_portefeuille(entreprise: str) -> Entreprise | None:
+def dossier_du_portefeuille(entreprise: str) -> Entreprise | None:
     """Le dossier tel que le portefeuille le connaît, ou `None`.
 
     Extrait au pas 73 : l'exercice et le régime se lisent au même endroit, et deux
     lectures recopiées finiraient par ne plus choisir le même dépôt.
     """
-    session = session_de_travail()
-    depot_dossiers = (
-        entreprises_en_memoire()
-        if session is None
-        else DepotEntreprisesSql(session, courant())
-    )
     try:
-        return depot_dossiers.lire(entreprise)
+        return depot_entreprises().lire(entreprise)
     except EntrepriseIntrouvable:
         return None
 
@@ -418,7 +404,7 @@ def periodes_verrouillees_du_dossier(entreprise: str) -> list[PeriodeVerrouillee
     )
 
 
-def _exercice_du_dossier(entreprise: str, libelle: str) -> Exercice | None:
+def exercice_du_portefeuille(entreprise: str, libelle: str) -> Exercice | None:
     """L'exercice tel que le portefeuille le connaît, ou `None`.
 
     ⚠️ La comptabilité ne stocke **pas** ses propres exercices, et c'est
@@ -426,7 +412,7 @@ def _exercice_du_dossier(entreprise: str, libelle: str) -> Exercice | None:
     un exercice ouvert d'un côté, clos de l'autre. L'arête
     `comptabilite → portefeuille` est déclarée pour cette raison.
     """
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     if dossier is None:
         return None
     return next((e for e in dossier.exercices if e.libelle == libelle), None)
@@ -490,9 +476,9 @@ def saisir_ecriture(
         brouillon = BrouillonEcriture(**demande.model_dump())
         return enregistrer_une_ecriture(
             brouillon,
-            journaux=_journaux.charger(),
-            plan=_plan.charger(),
-            exercice=_exercice_du_dossier(entreprise, demande.exercice),
+            journaux=depot_des_journaux.charger(),
+            plan=depot_du_plan.charger(),
+            exercice=exercice_du_portefeuille(entreprise, demande.exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -531,9 +517,9 @@ def corriger_ecriture(
         return corriger_un_brouillon(
             f"{exercice}/{journal}/{numero:06d}",
             demande,
-            journaux=_journaux.charger(),
-            plan=_plan.charger(),
-            exercice=_exercice_du_dossier(entreprise, exercice),
+            journaux=depot_des_journaux.charger(),
+            plan=depot_du_plan.charger(),
+            exercice=exercice_du_portefeuille(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -563,7 +549,7 @@ def valider_ecriture(
     try:
         validee = valider_une_ecriture(
             cle,
-            exercice=_exercice_du_dossier(entreprise, exercice),
+            exercice=exercice_du_portefeuille(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -644,8 +630,8 @@ def contrepasser_ecriture(
         return contrepasser_une_ecriture(
             cle,
             motif=demande.motif,
-            jour=demande.date_operation or maintenant().date(),
-            exercice=_exercice_du_dossier(entreprise, exercice),
+            jour=demande.date_operation or aujourd_hui(),
+            exercice=exercice_du_portefeuille(entreprise, exercice),
             periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
             depot=depot(entreprise),
             par=acces.compte,
@@ -782,7 +768,7 @@ def proposer_depuis_une_facture(
     # ⚠️ Pas 73 : le régime vient du portefeuille, à la date de l'opération, et plus
     # de la requête. Voir `rattacher_au_dossier`. Le contrôle de conformité se fait
     # ensuite sur la facture rattachée : ses règles lisent aussi ce régime.
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     if dossier is None:
         raise HTTPException(
             status_code=404, detail=f"dossier {entreprise} inconnu du portefeuille."
@@ -855,6 +841,79 @@ def proposer_depuis_une_facture(
     )
 
 
+class PropositionDeLaPiece(BaseModel):
+    """Le journal et la date, quand ils diffèrent de la facture. Tout le reste vient de la pièce."""
+
+    journal: str = "AC"
+    exercice: str | None = None
+    date_operation: date | None = None
+
+
+@routeur.post(
+    "/dossiers/{entreprise}/pieces/{identifiant}/proposition",
+    summary="Proposer l'écriture d'une pièce dont la facture est lue",
+    responses={
+        404: {"description": "Pièce inconnue, hors du dossier, ou sans facture lue"},
+        409: {"description": "La facture ne permet aucune écriture équilibrée"},
+    },
+)
+def proposer_depuis_la_piece(
+    acces: AccesRequis, entreprise: str, identifiant: str, demande: PropositionDeLaPiece
+) -> PropositionDEcriture:
+    """La facture lue de la pièce, contrôlée puis imputée. **Sans rien écrire.**
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME CHEMIN QUE `POST /propositions`, ET NON UNE COPIE (14 octobre 2026).
+
+    Le moteur de proposition ne travaillait que sur les factures de démonstration :
+    une pièce réelle n'en portait pas. Elle porte désormais sa facture lue et
+    confirmée ; cette route la met dans la forme du contrôle (`FactureAControler`)
+    et appelle la route existante. Contrôle de conformité, régime lu au portefeuille,
+    numéro pressenti : rien n'est recopié, rien ne diverge.
+
+    ⚠️ La pièce est désignée par le dossier ET son identifiant : une pièce d'un autre
+    dossier rend 404, comme une pièce inconnue.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
+    from app.contextes.collecte.api import DepotPiecesSql, pieces_en_memoire
+    from app.contextes.conformite.api import Document, LigneFacture, Montants, Partie
+
+    session = session_de_travail()
+    pieces = pieces_en_memoire() if session is None else DepotPiecesSql(session, courant())
+    piece = pieces.par_identifiant(identifiant)
+    if piece is None or piece.entreprise != entreprise:
+        raise HTTPException(status_code=404, detail=f"pièce {identifiant} introuvable.")
+    lue = piece.facture
+    if lue is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Cette pièce n'a pas de facture lue : lisez-la avant de proposer l'écriture.",
+        )
+    facture = FactureAControler(
+        document=Document(reference=lue.reference, date_emission=lue.date_emission),
+        emetteur=Partie(denomination=lue.emetteur, niu=lue.niu_emetteur, niu_actif=lue.niu_actif),
+        destinataire=Partie(niu=entreprise),
+        montants=Montants(
+            total_ht=lue.montant_ht, total_tva=lue.montant_tva, total_ttc=lue.montant_ttc
+        ),
+        lignes=[
+            LigneFacture(designation=ligne.designation, montant_ht=ligne.montant_ht)
+            for ligne in lue.lignes
+        ],
+    )
+    return proposer_depuis_une_facture(
+        acces,
+        entreprise,
+        DemandeDeProposition(
+            facture=facture,
+            journal=demande.journal,
+            exercice=demande.exercice,
+            date_operation=demande.date_operation,
+        ),
+    )
+
+
 def _moteur_de_conformite():
     """Le moteur de contrôle, obtenu par la **surface publique** de la conformité.
 
@@ -873,282 +932,133 @@ def _moteur_de_conformite():
     return moteur_par_defaut()
 
 
-# ── L'échange avec le logiciel du client ─────────────────────────────────────
-#
-# ⚠️ **UN CENTRE DE GESTION NE REMPLACE PAS LE LOGICIEL DE SES ADHÉRENTS.**
-#
-# Il s'y branche. Chaque adhérent arrive avec le sien, et la plateforme doit
-# s'adapter au système final, jamais l'inverse. Le format est donc une **donnée**
-# du référentiel : brancher un progiciel de plus, c'est déposer un fichier, pas
-# modifier ce module.
+# ── Les soldes à regarder, et la relecture par l'agent (18 octobre 2026, point 15) ──
 
 
-class ProfilPublie(BaseModel):
-    """Un profil d'échange, tel qu'un écran le propose."""
-
-    code: str
-    libelle: str
-    #: Ce que le centre sait de ce profil, et ce qu'il ne garantit pas. Repris du
-    #: référentiel : un exploitant qui choisit doit le lire sans ouvrir le dépôt.
-    remarque: str
-    colonnes: list[str]
-    encodage: str
+class SoldeARegarderLu(BaseModel):
+    compte: str
+    solde: Decimal
+    constat: str
+    suggestion: str
 
 
-@routeur.get("/echange/profils", summary="Les formats d'export disponibles")
-def lister_les_profils(acces: AccesRequis) -> list[ProfilPublie]:
-    """Ce que le référentiel propose, à l'instant.
+class SoldesARegarder(BaseModel):
+    soldes: list[SoldeARegarderLu]
 
-    ⚠️ Lue au référentiel et non écrite ici : un écran qui recopierait la liste
-    proposerait un profil retiré, ou tairait un profil ajouté le matin même.
-    """
-    exiger(acces, Permission.LIRE_COMPTABILITE)
-    return [
-        ProfilPublie(
-            code=profil.code,
-            libelle=profil.libelle,
-            remarque=profil.remarque,
-            colonnes=[c.intitule or c.champ for c in profil.colonnes],
-            encodage=profil.encodage,
-        )
-        for profil in _profils().values()
-    ]
+
+def _soldes_et_releve(entreprise: str, exercice: str):
+    from app.contextes.comptabilite.domaine.soldes_a_regarder import soldes_a_regarder
+
+    soldes = balance(depot(entreprise).lister(exercice))
+    periode = exercice_du_portefeuille(entreprise, exercice)
+    return soldes, periode, soldes_a_regarder(soldes, cloture=bool(periode and periode.clos))
 
 
 @routeur.get(
-    "/dossiers/{entreprise}/export",
-    summary="Exporter les écritures vers le logiciel du client",
-    responses={
-        403: {"description": "Habilitation insuffisante sur ce dossier"},
-        404: {"description": "Profil d'échange inconnu"},
-        409: {"description": "Le lot contient une écriture non validée"},
-    },
+    "/dossiers/{entreprise}/balance/soldes-a-regarder",
+    summary="Les soldes dont le sens contredit la nature du compte (relevé sans agent)",
 )
-def exporter(
-    acces: AccesRequis,
-    entreprise: str,
-    exercice: str = Query(description="L'exercice à exporter."),
-    profil: str = Query(
-        "pivot-csv", description="Le code d'un profil du référentiel."
-    ),
-    journal: str | None = Query(None, description="Restreint à un journal."),
-) -> Response:
-    """Le fichier, encodé comme le logiciel destinataire l'attend.
-
-    ─────────────────────────────────────────────────────────────────────────────
-    ⚠️ **SEULES LES ÉCRITURES VALIDÉES SORTENT, ET LE REFUS EST FRANC.**
-
-    Un brouillon est une écriture que le centre n'a pas engagée. L'exporter
-    pousserait dans le système du client des mouvements que personne n'assume, et
-    il les tiendrait pour arrêtés — il déclare avec, puis découvre au contrôle que
-    le centre les a corrigés depuis.
-
-    Le lot est donc refusé **en entier**, en nommant les écritures en cause. Un
-    export qui filtrerait en silence livrerait un fichier incomplet, et l'écart ne
-    se verrait qu'à la balance.
-
-    ⚠️ **LE FICHIER EST RENDU EN OCTETS, PAS EN TEXTE.**
-
-    L'encodage fait partie du format : le rendre en JSON ferait passer le contenu
-    par de l'UTF-8, et le client recevrait des libellés abîmés après avoir cru
-    télécharger le bon fichier. C'est le piège le plus coûteux de cet échange,
-    parce qu'il ne se voit qu'après l'import.
-
-    Les caractères que l'encodage cible ne connaît pas sont **remplacés**, jamais
-    fatals : un libellé qui porterait un caractère exotique ne doit pas faire
-    perdre le fichier entier d'un exercice.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
+def lire_les_soldes_a_regarder(
+    acces: AccesRequis, entreprise: str, exercice: str = Query(...)
+) -> SoldesARegarder:
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
-
-    try:
-        choisi = _profils()[profil]
-    except KeyError as absent:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"aucun profil d'échange « {profil} ». Les profils du référentiel "
-                f"sont : {', '.join(sorted(_profils())) or 'aucun'}."
-            ),
-        ) from absent
-
-    ecritures = depot(entreprise).toutes(exercice)
-    if journal is not None:
-        ecritures = [e for e in ecritures if e.journal == journal]
-
-    try:
-        contenu = rendre(ecritures, choisi)
-    except EchangeRefuse as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-
-    octets = contenu.encode(choisi.encodage, errors="replace")
-    nom = f"{entreprise}-{exercice}{'-' + journal if journal else ''}-{choisi.code}.csv"
-    return Response(
-        content=octets,
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="{nom}"',
-            # ⚠️ L'encodage est annoncé dans l'en-tête **et** appliqué au contenu.
-            # Un navigateur qui devine se trompe une fois sur deux, et le client
-            # ouvre un fichier abîmé dans son tableur avant même de l'importer.
-            "Content-Type": f"text/csv; charset={choisi.encodage}",
-        },
+    _, _, releve = _soldes_et_releve(entreprise, exercice)
+    return SoldesARegarder(
+        soldes=[
+            SoldeARegarderLu(
+                compte=r.compte, solde=r.solde, constat=r.constat, suggestion=r.suggestion
+            )
+            for r in releve
+        ]
     )
 
 
-def _profils():
-    """Les profils du référentiel, relus à chaque appel.
-
-    ⚠️ Non mémoïsés, contrairement au moteur de conformité : un export se demande
-    quelques fois par mois, et un profil corrigé le matin doit servir l'après-midi
-    **sans redéploiement**. C'est le sens même de l'avoir mis au référentiel.
-    """
-    return charger_les_profils(configuration().dossier_referentiel / "echange")
+class RemarqueSurLaBalanceLue(BaseModel):
+    compte: str | None
+    constat: str
+    suggestion: str
 
 
-#: ⚠️ Un plafond en octets, et pas en écritures : le contrôle doit porter sur ce
-#: qui est reçu, avant d'être compris. Un exercice de PME fait quelques milliers
-#: de lignes, soit quelques centaines de kilo-octets ; huit méga-octets laissent
-#: dix fois la marge et n'épuisent pas la mémoire d'un conteneur.
-TAILLE_MAXIMALE_DE_REPRISE = 8 * 1024 * 1024
+class RelectureDeLaBalanceLue(BaseModel):
+    #: Faux sans clé, ou quand l'agent n'a pas répondu : rien n'attend sa réponse.
+    disponible: bool
+    remarques: list[RemarqueSurLaBalanceLue]
+    message: str
+
+
+def service_de_relecture_de_balance():
+    """L'agent comptable, ou `None` sans clé."""
+    reglages = configuration()
+    moteur = moteur_ia(reglages)
+    if moteur is None:
+        return None
+    from app.contextes.comptabilite.adaptateurs.sortant.relecture_balance_claude import (
+        RelectureDeLaBalance,
+    )
+
+    return RelectureDeLaBalance(
+        cle_api=moteur.cle_api, modele=moteur.modele, fournisseur=moteur.fournisseur
+    )
+
+
+def _balance_pour_l_agent(entreprise: str, exercice: str) -> str:
+    """Ce que l'agent lit : sans NIU, sans dénomination, sans libellé ni tiers."""
+    soldes, periode, releve = _soldes_et_releve(entreprise, exercice)
+    dossier = dossier_du_portefeuille(entreprise)
+    intitules = {c.numero: c.intitule for c in depot_du_plan.charger()}
+    lignes = []
+    if dossier is not None:
+        lignes.append(f"Forme juridique : {dossier.forme_juridique}")
+    if periode is not None:
+        lignes.append(
+            f"Exercice : du {periode.ouverture:%d/%m/%Y} au {periode.cloture:%d/%m/%Y}"
+            f" ({'clos' if periode.clos else 'en cours'})"
+        )
+        if dossier is not None:
+            lignes.append(f"Régime à la clôture : {dossier.regime_au(periode.cloture)}")
+    lignes.append("Balance (compte ; intitulé ; total débit ; total crédit ; solde) :")
+    lignes += [
+        f"{s.compte} ; {intitules.get(s.compte, '')} ; {s.total_debit} ; {s.total_credit} ; "
+        f"{s.solde}"
+        for s in soldes
+    ]
+    if releve:
+        lignes.append("Soldes déjà relevés par les règles du plan :")
+        lignes += [f"- {r.compte} : {r.constat}" for r in releve]
+    return "\n".join(lignes)
 
 
 @routeur.post(
-    "/dossiers/{entreprise}/reprise",
-    summary="Reprendre un fichier d'écritures venu du logiciel du client",
-    responses={
-        403: {"description": "Habilitation insuffisante sur ce dossier"},
-        404: {"description": "Profil d'échange inconnu"},
-        409: {"description": "Le fichier ne se lit pas avec ce profil"},
-        413: {"description": "Fichier trop volumineux"},
-    },
+    "/dossiers/{entreprise}/balance/relecture-de-l-agent",
+    summary="Demander à l'agent comptable une relecture de la balance (il propose, n'écrit rien)",
 )
-async def reprendre(
-    acces: AccesRequis,
-    entreprise: str,
-    fichier: UploadFile = File(description="Le fichier exporté par l'autre logiciel."),
-    exercice: str = Query(description="L'exercice dans lequel reprendre."),
-    profil: str = Query("pivot-csv", description="Le code d'un profil du référentiel."),
-    journal: str | None = Query(
-        None, description="Le journal, quand le fichier n'en porte pas."
-    ),
-    appliquer: bool = Query(
-        False,
-        description=(
-            "Faux, le défaut : le rapport dit ce qui entrerait, rien n'est écrit."
+def demander_une_relecture_de_la_balance(
+    acces: AccesRequis, entreprise: str, exercice: str = Query(...)
+) -> RelectureDeLaBalanceLue:
+    exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    service = service_de_relecture_de_balance()
+    if service is None:
+        return RelectureDeLaBalanceLue(
+            disponible=False,
+            remarques=[],
+            message="L'agent n'est pas branché sur ce poste : le relevé ci-dessus reste valable.",
+        )
+    remarques = service.relire(_balance_pour_l_agent(entreprise, exercice))
+    if remarques is None:
+        return RelectureDeLaBalanceLue(
+            disponible=False,
+            remarques=[],
+            message="L'agent n'a pas répondu. Réessayez plus tard ; rien n'attend sa réponse.",
+        )
+    return RelectureDeLaBalanceLue(
+        disponible=True,
+        remarques=[
+            RemarqueSurLaBalanceLue(compte=r.compte, constat=r.constat, suggestion=r.suggestion)
+            for r in remarques
+        ],
+        message=(
+            "Des propositions à juger : aucune écriture n'est passée."
+            if remarques
+            else "L'agent n'a rien relevé. Cela ne vaut pas révision."
         ),
-    ),
-) -> RapportDeReprise:
-    """Relit le fichier avec le profil déclaré, et rend ce qui entrerait.
-
-    ─────────────────────────────────────────────────────────────────────────────
-    ⚠️ **LE MODE CONTRÔLE EST LE DÉFAUT.**
-
-    Reprendre un exercice entier est irréversible, et pas seulement en pratique :
-    les écritures entrent en brouillon, et **aucune route ne supprime un brouillon**.
-    Ce texte disait « donc elles se suppriment » ; c'était faux (pas 72). Un brouillon
-    se corrige à son numéro, se valide, se contre-passe : quatre mille brouillons
-    d'un mauvais fichier n'ont pas d'autre issue, et la question est ouverte (Q23).
-    Se tromper de fichier, de dossier ou d'exercice doit se voir **avant**.
-
-    ⚠️ **LA PERMISSION EST CELLE DE LA SAISIE, PAS CELLE DE LA LECTURE.**
-
-    Une reprise produit des écritures. Qu'elles viennent d'un fichier plutôt que
-    d'un formulaire ne change rien à ce qu'elles sont, et le mode contrôle exige
-    le même droit que le mode application : le rapport de contrôle **montre le
-    contenu comptable du fichier**, ce qui n'est pas une lecture publique.
-
-    TROIS STATUTS, TROIS SENS DIFFÉRENTS
-
-    `404` le profil n'existe pas au référentiel, donc la demande désigne un format
-    inconnu du centre.
-
-    `409` le fichier ne se lit pas **du tout** avec ce profil : encodage, charabia,
-    profil incapable de relire. Ce n'est pas un défaut de la requête, c'est un
-    désaccord entre le fichier et le format annoncé.
-
-    `200` avec des anomalies : le fichier se lit, et son contenu est refusé ligne
-    par ligne. C'est un résultat, pas une erreur, et il faut qu'un écran puisse
-    l'afficher en entier plutôt qu'un message d'échec.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
-
-    try:
-        choisi = _profils()[profil]
-    except KeyError as absent:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"aucun profil d'échange « {profil} ». Les profils du référentiel "
-                f"sont : {', '.join(sorted(_profils())) or 'aucun'}."
-            ),
-        ) from absent
-
-    octets = await fichier.read()
-    if len(octets) > TAILLE_MAXIMALE_DE_REPRISE:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"fichier de {len(octets)} octets, au-delà des "
-                f"{TAILLE_MAXIMALE_DE_REPRISE} admis. Un exercice de PME tient "
-                "largement dedans : vérifier qu'il s'agit bien d'un export "
-                "d'écritures et non d'une archive."
-            ),
-        )
-
-    # ⚠️ TOUT CE QUI SUIT EST BLOQUANT, ET CETTE ROUTE EST ASYNCHRONE.
-    #
-    # Elle l'est pour une seule raison : `await fichier.read()`. Le reste — relire
-    # huit mégaoctets d'écritures, les confronter au plan, les écrire — ne rend
-    # jamais la main. Tenu sur la boucle d'événements, il figeait le serveur entier
-    # pendant toute la reprise. Voir `tests/test_boucle_non_bloquee.py`.
-    return await run_in_threadpool(
-        _reprendre_le_lot,
-        octets,
-        choisi,
-        entreprise=entreprise,
-        exercice=exercice,
-        journal=journal,
-        appliquer=appliquer,
-        par=acces.compte,
-    )
-
-
-def _reprendre_le_lot(
-    octets: bytes,
-    choisi,  # noqa: ANN001 — le profil du référentiel, typé par `_profils()`
-    *,
-    entreprise: str,
-    exercice: str,
-    journal: str | None,
-    appliquer: bool,
-    par: str,
-) -> RapportDeReprise:
-    """La reprise elle-même. **Bloquante, donc jamais sur la boucle.**"""
-    plan = _plan.charger()
-    try:
-        lot = lire(
-            octets,
-            choisi,
-            exercice=exercice,
-            journal_par_defaut=journal,
-            # ⚠️ Le plan du dossier est passé au lecteur pour que le compte
-            # inconnu sorte **avec son rang de ligne**. Le contrôle d'environnement
-            # le refuserait aussi, mais en nommant l'écriture, pas la ligne du
-            # fichier : l'exploitant chercherait dans le mauvais outil.
-            comptes_connus=frozenset(c.numero for c in plan),
-        )
-    except EchangeRefuse as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-
-    return reprendre_un_lot(
-        lot,
-        journaux=_journaux.charger(),
-        plan=plan,
-        exercice=_exercice_du_dossier(entreprise, exercice),
-        periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
-        depot=depot(entreprise),
-        par=par,
-        appliquer=appliquer,
     )

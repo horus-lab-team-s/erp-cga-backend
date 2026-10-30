@@ -23,18 +23,28 @@ En base : une transaction avec `SELECT … FOR UPDATE` sur la ligne du paiement.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from app.contextes.souscription.domaine.devis import Devis
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
     EtatDossier,
 )
+from app.contextes.souscription.domaine.fonds_de_tiers import AppelDeFonds
+from app.contextes.souscription.domaine.honoraires import (
+    ContratDHonoraires,
+    PeriodeDejaReglee,
+    ReglementDHonoraires,
+)
 from app.contextes.souscription.domaine.paiements import Paiement, StatutPaiement
 from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
 from app.contextes.souscription.domaine.rappels import RappelAPasser
 from app.contextes.souscription.domaine.relance import SuiviDeRelance
+from app.contextes.souscription.domaine.situation_de_reglement import (
+    GraceDeReglement,
+    RegleDeDepassement,
+)
 from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
@@ -42,6 +52,8 @@ from app.contextes.souscription.domaine.souscriptions import (
 from app.partage.depot_memoire import EntrepotMemoire
 
 __all__ = [
+    "DepotGracesDeReglementMemoire",
+    "DepotRegleDeDepassementMemoire",
     "DepotDevisMemoire",
     "DepotProformasMemoire",
     "DepotQualificationsMemoire",
@@ -173,6 +185,13 @@ class DepotPaiementsMemoire:
             key=lambda p: p.initie_le,
         )
 
+    def encaisses(self) -> list[Paiement]:
+        """Les paiements validés, toutes natures : le journal de caisse (18 octobre 2026)."""
+        return sorted(
+            self._entrepot.filtrer(lambda p: p.statut == StatutPaiement.VALIDE),
+            key=lambda p: p.initie_le,
+        )
+
     def rapprochables(self) -> list[Paiement]:
         """Tout sauf les périmés et les rejetés.
 
@@ -237,6 +256,12 @@ class DepotDossiersMemoire:
             self._entrepot.filtrer(
                 lambda d: d.ouvert and (etat is None or d.etat is etat)
             ),
+            key=lambda d: d.depuis_le,
+        )
+
+    def payes(self) -> list[DossierCommercial]:
+        return sorted(
+            self._entrepot.filtrer(lambda d: d.etat is EtatDossier.PAYEE),
             key=lambda d: d.depuis_le,
         )
 
@@ -385,3 +410,101 @@ class DepotQualificationsMemoire:
 
     def enregistrer(self, qualification: Qualification) -> None:
         self._entrepot.poser(qualification)
+
+
+class DepotContratsDHonorairesMemoire:
+    """Réalisation en mémoire de `DepotContratsDHonoraires`."""
+
+    def __init__(self) -> None:
+        self._contrats: dict[str, ContratDHonoraires] = {}
+
+    def lire(self, niu: str) -> ContratDHonoraires | None:
+        return self._contrats.get(niu)
+
+    def enregistrer(self, contrat: ContratDHonoraires) -> None:
+        self._contrats[contrat.niu] = contrat
+
+    def lister(self) -> list[ContratDHonoraires]:
+        return sorted(self._contrats.values(), key=lambda c: c.denomination)
+
+
+class DepotReglementsDHonorairesMemoire:
+    """Réalisation en mémoire de `DepotReglementsDHonoraires`.
+
+    ⚠️ La même garde que la clé unique de la base : sans elle, les cas en mémoire
+    accepteraient un double règlement que PostgreSQL refuserait.
+    """
+
+    def __init__(self) -> None:
+        self._reglements: dict[tuple[str, date], ReglementDHonoraires] = {}
+
+    def pour(self, niu: str) -> list[ReglementDHonoraires]:
+        return sorted(
+            (r for r in self._reglements.values() if r.niu == niu), key=lambda r: r.periode
+        )
+
+    def enregistrer(self, reglement: ReglementDHonoraires) -> None:
+        cle = (reglement.niu, reglement.periode)
+        if cle in self._reglements:
+            raise PeriodeDejaReglee(
+                f"la période du {reglement.periode:%d/%m/%Y} de {reglement.niu} est déjà réglée."
+            )
+        self._reglements[cle] = reglement
+
+    def lister(self) -> list[ReglementDHonoraires]:
+        return sorted(self._reglements.values(), key=lambda r: r.constate_le)
+
+
+class DepotAppelsDeFondsMemoire:
+    """Réalisation en mémoire de `DepotAppelsDeFonds`."""
+
+    def __init__(self) -> None:
+        self._appels: dict[str, AppelDeFonds] = {}
+
+    def lire(self, identifiant: str) -> AppelDeFonds | None:
+        return self._appels.get(identifiant)
+
+    def pour(self, niu: str) -> list[AppelDeFonds]:
+        return sorted(
+            (a for a in self._appels.values() if a.niu == niu),
+            key=lambda a: (a.periode_debut, a.code_obligation),
+        )
+
+    def enregistrer(self, appel: AppelDeFonds) -> None:
+        self._appels[appel.identifiant] = appel
+
+    def lister(self) -> list[AppelDeFonds]:
+        return sorted(self._appels.values(), key=lambda a: a.arrete_le)
+
+
+class DepotRegleDeDepassementMemoire:
+    """La règle de dépassement, en mémoire (18 octobre 2026)."""
+
+    def __init__(self) -> None:
+        self._regle: RegleDeDepassement | None = None
+
+    def lire(self) -> RegleDeDepassement | None:
+        return self._regle
+
+    def enregistrer(self, regle: RegleDeDepassement) -> None:
+        self._regle = regle
+
+
+class DepotGracesDeReglementMemoire:
+    """Les grâces de règlement, en mémoire (18 octobre 2026)."""
+
+    def __init__(self) -> None:
+        self._graces: dict[str, GraceDeReglement] = {}
+
+    def pour(self, niu: str) -> list[GraceDeReglement]:
+        return sorted(
+            (g for g in self._graces.values() if g.niu == niu),
+            key=lambda g: g.accordee_le,
+            reverse=True,
+        )
+
+    def toutes(self) -> list[GraceDeReglement]:
+        return list(self._graces.values())
+
+    def enregistrer(self, grace: GraceDeReglement) -> None:
+        self._graces[grace.identifiant] = grace

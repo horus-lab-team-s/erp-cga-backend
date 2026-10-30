@@ -26,22 +26,16 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.contextes.collecte.api import (
-    DepotDemandesSql,
-    DepotPiecesSql,
-    demandes_en_memoire,
-    pieces_en_memoire,
-)
 from app.contextes.comptabilite.api import (
-    DepotEcrituresSql,
-    ecritures_en_memoire,
     montant_tva_rejetee,
 )
-from app.contextes.obligations.api import (
-    DepotTypesObligationMemoire,
-    accuses_du_portail,
-    effectif_du_dossier,
-    generer_echeancier,
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_demandes,
+    depot_dossiers,
+    depot_ecritures,
+    depot_pieces,
+    echeancier_du_dossier,
+    sans_echouer,
 )
 from app.contextes.pilotage.api import (
     CatalogueDesMesures,
@@ -62,31 +56,24 @@ from app.contextes.pilotage.api import (
     repartir_la_charge,
 )
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     EntrepriseIntrouvable,
-    entreprises_en_memoire,
 )
 from app.contextes.referentiel.api import ServiceParametres, service_parametres
 from app.contextes.transverse.api import (
-    ROLES_INTERNES,
     Acces,
     AccesRequis,
     Permission,
     atelier,
+    est_interne,
     exiger,
     exiger_dossier,
     habilitations_actives,
-    session_de_travail,
 )
-from app.partage.horloge import maintenant
-from app.partage.locataire import courant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage"])
 
 
-def _aujourd_hui() -> date:
-    """La date du jour, prise à l'horloge du projet et jamais à `date.today()`."""
-    return maintenant().date()
 
 
 def parametres() -> ServiceParametres:
@@ -95,32 +82,12 @@ def parametres() -> ServiceParametres:
     return service_parametres()
 
 
-def _depot_dossiers():
-    session = session_de_travail()
-    if session is None:
-        return entreprises_en_memoire()
-    return DepotEntreprisesSql(session, courant())
 
 
-def _depot_pieces():
-    session = session_de_travail()
-    if session is None:
-        return pieces_en_memoire()
-    return DepotPiecesSql(session, courant())
 
 
-def _depot_demandes():
-    session = session_de_travail()
-    if session is None:
-        return demandes_en_memoire()
-    return DepotDemandesSql(session, courant())
 
 
-def _ecritures(entreprise: str):
-    session = session_de_travail()
-    if session is None:
-        return ecritures_en_memoire(entreprise)
-    return DepotEcrituresSql(session, courant(), entreprise)
 
 
 # ── Ce que l'écran lit ───────────────────────────────────────────────────────
@@ -168,11 +135,11 @@ def lire_tableau_de_bord(
     traite ce qui est en haut. Un tri alphabétique ferait un annuaire.
     """
     exiger(acces, Permission.LIRE_PILOTAGE)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
 
-    dossiers = _depot_dossiers().lister()
-    pieces = _depot_pieces()
-    demandes = _depot_demandes()
+    dossiers = depot_dossiers().lister()
+    pieces = depot_pieces()
+    demandes = depot_demandes()
 
     scores: list[ScoreRisque] = []
     for dossier in dossiers:
@@ -274,7 +241,7 @@ class DemandeDeCloture(BaseModel):
 
 def _dossier_ou_404(niu: str):
     try:
-        return _depot_dossiers().lire(niu)
+        return depot_dossiers().lire(niu)
     except EntrepriseIntrouvable as absent:
         raise HTTPException(status_code=404, detail=f"dossier « {niu} » inconnu.") from absent
 
@@ -282,7 +249,7 @@ def _dossier_ou_404(niu: str):
 def _score_du_dossier(niu: str, jour: date, exercice: str) -> ScoreRisque:
     """Le score du dossier, calculé **exactement** comme au tableau de bord."""
     observations = _observer(
-        _dossier_ou_404(niu), _depot_pieces(), _depot_demandes(), jour, exercice
+        _dossier_ou_404(niu), depot_pieces(), depot_demandes(), jour, exercice
     )
     return evaluer_le_risque(observations, parametres(), jour)
 
@@ -332,7 +299,7 @@ def lire_la_vue_risque(
     exercice: str | None = Query(None, description="Défaut : l'année de la date"),
 ) -> VueRisque:
     exiger_dossier(acces, Permission.LIRE_PILOTAGE, niu)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
     exercice = exercice or str(jour.year)
     score = _score_du_dossier(niu, jour, exercice)
     catalogue: CatalogueDesMesures = catalogue_des_mesures()
@@ -371,7 +338,7 @@ def lire_les_decisions(acces: AccesRequis, niu: str) -> list[DecisionLue]:
         # 404 et non 403 : l'existence même d'une décision de direction est une information.
         raise HTTPException(status_code=404, detail="aucune décision lisible sur ce dossier.")
     _dossier_ou_404(niu)
-    return _decisions_lues(niu, _aujourd_hui())
+    return _decisions_lues(niu, aujourd_hui())
 
 
 @routeur.post(
@@ -388,7 +355,7 @@ def decider_une_mesure(
     """
     exiger_dossier(acces, Permission.DECIDER_SUR_DOSSIER, niu, motif=demande.motif)
     instant = maintenant()
-    jour = instant.date()
+    jour = jour_a_douala(instant)
     score = _score_du_dossier(niu, jour, demande.exercice or str(jour.year))
     try:
         decision = prendre_une_mesure(
@@ -473,7 +440,7 @@ def _qui_suit_quoi(
                 # ⚠️ Pas 105 : un adhérent et un inspecteur ont une portée explicite (leur
                 # dossier, leur mission), et figuraient donc parmi les « collaborateurs » de la
                 # charge. Ils ne portent aucun travail du cabinet.
-                if habilitation.role not in ROLES_INTERNES:
+                if not est_interne(habilitation.role):
                     continue
                 suivi.setdefault(score.entreprise, []).append(habilitation.compte)
         for comptes in suivi.values():
@@ -481,7 +448,7 @@ def _qui_suit_quoi(
                 if compte not in noms:
                     fiche = boutique.comptes.lire(compte)
                     noms[compte] = f"{fiche.prenom} {fiche.nom}".strip() or compte
-    except Exception:  # noqa: BLE001 — agrégateur : voir `_sans_echouer`.
+    except Exception:  # noqa: BLE001 — agrégateur : voir `sans_echouer`.
         return {}, {}
     return {niu: tuple(comptes) for niu, comptes in suivi.items()}, noms
 
@@ -513,13 +480,13 @@ def _observer(
 
     en_souffrance = tuple(
         p.identifiant
-        for p in _sans_echouer(lambda: pieces.du_dossier(niu), [])
+        for p in sans_echouer(lambda: pieces.du_dossier(niu), [])
         if getattr(p, "en_attente_de_traitement", False)
     )
 
     # ⚠️ Pas 104 : cette composante valait **toujours zéro**, sans que rien ne le dise. La
     # lecture appelait `demandes.du_dossier`, que le dépôt des demandes n'a jamais eu ; l'erreur
-    # était avalée par `_sans_echouer`, si bien que le filtre sur `StatutDemande.EN_ATTENTE`,
+    # était avalée par `sans_echouer`, si bien que le filtre sur `StatutDemande.EN_ATTENTE`,
     # un statut qui n'existe pas, n'était jamais évalué. Deux défauts qui se masquaient.
     #
     # « Sans réponse » : une demande **ouverte** qui est échue, ou assez ancienne pour être
@@ -527,20 +494,20 @@ def _observer(
     # Une demande ouverte hier n'est pas encore un risque.
     sans_reponse = tuple(
         d.identifiant
-        for d in _sans_echouer(lambda: demandes.ouvertes(niu), [])
+        for d in sans_echouer(lambda: demandes.ouvertes(niu), [])
         if d.en_retard(jour) or d.a_escalader(jour)
     )
 
     bloquantes = tuple(
         ecriture.piece_justificative or f"{ecriture.journal}-{ecriture.numero:06d}"
-        for ecriture in _sans_echouer(lambda: _ecritures(niu).toutes(exercice), [])
+        for ecriture in sans_echouer(lambda: depot_ecritures(niu).toutes(exercice), [])
         if montant_tva_rejetee(ecriture) > 0
     )
 
     retards = tuple(
         f"{instance.code_obligation} {instance.periode_debut:%m/%Y}"
-        for instance in _sans_echouer(
-            lambda: _echeancier(dossier, exercice, jour), []
+        for instance in sans_echouer(
+            lambda: echeancier_du_dossier(dossier, exercice, jour), []
         )
         if instance.en_retard(jour)
     )
@@ -557,44 +524,10 @@ def _observer(
 
 #: Le catalogue des types d'obligation. En mémoire, comme dans le contexte F :
 #: ce sont des définitions, pas des données de dossier.
-_catalogue = DepotTypesObligationMemoire()
 
 
-def _echeancier(dossier, exercice: str, jour: date):
-    periode = next((e for e in dossier.exercices if e.libelle == exercice), None)
-    if periode is None:
-        return []
-    # ⚠️ La même question que l'échéancier des obligations (pas 56) : sans elle, le
-    # pilotage ne comptait jamais une CNPS en retard.
-    return generer_echeancier(
-        dossier,
-        _catalogue.charger(jour),
-        periode,
-        emploie_sur=effectif_du_dossier(dossier.niu),
-        # ⚠️ Sans elle, une déclaration déposée pesait sur le score comme un retard
-        # (pas 58).
-        accuse_de=accuses_du_portail(),
-    )
 
 
-def _sans_echouer(lecture, repli):
-    """Exécute une lecture, ou rend le repli.
-
-    Le tableau de bord agrège cinq contextes : si l'un d'eux refuse, la direction
-    doit quand même voir les quatre autres. L'exception est avalée **ici et
-    seulement ici** — dans un agrégateur, jamais dans un calcul.
-
-    ⚠️ **Sauf une erreur de programmation** (pas 104). Une méthode qui n'existe pas, un
-    mauvais nombre d'arguments ne sont pas un contexte indisponible : ce sont des défauts du
-    code, et les avaler les rend invisibles pour toujours. C'est exactement ce qui est arrivé
-    aux demandes sans réponse, dont la composante a valu zéro sans que personne ne le voie.
-    """
-    try:
-        return lecture()
-    except (AttributeError, TypeError, NameError):
-        raise
-    except Exception:  # noqa: BLE001 — voir la docstring : c'est un agrégateur.
-        return repli
 
 
 __all__ = ["routeur"]
