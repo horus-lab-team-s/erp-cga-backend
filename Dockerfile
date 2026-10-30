@@ -49,6 +49,11 @@ RUN python -m venv "$VIRTUAL_ENV"
 
 WORKDIR /construction
 COPY pyproject.toml README.md uv.lock ./
+# ⚠️ RÉGLAGES DE PATIENCE (30 octobre 2026). Sur la liaison du poste de déploiement, un paquet de
+# PyPI a mis plus de quinze secondes à répondre : pip abandonnait (délai par défaut) et toute la
+# construction échouait, sans que rien soit faux. Les versions restent celles du verrou.
+ENV PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
 # ⚠️ 19 octobre 2026 (audit de sécurité) : `pip install .` résolvait les bornes « >= »
 # du pyproject au moment de la construction. La production recevait donc d'autres
 # versions que celles testées et auditées (`pip-audit` sur `uv.lock`). Les versions
