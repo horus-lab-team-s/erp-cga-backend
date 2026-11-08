@@ -2835,18 +2835,18 @@ localites:
   lat: 7.5278
   lon: 13.72589
   osm: way/379982028
-- nom: Mbang Sang
-  type: village
-  arrondissement: CM001005004
-  lat: 7.30124
-  lon: 13.75175
-  osm: node/3037427112
 - nom: Mbang-Mboum
   type: village
   arrondissement: CM001005004
   lat: 7.51485
   lon: 13.83816
   osm: node/2504100174
+- nom: Mbang Sang
+  type: village
+  arrondissement: CM001005004
+  lat: 7.30124
+  lon: 13.75175
+  osm: node/3037427112
 - nom: Mbaossi
   type: village
   arrondissement: CM001005004
@@ -11991,18 +11991,18 @@ localites:
   lat: 3.61111
   lon: 11.31111
   osm: node/2372666721
-- nom: Ngoumou I
-  type: village
-  arrondissement: CM002006004
-  lat: 3.60961
-  lon: 11.31857
-  osm: node/2460908238
 - nom: Ngoumou-Centre
   type: village
   arrondissement: CM002006004
   lat: 3.59977
   lon: 11.30617
   osm: node/2372666726
+- nom: Ngoumou I
+  type: village
+  arrondissement: CM002006004
+  lat: 3.60961
+  lon: 11.31857
+  osm: node/2460908238
 - nom: Nkoakom
   type: village
   arrondissement: CM002006004
@@ -15555,18 +15555,18 @@ localites:
   lat: 3.23551
   lon: 11.35199
   osm: node/2460663642
-- nom: Abang Betsenga
-  type: village
-  arrondissement: CM002010005
-  lat: 3.29622
-  lon: 11.29102
-  osm: node/2460662487
 - nom: Abang-Akongo
   type: village
   arrondissement: CM002010005
   lat: 3.37554
   lon: 11.09943
   osm: node/2460907000
+- nom: Abang Betsenga
+  type: village
+  arrondissement: CM002010005
+  lat: 3.29622
+  lon: 11.29102
+  osm: node/2460662487
 - nom: Adzap
   type: village
   arrondissement: CM002010005
@@ -32855,6 +32855,12 @@ localites:
   lat: 4.6859
   lon: 9.80715
   osm: node/3037843876
+- nom: Loum-Chantier
+  type: village
+  arrondissement: CM005001004
+  lat: 4.6986
+  lon: 9.71627
+  osm: node/2467814068
 - nom: Loum Chantier Gare
   type: village
   arrondissement: CM005001004
@@ -32867,12 +32873,6 @@ localites:
   lat: 4.68315
   lon: 9.70549
   osm: node/4461955130
-- nom: Loum-Chantier
-  type: village
-  arrondissement: CM005001004
-  lat: 4.6986
-  lon: 9.71627
-  osm: node/2467814068
 - nom: Ngondo
   type: village
   arrondissement: CM005001004
@@ -62137,18 +62137,18 @@ localites:
   lat: 4.84189
   lon: 9.13083
   osm: node/2467973115
-- nom: Dikome Balue
-  type: village
-  arrondissement: CM010006002
-  lat: 4.89927
-  lon: 9.25702
-  osm: node/2467813941
 - nom: Dikome-Balue
   type: village
   arrondissement: CM010006002
   lat: 4.77725
   lon: 9.17546
   osm: node/2467813935
+- nom: Dikome Balue
+  type: village
+  arrondissement: CM010006002
+  lat: 4.89927
+  lon: 9.25702
+  osm: node/2467813941
 - nom: Ebobe
   type: village
   arrondissement: CM010006002

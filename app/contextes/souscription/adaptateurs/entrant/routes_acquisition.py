@@ -1084,6 +1084,8 @@ class QuestionAuVisiteur(BaseModel):
     valeurs: list[ValeurProposee] = Field(default_factory=list)
     unite: str | None = None
     aide: str = ""
+    #: Vide, ou `LOCALISATION` : voir `Question.saisie`.
+    saisie: str = ""
 
 
 class QuestionnaireDuVisiteur(BaseModel):
@@ -1128,6 +1130,7 @@ def lire_les_questions_du_visiteur(service: str) -> QuestionnaireDuVisiteur:
                 ],
                 unite=q.unite,
                 aide=q.aide_visiteur,
+                saisie=q.saisie,
             )
             for q in questionnaire.pour_le_visiteur
         ],

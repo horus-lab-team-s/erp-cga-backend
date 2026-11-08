@@ -1277,13 +1277,6 @@ quartiers:
   lon: 11.46966
   osm: node/13177924724
   ville: Yaoundé
-- nom: Oyom-Abang
-  type: limite_quartier
-  arrondissement: CM002007007
-  lat: 3.87594
-  lon: 11.47044
-  osm: relation/2958528
-  ville: Yaoundé
 - nom: Cité Lima
   type: neighbourhood
   arrondissement: CM002008008
@@ -1472,19 +1465,19 @@ quartiers:
   lon: 15.02046
   osm: node/7138918326
   ville: Kousséri
-- nom: Dahbil Gon
-  type: suburb
-  arrondissement: CM004004002
-  lat: 10.11445
-  lon: 14.44743
-  osm: way/326521788
-  ville: Kaélé
 - nom: Dahbil-Doyan
   type: suburb
   arrondissement: CM004004002
   lat: 10.10829
   lon: 14.44092
   osm: way/326524805
+  ville: Kaélé
+- nom: Dahbil Gon
+  type: suburb
+  arrondissement: CM004004002
+  lat: 10.11445
+  lon: 14.44743
+  osm: way/326521788
   ville: Kaélé
 - nom: Dahbil-Lumburi
   type: suburb
@@ -1828,13 +1821,6 @@ quartiers:
   lat: 4.03148
   lon: 9.70576
   osm: node/732152105
-  ville: Douala
-- nom: New-Bell
-  type: limite_quartier
-  arrondissement: CM005004002
-  lat: 4.02544
-  lon: 9.71256
-  osm: way/476596374
   ville: Douala
 - nom: Ngangue
   type: suburb

@@ -459,9 +459,12 @@ class TestQuestionnairesDuReferentiel:
 
     def test_la_creation_demande_la_forme_juridique_en_premier(self, repertoire):
         """L'ordre compte : demander le capital social avant la forme juridique
-        fait interrompre le responsable par le client."""
+        fait interrompre le responsable par le client.
+
+        8 novembre 2026 : seule la consultation préalable la précède, à la demande du
+        cabinet (réunion du 4 novembre) : on propose de conseiller AVANT de faire choisir."""
         ordonnees = repertoire.prendre("CREATION").ordonnees
-        assert ordonnees[0].code == "forme_juridique"
+        assert [q.code for q in ordonnees[:2]] == ["consultation_prealable", "forme_juridique"]
         codes = [q.code for q in ordonnees]
         assert codes.index("associes") < codes.index("capital_social")
 

@@ -199,7 +199,7 @@ class TestParLaRoutePublique:
         assert "forme_juridique" in questions and "pages_statuts" not in questions
         # ⚠️ Rien de ce qui sert au juriste ne sort par une route publique.
         assert set(questions["forme_juridique"]) == {
-            "code", "libelle", "type", "valeurs", "unite", "aide",
+            "code", "libelle", "type", "valeurs", "unite", "aide", "saisie",
         }
         assert {"valeur": "SARL", "libelle": "SARL (plusieurs associés)"} in (
             questions["forme_juridique"]["valeurs"]

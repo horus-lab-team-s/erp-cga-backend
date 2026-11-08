@@ -218,6 +218,15 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Combien de paramètres restent à valider, donc si un chiffre produit est "
         "opposable. C'est une information sur la plateforme, pas sur un dossier."
     ),
+    # 8 novembre 2026 : la géographie du Cameroun, servie au formulaire de création du site.
+    ("GET", "/referentiel/geographie/decoupage"): (
+        "Le découpage administratif officiel (INC), publié par l'État : régions, "
+        "départements, arrondissements. Le visiteur anonyme en a besoin pour situer son siège."
+    ),
+    ("GET", "/referentiel/geographie/arrondissements/{code}/lieux"): (
+        "Les villes, localités et quartiers d'un arrondissement, tirés d'OpenStreetMap "
+        "(données ouvertes). Rien qui touche un dossier ou une personne."
+    ),
     # ── Les deux outils de développement, fermés hors démonstration ──
     ("GET", "/transverse/courriels"): (
         "La boîte aux lettres de recette. Rend 404 hors mode démonstration : voir "

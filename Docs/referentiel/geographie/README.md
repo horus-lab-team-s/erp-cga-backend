@@ -13,7 +13,7 @@ main, mais corriger la source ou le script et régénérer.
 | `decoupage.yaml` | 10 régions, 58 départements, 360 arrondissements, avec leurs codes officiels (P-codes, ex. `CM005004001`) | Institut national de cartographie (INC), publié par OCHA sur HDX (`cod-ab-cmr`, version v01 du 26 janvier 2026, CC BY-IGO) | **Officielle, complète** |
 | `villes.yaml` | 389 villes et bourgs (`city`, `town`), chacun rattaché à son arrondissement | OpenStreetMap (ODbL) ; rattachement par position sur les contours de l'INC | Bonne |
 | `localites.yaml` | 10 443 villages, chacun rattaché à son arrondissement | OpenStreetMap | Bonne, inégale selon les régions |
-| `quartiers.yaml` | 507 quartiers (points et limites `admin_level=10`), avec leur arrondissement et la ville la plus proche (Douala 96, Yaoundé 75, Ngaoundéré 56…) | OpenStreetMap | ⚠️ **PARTIELLE** |
+| `quartiers.yaml` | 505 quartiers (points et limites `admin_level=10`), avec leur arrondissement et la ville la plus proche (Douala 96, Yaoundé 75, Ngaoundéré 56…) | OpenStreetMap | ⚠️ **PARTIELLE** |
 
 ⚠️ **Aucune liste publique complète des quartiers du Cameroun n'existe** (vérifié le
 8 novembre 2026 : OpenStreetMap et GeoNames, qui n'en a que 39). Le formulaire doit donc
@@ -35,21 +35,23 @@ Un quartier porte `ville` : la ville (`city`) à moins de 15 km, à défaut le b
 
 ## Régénérer
 
-Télécharger les sources dans un dossier vide (`<src>`), puis lancer le script :
+    outils/sources-geographie.sh ~/Desktop/Gathe_finance/cga-depots/sources-geographie
+    python3 -I outils/referentiel_geographie.py \
+        --sources ~/Desktop/Gathe_finance/cga-depots/sources-geographie --sortie Docs/referentiel/geographie
 
-    # Découpage officiel : décompresser cmr_admin_boundaries.geojson.zip dans <src>/hdx/
-    https://data.humdata.org/dataset/cod-ab-cmr
+Le premier script télécharge le découpage de l'INC (HDX) et interroge l'API Overpass
+d'OpenStreetMap (villes, villages, quartiers, limites `admin_level=10`), en réessayant quand le
+serveur public répond 502 ou 504. ⚠️ Ranger les sources hors de `/tmp`, effacé au redémarrage.
 
-    # Lieux d'OpenStreetMap (API Overpass, une requête par fichier, sortie `out center tags`)
-    #   <src>/osm/villes.json             nwr(area.c)[place~"^(city|town)$"];
-    #   <src>/osm/villages.json           nwr(area.c)[place~"^(village)$"];
-    #   <src>/osm/quartiers.json          nwr(area.c)[place~"^(suburb|quarter|neighbourhood)$"];
-    #   <src>/osm/limites_quartiers.json  way(area.c)[boundary=administrative][admin_level~"^(9|10)$"][name];
-    #                                     rel(area.c)[boundary=administrative][admin_level~"^(9|10)$"][name];
-    # avec, en tête de chaque requête :
-    #   [out:json][timeout:360];area["ISO3166-1"="CM"][admin_level=2]->.c;
+Les doublons d'écriture d'un même arrondissement (« New Bell » et « New-Bell ») sont fusionnés.
 
-    python3 -I outils/referentiel_geographie.py --sources <src> --sortie Docs/referentiel/geographie
+## Lu par l'API
+
+`GET /referentiel/geographie/decoupage` (publique) rend les régions, départements et
+arrondissements ; `cle` est la valeur de la question `region_siege`.
+`GET /referentiel/geographie/arrondissements/{code}/lieux` rend les villes, localités et
+quartiers d'un arrondissement. Une ville y est proposée si elle s'y trouve **ou** si ses
+quartiers y sont (le point « Douala » est dans Douala 2e ; Bonapriso, à Douala 1er, est à Douala).
 
 ## Ce qui reste à faire (lot 1)
 

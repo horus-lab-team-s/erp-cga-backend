@@ -46,6 +46,7 @@ from app.contextes.creation_entreprise.application.tunnel import (
 )
 from app.contextes.creation_entreprise.domaine.checklist import (
     SOCIETES,
+    SituationDuFondateur,
     checklist_de,
     code_du_capital_minimum,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "TransitionInterdite",
     "abandonner",
     "avancer",
+    "SituationDuFondateur",
     "checklist_de",
     "code_du_capital_minimum",
     "convertir",

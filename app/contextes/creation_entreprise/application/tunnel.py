@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.contextes.creation_entreprise.domaine.checklist import (
+    SituationDuFondateur,
     checklist_de,
     code_du_capital_minimum,
 )
@@ -88,6 +89,7 @@ def ouvrir_dossier(
     a_la_date: date,
     capital: Decimal | None = None,
     par: str | None = None,
+    situation: SituationDuFondateur | None = None,
 ) -> DossierCreation:
     """Ouvre un dossier, avec sa checklist déjà posée.
 
@@ -115,7 +117,7 @@ def ouvrir_dossier(
         capital=capital,
         ouvert_le=a_la_date,
         etape=EtapeCreation.QUALIFICATION,
-        pieces=checklist_de(forme_juridique),
+        pieces=checklist_de(forme_juridique, situation),
         jalons=(Jalon(etape=EtapeCreation.QUALIFICATION, survenu_le=a_la_date, par=par),),
     )
 

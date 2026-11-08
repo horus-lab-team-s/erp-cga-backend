@@ -73,7 +73,9 @@ def _nom(proprietes: dict, prefixe: str) -> str:
 
 
 def _cle_de_tri(texte: str) -> str:
-    return unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode().lower()
+    """Sans accent ni casse, le tiret et l'espace confondus : « New-Bell » = « New Bell »."""
+    sans_accent = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode()
+    return " ".join(sans_accent.lower().replace("-", " ").split())
 
 
 # ── Géométrie ───────────────────────────────────────────────────────────────────

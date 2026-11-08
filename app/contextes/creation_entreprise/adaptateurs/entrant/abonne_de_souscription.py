@@ -49,6 +49,7 @@ from decimal import Decimal, InvalidOperation
 from app.contextes.creation_entreprise.api import (
     DossierCreationIntrouvable,
     Fondateur,
+    SituationDuFondateur,
     ouvrir_dossier,
 )
 from app.contextes.portefeuille.contrats import FormeJuridique
@@ -146,6 +147,8 @@ def ouvrir_le_dossier_de_creation(evenement: EvenementSortant) -> None:
         a_la_date=aujourd_hui(),
         # ⚠️ Le système, et non un collaborateur : personne n'a cliqué.
         par="système:encaissement",
+        # 8 novembre 2026 : étranger, Ordre, mines, procuration (questionnaire, version 3).
+        situation=SituationDuFondateur.depuis_les_faits(faits),
     )
     magasin.enregistrer(dossier)
     _journal.info(

@@ -29,6 +29,11 @@ from app.contextes.referentiel.adaptateurs.sortant.depots_decisions import (
     depot_des_decisions,
     vider_les_decisions,
 )
+from app.contextes.referentiel.adaptateurs.sortant.geographie import (
+    Geographie,
+    cle_de_region,
+    geographie,
+)
 from app.contextes.referentiel.application.decisions import (
     HorsDuCircuit,
     proposer_une_version,
@@ -68,6 +73,9 @@ from app.contextes.referentiel.domaine.surcouche import (
 )
 
 __all__ = [
+    "Geographie",
+    "cle_de_region",
+    "geographie",
     # Lecture
     "ServiceBaremes",
     "ServiceParametres",

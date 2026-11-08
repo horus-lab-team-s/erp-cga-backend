@@ -64,7 +64,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -159,6 +159,12 @@ class Question(BaseModel):
     aide_visiteur: str = ""
     #: Le nom lisible de chaque valeur d'un ENUM : `DE_10M_A_50M` ne se lit pas.
     libelles_valeurs: dict[str, str] = Field(default_factory=dict)
+    #: 8 novembre 2026 : la façon dont le site fait SAISIR la réponse, quand un champ ordinaire
+    #: ne suffit pas. Vide : le champ qui va avec le type. `LOCALISATION` : la cascade région ›
+    #: département › arrondissement › ville › quartier du référentiel géographique ; la
+    #: réponse est le code officiel de l'arrondissement, et le site remplit en même temps
+    #: `region_siege`, `ville_siege` et `quartier_siege` (voir `CHAMPS_DE_LA_LOCALISATION`).
+    saisie: Literal["", "LOCALISATION"] = ""
 
     @property
     def fait(self) -> Fait:
