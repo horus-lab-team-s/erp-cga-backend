@@ -87,6 +87,10 @@ from app.contextes.transverse.adaptateurs.sortant.notifications_smtp import (
     TransportSmtp,
 )
 from app.contextes.transverse.adaptateurs.sortant.portail_manuel import PortailManuel
+from app.contextes.transverse.adaptateurs.sortant.transport_brevo import (
+    CHEMIN_DU_LOGO,
+    TransportBrevo,
+)
 from app.contextes.transverse.application.authentification import verifier_session
 from app.contextes.transverse.application.autorisation import (
     Acces,
@@ -190,16 +194,27 @@ def service_de_notification() -> ServiceNotification:
             "Poser le relais SMTP, puis retirer ce réglage."
         )
         return ServiceNotificationMemoire()
-    if not reglages.smtp_hote:
-        return ServiceNotificationMemoire()
-    return ServiceNotificationSmtp(
-        transport=TransportSmtp(
+    # 8 novembre 2026 : la clé d'API de Brevo, quand elle est posée, passe avant le relais
+    # SMTP (le modèle de réglages pré-remplit l'hôte SMTP de Brevo, sans ses identifiants).
+    transport: TransportSmtp | TransportBrevo
+    if reglages.brevo_cle_api:
+        vitrine = reglages.adresse_publique_vitrine.rstrip("/")
+        transport = TransportBrevo(
+            cle_api=reglages.brevo_cle_api,
+            adresse_du_logo=f"{vitrine}{CHEMIN_DU_LOGO}" if vitrine.startswith("https://") else "",
+        )
+    elif reglages.smtp_hote:
+        transport = TransportSmtp(
             hote=reglages.smtp_hote,
             port=reglages.smtp_port,
             utilisateur=reglages.smtp_utilisateur,
             mot_de_passe=reglages.smtp_mot_de_passe,
             chiffrement=reglages.smtp_chiffrement,
-        ),
+        )
+    else:
+        return ServiceNotificationMemoire()
+    return ServiceNotificationSmtp(
+        transport=transport,
         expediteur=reglages.courriel_expediteur,
         repondre_a=reglages.courriel_repondre_a,
         adresse_site=reglages.adresse_publique_site,

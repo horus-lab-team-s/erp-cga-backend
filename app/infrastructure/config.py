@@ -328,6 +328,10 @@ class Configuration(BaseSettings):
     #: en mémoire prend le relais et retient les messages, ce qui est le mode de
     #: développement voulu. Voir `adaptateurs/sortant/notifications_smtp.py`.
     smtp_hote: str = ""
+    #: 8 novembre 2026 : la clé d'API de Brevo (`xkeysib-…`). Posée, elle REMPLACE le relais
+    #: SMTP (l'API de Brevo remet le même message) : c'est la seule clé que porte le compte
+    #: Brevo du serveur de la cliente. Voir `adaptateurs/sortant/transport_brevo.py`.
+    brevo_cle_api: str = ""
     smtp_port: int = 587
     smtp_utilisateur: str = ""
     smtp_mot_de_passe: str = ""
@@ -445,12 +449,17 @@ class Configuration(BaseSettings):
                 "CGA_PERSISTANCE doit valoir 'postgresql' : en mémoire, toutes "
                 "les écritures comptables disparaissent au redémarrage."
             )
-        if not self.smtp_hote and not self.courriels_differes:
+        if not self.smtp_hote and not self.brevo_cle_api and not self.courriels_differes:
             fautes.append(
-                "CGA_SMTP_HOTE est vide : aucun lien d'activation ne partirait, "
-                "et aucun compte ne pourrait être activé."
+                "CGA_SMTP_HOTE est vide, et CGA_BREVO_CLE_API aussi : aucun lien "
+                "d'activation ne partirait, et aucun compte ne pourrait être activé."
             )
-        if self.smtp_hote and not self.smtp_chiffrement and self.smtp_port != 465:
+        if (
+            self.smtp_hote
+            and not self.brevo_cle_api
+            and not self.smtp_chiffrement
+            and self.smtp_port != 465
+        ):
             fautes.append("CGA_SMTP_CHIFFREMENT=false expose l'authentification SMTP en clair.")
         if not self.cle_chiffrement:
             fautes.append(
