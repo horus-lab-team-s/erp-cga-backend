@@ -387,6 +387,30 @@ class Configuration(BaseSettings):
     #: ─────────────────────────────────────────────────────────────────────
     mode_demonstration: bool = False
 
+    #: 9 novembre 2026 : la PÉRIODE D'ESSAI du serveur de la cliente, avant l'ouverture.
+    #:
+    #: ─────────────────────────────────────────────────────────────────────
+    #: « Restons sur le serveur de la cliente : la solution n'est pas encore utilisée,
+    #: nous avons deux semaines pour la rendre opérationnelle. Pour les tests, des
+    #: paiements qui se valident de façon automatique. »
+    #:
+    #: ⚠️ CE N'EST PAS `mode_demonstration`, et la différence est le sujet. Celui-ci ne
+    #: touche QU'AUX PAIEMENTS : courriels, sécurité et cloisonnement restent ceux de la
+    #: production. Vrai :
+    #:   · les clés Tara sont IGNORÉES (aucun débit réel ne peut partir) ;
+    #:   · chaque paiement initié se valide seul, par le chemin d'une vraie notification ;
+    #:   · `/sante` l'annonce, et un bandeau s'affiche sur chaque écran.
+    #: Admis en production, parce que c'est là qu'on l'emploie ; mais il se déclare, il
+    #: se voit, et il se retire d'une ligne avant l'ouverture au public. Les données
+    #: d'essai sont alors à purger.
+    #: ─────────────────────────────────────────────────────────────────────
+    paiements_d_essai: bool = False
+
+    @property
+    def paiements_valides_d_office(self) -> bool:
+        """Les paiements initiés se valident-ils seuls (recette, ou période d'essai) ?"""
+        return self.mode_demonstration or self.paiements_d_essai
+
     @property
     def en_base(self) -> bool:
         """Les écritures survivent-elles au redémarrage ?

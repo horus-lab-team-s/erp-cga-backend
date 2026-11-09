@@ -172,9 +172,12 @@ class Comptoir:
         # les décisions du gérant, conservées en base et rejouées à chaque
         # lecture. Voir `CatalogueArrete`.
         self.services = CatalogueArrete(DepotServicesMemoire(), self.tarifs_fixes)
+        # ⚠️ 9 novembre 2026 : en période d'essai, les clés Tara sont ignorées — le
+        # fournisseur est simulé, aucun débit réel ne peut partir. Voir `paiements_d_essai`.
+        essai = config.paiements_d_essai
         self.fournisseur = FournisseurTara(
-            cle_api=config.tara_cle_api,
-            identifiant_marchand_tara=config.tara_identifiant_marchand,
+            cle_api="" if essai else config.tara_cle_api,
+            identifiant_marchand_tara="" if essai else config.tara_identifiant_marchand,
             adresse_publique=config.adresse_publique,
         )
         boutique = atelier()
@@ -616,7 +619,7 @@ def engager_devis(reference: str, demande: DemandeEngagement) -> Engagement:
     # La suite du parcours n'est pas court-circuitée : on emprunte exactement le
     # chemin d'une vraie notification, celui que le prestataire déclenchera. Ce
     # qui est simulé, c'est l'appel du prestataire, rien d'autre.
-    valide_d_office = configuration().mode_demonstration and not paiement.clos
+    valide_d_office = configuration().paiements_valides_d_office and not paiement.clos
     if valide_d_office:
         traiter_notification(
             {

@@ -79,9 +79,15 @@ journal = logging.getLogger(__name__)
 
 
 def _environnement_expose() -> bool:
+    """Exposé ET sans période d'essai déclarée : la simulation y est alors refusée.
+
+    9 novembre 2026 : en période d'essai (`CGA_PAIEMENTS_D_ESSAI`), le serveur de la cliente
+    simule volontairement — c'est déclaré, annoncé et affiché, pas un oubli de clé.
+    """
     from app.infrastructure.config import configuration
 
-    return configuration().en_production
+    config = configuration()
+    return config.en_production and not config.paiements_d_essai
 
 #: Voir l'en-tête : `dklo.co`, et non `taramoney.com`.
 ADRESSE_TARA = "https://www.dklo.co"
