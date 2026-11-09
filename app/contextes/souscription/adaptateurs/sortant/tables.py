@@ -40,6 +40,11 @@ __all__ = [
     "TableIdentiteFiscaleDuCabinet",
     "TableGraceDeReglement",
     "TableRegleDeDepassement",
+    "TableRegleDesVersements",
+    "TableAgendaDeCreation",
+    "TableRendezVous",
+    "TableCodeDeDossier",
+    "TableVersementDuParcours",
     "TableDevis",
     "TableReglementDHonoraires",
     "TableProforma",
@@ -479,6 +484,81 @@ class TableGraceDeReglement(Cloisonne, Document, Base):
     identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
     niu: Mapped[str] = mapped_column(String(64), nullable=False)
     jusqu_au: Mapped[date] = mapped_column(Date, nullable=False)
+
+
+class TableRegleDesVersements(Cloisonne, Document, Base):
+    """Frais de traitement par service et seuil de démarrage (9 novembre 2026) : une
+    ligne par locataire. Sans ligne : pas de frais, règlement complet. Voir
+    `domaine/versements_du_parcours.py`."""
+
+    __tablename__ = "regle_des_versements"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fixee_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableVersementDuParcours(Cloisonne, Document, Base):
+    """Les versements d'un dossier commercial (9 novembre 2026) : frais de traitement et
+    tranches de la proforma.
+
+    ⚠️ LA RÉFÉRENCE EXTERNE EST UNIQUE PAR LOCATAIRE. Un rappel d'opérateur rejoué, ou un
+    reçu de caisse saisi deux fois, ne compte pas deux versements : la base tranche.
+    """
+
+    __tablename__ = "versement_du_parcours"
+    __table_args__ = (
+        UniqueConstraint(
+            "locataire", "reference_externe", name="uq_versement_du_parcours_reference"
+        ),
+        Index("ix_versement_du_parcours_dossier", "locataire", "dossier"),
+    )
+
+    identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dossier: Mapped[str] = mapped_column(String(64), nullable=False)
+    reference_externe: Mapped[str] = mapped_column(String(160), nullable=False)
+    constate_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableAgendaDeCreation(Cloisonne, Document, Base):
+    """Les plages de rendez-vous de création (9 novembre 2026) : une ligne par locataire.
+    Sans ligne : la proposition d'ouverture (`AGENDA_PAR_DEFAUT`)."""
+
+    __tablename__ = "agenda_de_creation"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fixe_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableRendezVous(Cloisonne, Document, Base):
+    """Les rendez-vous de création (9 novembre 2026).
+
+    ⚠️ `creneau` EST LA GARDE DE LA DOUBLE RÉSERVATION. Il vaut l'heure de début tant que le
+    rendez-vous occupe son créneau, et l'identifiant une fois annulé : deux clients qui
+    cliquent sur le même créneau à la même seconde, la base tranche.
+    """
+
+    __tablename__ = "rendez_vous"
+    __table_args__ = (
+        UniqueConstraint("locataire", "creneau", name="uq_rendez_vous_creneau"),
+        Index("ix_rendez_vous_dossier", "locataire", "dossier"),
+    )
+
+    identifiant: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dossier: Mapped[str] = mapped_column(String(64), nullable=False)
+    creneau: Mapped[str] = mapped_column(String(64), nullable=False)
+    debut: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TableCodeDeDossier(Cloisonne, Document, Base):
+    """Le code court qui rattache une seconde demande à un dossier (9 novembre 2026)."""
+
+    __tablename__ = "code_de_dossier"
+    __table_args__ = (
+        UniqueConstraint("locataire", "dossier", name="uq_code_de_dossier_dossier"),
+    )
+
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    dossier: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class TableIdentiteFiscaleDuCabinet(Cloisonne, Document, Base):

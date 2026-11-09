@@ -43,6 +43,7 @@ from app.contextes.souscription.domaine.journal_de_caisse import (
 )
 from app.contextes.souscription.domaine.paiements import NaturePaiement
 from app.contextes.souscription.domaine.proforma import EtatProforma
+from app.contextes.souscription.domaine.versements_du_parcours import NatureVersement
 from app.contextes.transverse.api import AccesRequis, Permission, atelier, exiger
 from app.partage.formats import MOIS
 from app.partage.horloge import aujourd_hui, jour_a_douala
@@ -93,6 +94,35 @@ def _lignes(familles: list[FamilleDeVersement]) -> list[LigneDuJournal]:
         tara = {p.reference_reglee: p for p in paiements if p.nature is NaturePaiement.PROFORMA}
         proformas = depot_proformas()
         for dossier in depot_dossiers().lister():
+            # 9 novembre 2026 : un dossier qui a des versements enregistrés (frais de
+            # traitement, tranches) donne une ligne par versement, engagé ou non.
+            versements = boutique.versements_du_parcours.pour(dossier.reference)
+            if versements:
+                for v in versements:
+                    objet = {
+                        NatureVersement.FRAIS_DE_TRAITEMENT: (
+                            f"Frais de traitement · {dossier.service.lower()}"
+                        ),
+                        NatureVersement.PENALITE_RENDEZ_VOUS: "Pénalité · rendez-vous manqué",
+                        NatureVersement.TROP_PERCU: "Trop-perçu à restituer",
+                        NatureVersement.RESTITUTION: "Restitution d'un trop-perçu",
+                    }.get(v.nature, f"Proforma {v.proforma} · tranche")
+                    lignes.append(
+                        LigneDuJournal(
+                            le=v.constate_le,
+                            axe=AXE_DU_SERVICE.get(dossier.service, AxeDeVersement.PRESTATION),
+                            objet=objet,
+                            client=dossier.demande.nom,
+                            dossier=dossier.inscrit_sous or dossier.reference,
+                            # Une restitution sort de la caisse : elle se lit en négatif.
+                            montant=(
+                                -v.montant if v.nature is NatureVersement.RESTITUTION else v.montant
+                            ),
+                            canal=v.canal.value,
+                            reference=v.reference_externe.split(":", 1)[-1],
+                        )
+                    )
+                continue
             if dossier.etat is not EtatDossier.PAYEE:
                 continue
             vivantes = [

@@ -803,6 +803,22 @@ def creer_application() -> FastAPI:
 
     application.include_router(routeur_honoraires)
     application.include_router(routeur_reglement)
+    # 9 novembre 2026 : frais de traitement, tranches de la proforma, seuil de démarrage.
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        routeur_acquisition as routeur_versements_acquisition,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        routeur_souscription as routeur_versements_souscription,
+    )
+
+    application.include_router(routeur_versements_souscription)
+    application.include_router(routeur_versements_acquisition)
+    # 9 novembre 2026 : les rendez-vous de création, pour qui ne remplit pas seul.
+    from app.contextes.souscription.adaptateurs.entrant.routes_rendez_vous import (
+        routeur as routeur_rendez_vous,
+    )
+
+    application.include_router(routeur_rendez_vous)
     # 18 octobre 2026 : l'identité fiscale du cabinet, que la facture définitive attend.
     from app.contextes.souscription.adaptateurs.entrant.routes_facturation import (
         routeur as routeur_facturation,

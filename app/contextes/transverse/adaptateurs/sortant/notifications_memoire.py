@@ -72,6 +72,8 @@ CODES_MESSAGES: dict[str, str] = {
     # Pas 134 : entre le dépôt du formulaire et le premier appel, la cliente
     # n'avait aucune trace écrite de son geste.
     "demande.accuse_de_depot": "Accusé de réception d'une demande de contact",
+    "demande.accuse_avec_code": "Accusé de réception, avec le code de dossier et le rendez-vous",
+    "demande.rattachee": "Une demande jointe à son dossier par le code de dossier",
     # Pas 133 : une fondatrice n'a pas souscrit, elle a fait immatriculer sa
     # société — et son accès s'ouvre le jour du NIU, pas celui du paiement.
     "compte.activation_creation": (

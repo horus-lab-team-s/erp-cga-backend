@@ -333,7 +333,7 @@ class TestLaSecondePageDuCabinet:
         assert len(composition.documents_a_recevoir) == 6
         # La première et la dernière pièce : la liste est entière, pas amorcée.
         assert "Le nom de votre entreprise" in texte
-        assert "Cachet de l'entreprise" in texte
+        assert "cachet de l'entreprise, une fois celle-ci créée" in texte
         assert "Un registre de commerce" in texte
 
     def test_le_delai_et_les_moyens_de_reglement_sont_imprimes(self):

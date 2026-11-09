@@ -118,14 +118,19 @@ from app.contextes.souscription.api import (
 )
 from app.contextes.souscription.application.encaissement_du_parcours import (
     EncaissementRefuse,
-    encaisser_l_acceptation,
     ouvre_un_locataire,
+)
+from app.contextes.souscription.domaine.code_de_dossier import (
+    CodeDeDossier,
+    normaliser_le_code,
+    nouveau_code,
 )
 from app.contextes.souscription.domaine.proforma import (
     EtatProforma,
     Proforma,
 )
 from app.contextes.souscription.domaine.rappels import RappelDejaFait
+from app.contextes.souscription.domaine.rendez_vous import ModeRendezVous
 from app.contextes.tenants.api import (
     NOM_SAGA,
     NomsReservesIndisponibles,
@@ -227,6 +232,20 @@ class DepotDeDemande(BaseModel):
     #: Les réponses aux questions que le site a posées, par code. Facultatives,
     #: toutes. Voir `Question.visiteur`.
     declarations: dict[str, str] = Field(default_factory=dict)
+    #: 9 novembre 2026 : « je préfère un rendez-vous ». Exige une adresse électronique : le
+    #: code de dossier et la confirmation partent par courriel.
+    rendez_vous: RendezVousDemande | None = None
+    #: 9 novembre 2026 : « j'ai déjà payé les frais » — le code reçu par courriel. La demande
+    #: rejoint alors ce dossier, avec tous les frais déjà versés.
+    code_de_dossier: str | None = Field(default=None, max_length=20)
+
+
+class RendezVousDemande(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: ModeRendezVous
+    #: L'heure de début, à Douala, choisie parmi `GET /acquisition/rendez-vous/creneaux`.
+    debut: datetime
 
 
 def _exiger_un_service_du_catalogue(code: str) -> None:
@@ -329,10 +348,28 @@ class AccuseDeDemande(BaseModel):
     #: formulaire, juste après l'envoi. ⚠️ OPAQUE : il porte la référence du dossier
     #: chiffrée, et la référence elle-même ne circule toujours pas.
     jeton_de_pieces: str | None = None
+    #: 9 novembre 2026 : les frais de traitement du service, s'il en a, et de quoi les
+    #: régler depuis la page d'après l'envoi. Ils seront déduits du total de la proforma.
+    frais_de_traitement: Decimal | None = None
+    jeton_de_frais: str | None = None
+    #: 9 novembre 2026 : la demande a rejoint un dossier existant par son code de dossier.
+    rattachee: bool = False
+    #: Les frais déjà versés sur ce dossier (au rendez-vous, au guichet…) : rien à repayer.
+    frais_deja_verses: Decimal = Decimal(0)
+    #: Le rendez-vous pris, s'il y en a un.
+    rendez_vous: RendezVousPris | None = None
+
+
+class RendezVousPris(BaseModel):
+    mode: ModeRendezVous
+    debut: datetime
+    fin: datetime
 
 
 #: L'usage du sceau qui ouvre l'ajout de pièces à une demande. Voir `partage/sceau`.
 _USAGE_PIECES = "pieces-de-demande"
+#: L'usage du sceau qui ouvre le règlement des frais de traitement d'une demande.
+_USAGE_FRAIS = "frais-de-traitement"
 #: Ce qu'une pièce jointe à une demande peut peser, et ce qu'elle peut être.
 _TAILLE_MAXIMALE_PIECE = 10 * 1024 * 1024
 _TYPES_DE_PIECE = frozenset({"application/pdf", "image/jpeg", "image/png"})
@@ -362,10 +399,15 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
     """
     referentiel = referentiel_d_acquisition()
     instant = maintenant()
+    demande = _construire_la_demande(corps, instant)
+    return _ranger_la_demande(corps, demande, instant, referentiel)[0]
+
+
+def _construire_la_demande(corps, instant, *, origine: str | None = None) -> DemandeDeContact:
     try:
         # ⚠️ Avant tout le reste : un code inconnu ne doit pas créer de dossier.
         _exiger_un_service_du_catalogue(corps.service_souhaite)
-        demande = DemandeDeContact(
+        return DemandeDeContact(
             identifiant=_reference("dc"),
             deposee_le=instant,
             nom=corps.nom,
@@ -379,16 +421,107 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
                 recueilli_le=instant,
                 version_du_texte=corps.version_du_texte,
             ),
-            origine=corps.origine,
+            origine=origine or corps.origine,
             declarations=corps.declarations,
         )
     except (NumeroInvalide, ValueError) as echec:
         raise HTTPException(status_code=422, detail=message_lisible(echec)) from echec
 
-    depot = deposer_une_demande(
-        demande, depot_dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
+
+class DemandeSaisieAuCabinet(BaseModel):
+    reference: str
+    accuse: AccuseDeDemande
+
+
+@routeur.post(
+    "/demandes/au-cabinet",
+    status_code=201,
+    summary="Saisir la demande d'un client venu au cabinet (le responsable, à sa place)",
+    responses={403: {"description": "Habilitation insuffisante"}},
+)
+def saisir_une_demande_au_cabinet(
+    acces: AccesRequis, corps: DepotDeDemande
+) -> DemandeSaisieAuCabinet:
+    """9 novembre 2026 : « le responsable de la création doit pouvoir saisir les informations
+    des personnes de façon manuelle ». Le même rangement que le formulaire public — doublon,
+    code de dossier, rendez-vous, frais —, l'origine en plus : `cabinet`, et qui l'a saisie
+    au journal. Il complète ensuite la qualification depuis la fiche du dossier.
+    """
+    exiger(acces, Permission.QUALIFIER_PROSPECT)
+    instant = maintenant()
+    demande = _construire_la_demande(corps, instant, origine="cabinet")
+    accuse, reference = _ranger_la_demande(corps, demande, instant, referentiel_d_acquisition())
+    from app.contextes.transverse.api import atelier
+
+    atelier().journal.ajouter(
+        horodatage=instant,
+        acteur=acces.compte,
+        action="demande.saisie_au_cabinet",
+        objet_type="dossier_commercial",
+        objet_id=reference,
+        apres={"service": demande.service_souhaite},
     )
-    _preremplir_la_qualification(depot.dossier.reference, demande, instant)
+    return DemandeSaisieAuCabinet(reference=reference, accuse=accuse)
+
+
+def _ranger_la_demande(corps, demande, instant, referentiel) -> tuple[AccuseDeDemande, str]:
+    """Range la demande, prend le rendez-vous ; rend l'accusé et la référence du dossier."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_rendez_vous import (
+        prendre_un_rendez_vous,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+        situation_des_versements_de,
+    )
+
+    if corps.rendez_vous is not None and not (demande.courriel or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Une adresse électronique est nécessaire pour un rendez-vous : la "
+                "confirmation et votre code de dossier vous y sont envoyés."
+            ),
+        )
+    boutique = comptoir()
+    dossiers = depot_dossiers()
+    rattachee = False
+    if corps.code_de_dossier:
+        # « J'ai déjà payé les frais » : la demande rejoint le dossier du code.
+        trouve = boutique.codes_de_dossier.lire(normaliser_le_code(corps.code_de_dossier))
+        try:
+            existant = dossiers.lire(trouve.dossier) if trouve else None
+            if existant is None:
+                raise DossierIntrouvable("code inconnu")
+            dossier = existant.rattacher(demande)
+        except (DossierIntrouvable, TransitionDossierRefusee) as refus:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Ce code de dossier ne correspond à aucune demande en cours : vérifiez-le "
+                    "dans le courriel du cabinet, ou laissez le champ vide."
+                ),
+            ) from refus
+        dossiers.enregistrer(dossier)
+        rattachee = True
+    else:
+        dossier = deposer_une_demande(
+            demande, dossiers, reference=_reference("dos"), boite=boite_d_envoi()
+        ).dossier
+    _preremplir_la_qualification(dossier.reference, demande, instant)
+
+    rdv = None
+    if corps.rendez_vous is not None:
+        rdv = prendre_un_rendez_vous(
+            dossier.reference, corps.rendez_vous.mode, corps.rendez_vous.debut
+        )
+    if boutique.codes_de_dossier.du_dossier(dossier.reference) is None:
+        boutique.codes_de_dossier.enregistrer(
+            CodeDeDossier(code=nouveau_code(), dossier=dossier.reference, cree_le=instant)
+        )
+    if rattachee:
+        # Pas de nouvel événement de dépôt : on écrit tout de suite la confirmation.
+        _confirmer_le_rattachement(dossier, rdv)
 
     repli = canal_a_employer(
         demande.canal_prefere,
@@ -397,13 +530,239 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
         a_un_courriel=demande.courriel is not None,
         messagerie_prete=bool(referentiel["modeles"].envoyables()),
     )
-    return AccuseDeDemande(
+    frais = regle_des_versements().frais_de(dossier.service)
+    deja = situation_des_versements_de(dossier).frais_verses
+    accuse = AccuseDeDemande(
         canal_de_rappel=repli.canal,
-        message="Votre demande est enregistrée. Un responsable vous recontacte.",
+        message=(
+            "Votre demande est jointe à votre dossier. Un responsable vous recontacte."
+            if rattachee
+            else "Votre demande est enregistrée. Un responsable vous recontacte."
+        ),
         jeton_de_pieces=jeton_opaque(
-            depot.dossier.reference, secret=_secret_des_pieces(), usage=_USAGE_PIECES
+            dossier.reference, secret=_secret_des_pieces(), usage=_USAGE_PIECES
+        ),
+        frais_de_traitement=frais,
+        # ⚠️ Des frais déjà versés ne se redemandent pas : pas de jeton pour les payer.
+        jeton_de_frais=(
+            jeton_opaque(dossier.reference, secret=_secret_des_pieces(), usage=_USAGE_FRAIS)
+            if frais is not None and deja == 0
+            else None
+        ),
+        rattachee=rattachee,
+        frais_deja_verses=deja,
+        rendez_vous=(
+            RendezVousPris(mode=rdv.mode, debut=rdv.debut, fin=rdv.fin) if rdv else None
         ),
     )
+    return accuse, dossier.reference
+
+
+def _confirmer_le_rattachement(dossier, rdv) -> None:
+    """Le courriel d'une demande rattachée par son code. Un échec d'envoi ne la perd pas."""
+    courriel = (dossier.derniere_demande.courriel or dossier.demande.courriel or "").strip()
+    if not courriel:
+        return
+    from app.contextes.transverse.api import service_de_notification
+
+    demande = dossier.demande
+    try:
+        service_de_notification().envoyer(
+            "demande.rattachee",
+            destinataire=courriel,
+            contexte={
+                "prenom": demande.nom,
+                "rendez_vous": phrase_du_rendez_vous(rdv),
+            },
+        )
+    except Exception:  # noqa: BLE001 — la demande est rangée ; le courriel n'est qu'un écho
+        _journal_acceptation.warning("dossier %s : confirmation non envoyée.", dossier.reference)
+
+
+def phrase_du_rendez_vous(rdv) -> str:
+    """« Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, au cabinet. » Ou vide."""
+    if rdv is None:
+        return ""
+    jours = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+    mois = (
+        "janvier", "février", "mars", "avril", "mai", "juin",
+        "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    )
+    d = rdv.debut
+    ou = (
+        "au cabinet"
+        if rdv.mode is ModeRendezVous.PRESENTIEL
+        else "en ligne (le lien vous sera envoyé)"
+    )
+    return (
+        f"Votre rendez-vous : {jours[d.weekday()]} {d.day} {mois[d.month - 1]} {d.year} "
+        f"à {d.hour} h {d.minute:02d}, {ou}. Un rendez-vous manqué peut être pénalisé."
+    )
+
+
+# ── Les frais de traitement, depuis la page d'après l'envoi (9 novembre 2026) ─────
+
+
+class JetonDeFrais(BaseModel):
+    jeton: str = Field(min_length=16, max_length=256)
+
+
+class FraisDeLaDemande(BaseModel):
+    """Ce que la page du visiteur affiche. Rien d'interne : ni référence, ni nom."""
+
+    montant: Decimal | None
+    verses: bool
+
+
+class FraisAPayer(JetonDeFrais):
+    #: Le numéro à débiter. Vide : celui que le visiteur a donné à sa demande.
+    telephone: str = Field(default="", max_length=30)
+
+
+class PaiementDesFraisDemande(BaseModel):
+    #: L'opérateur a accepté d'envoyer la demande. ⚠️ Ce n'est PAS un paiement.
+    accepte: bool
+    message: str
+    telephone: str
+    simule: bool
+    montant: Decimal
+
+
+def _dossier_du_jeton_de_frais(jeton: str):
+    try:
+        reference = dechiffrer_la_reference(jeton, secret=_secret_des_pieces(), usage=_USAGE_FRAIS)
+        return depot_dossiers().lire(reference)
+    except (SceauInvalide, DossierIntrouvable) as refus:
+        raise HTTPException(
+            status_code=404,
+            detail="Ce lien ne s'ouvre pas : rechargez le formulaire, ou écrivez au cabinet.",
+        ) from refus
+
+
+@routeur.post(
+    "/demandes/frais-de-traitement/etat",
+    summary="Les frais de traitement d'une demande : montant, et s'ils sont versés (publique)",
+    responses={404: {"description": "Jeton faux ou demande inconnue : le même refus"}},
+)
+def lire_les_frais_de_la_demande(corps: JetonDeFrais) -> FraisDeLaDemande:
+    """⚠️ Le jeton dans le corps, pas dans l'adresse : une adresse finit dans les journaux."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+        situation_des_versements_de,
+    )
+
+    dossier = _dossier_du_jeton_de_frais(corps.jeton)
+    return FraisDeLaDemande(
+        montant=regle_des_versements().frais_de(dossier.service),
+        verses=situation_des_versements_de(dossier).frais_verses > 0,
+    )
+
+
+@routeur.post(
+    "/demandes/frais-de-traitement/paiement-en-ligne",
+    status_code=202,
+    summary="Régler les frais de traitement d'une demande par mobile money (publique)",
+    responses={
+        404: {"description": "Jeton faux ou demande inconnue : le même refus"},
+        409: {"description": "Pas de frais pour ce service, ou déjà versés"},
+        422: {"description": "Numéro inexploitable"},
+    },
+)
+def payer_les_frais_en_ligne(corps: FraisAPayer) -> PaiementDesFraisDemande:
+    """Publique, et fermée par le jeton de l'accusé : sans lui, personne ne fait sonner le
+    téléphone de personne. Le versement est constaté par l'opérateur, jamais par la page."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+        situation_des_versements_de,
+    )
+
+    dossier = _dossier_du_jeton_de_frais(corps.jeton)
+    montant = regle_des_versements().frais_de(dossier.service)
+    if montant is None:
+        raise HTTPException(status_code=409, detail="Ce service n'a pas de frais de traitement.")
+    if situation_des_versements_de(dossier).frais_verses > 0:
+        raise HTTPException(status_code=409, detail="Les frais de traitement sont déjà versés.")
+    try:
+        telephone = normaliser_telephone(corps.telephone or dossier.demande.telephone)
+    except NumeroInvalide as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
+
+    boutique = comptoir()
+    paiement = Paiement(
+        identifiant=f"pay-{uuid.uuid4().hex[:16]}",
+        nature=NaturePaiement.FRAIS_DE_TRAITEMENT,
+        reference_reglee=dossier.reference,
+        cle_idempotence=nouvelle_cle_idempotence(),
+        montant=montant,
+        telephone=telephone,
+        initie_le=maintenant(),
+    )
+    # ⚠️ On écrit avant d'appeler : voir `solliciter_le_telephone`.
+    boutique.paiements.enregistrer(paiement)
+    initiation = boutique.fournisseur.initier(
+        montant=paiement.montant,
+        telephone=paiement.telephone,
+        cle_idempotence=paiement.cle_idempotence,
+        libelle=f"Frais de traitement · {dossier.service}",
+    )
+    if initiation.reference_externe:
+        boutique.paiements.enregistrer(paiement.avec_reference(initiation.reference_externe))
+    valider_d_office_en_recette(paiement.identifiant)
+    return PaiementDesFraisDemande(
+        accepte=initiation.accepte,
+        message=initiation.message,
+        telephone=f"…{telephone[-4:]}",
+        simule=bool(boutique.fournisseur.simule),
+        montant=montant,
+    )
+
+
+def valider_d_office_en_recette(identifiant_paiement: str) -> bool:
+    """En mode recette, le paiement initié se valide seul. Rend vrai s'il l'a fait.
+
+    ─────────────────────────────────────────────────────────────────────────
+    9 NOVEMBRE 2026 : « pour les tests, active les validations de paiement automatiques »
+
+    ⚠️ LA MÊME RÈGLE QUE L'ABONNEMENT EN LIGNE (`routes_http.engager_une_souscription`) : ce
+    raccourci n'existe QUE sous `CGA_MODE_DEMONSTRATION`, drapeau déclaré que la production
+    refuse au démarrage, et seulement quand le fournisseur est simulé (sans clé Tara). Il ne
+    se déduit jamais d'une clé absente.
+
+    ⚠️ RIEN N'EST COURT-CIRCUITÉ : on emprunte le chemin d'une vraie notification de
+    l'opérateur (`traiter_notification`), donc le rapprochement, la vérification du
+    montant, la suite de la nature (frais, tranche) et le trop-perçu. Seul l'appel de
+    l'opérateur est simulé.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    if not configuration().mode_demonstration:
+        return False
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.application.encaissement import traiter_notification
+
+    boutique = comptoir()
+    if not boutique.fournisseur.simule:
+        return False
+    paiement = boutique.paiements.lire(identifiant_paiement)
+    if paiement.clos:
+        return False
+    traiter_notification(
+        {
+            "productId": paiement.cle_idempotence,
+            "paymentId": f"DEMONSTRATION-{paiement.identifiant}",
+            "status": "SUCCESS",
+            "amount": str(paiement.montant),
+            "phoneNumber": paiement.telephone,
+            "message": "validé d'office — mode démonstration",
+        },
+        fournisseur=boutique.fournisseur,
+        paiements=boutique.paiements,
+        suites=boutique.suites,
+        journal=boutique.journal,
+        a_l_instant=maintenant(),
+        confirmer=False,  # mode démonstration : aucun prestataire à interroger
+    )
+    return True
 
 
 class PieceAccueillie(BaseModel):
@@ -2264,6 +2623,8 @@ class DemandeDeReglement(BaseModel):
     #: Le numéro à débiter. Vide, on emploie celui de la demande d'origine, qui
     #: est celui que le client a lui-même donné.
     telephone: str = ""
+    #: 9 novembre 2026 : une tranche. Absent : tout le reste à payer.
+    montant: Decimal | None = Field(default=None, gt=0)
 
 
 class ReglementDemande(BaseModel):
@@ -2287,6 +2648,7 @@ def solliciter_le_telephone(
     depot,
     slug: str | None,
     telephone_demande: str,
+    montant: Decimal | None = None,
 ) -> ReglementDemande:
     """Crée le paiement et demande le débit sur le téléphone du client.
 
@@ -2300,12 +2662,31 @@ def solliciter_le_telephone(
     # ⚠️ L'état est vérifié **ici**, avant de solliciter le téléphone du client.
     # Demander un débit sur un dossier qui n'a pas accepté ferait sonner le
     # téléphone de quelqu'un qui ne s'est engagé à rien.
-    if dossier.etat is not EtatDossier.ACCEPTEE:
+    if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
         raise HTTPException(
             status_code=409,
             detail=(
                 f"dossier {dossier.reference} à l'état {dossier.etat} : le règlement "
                 "se demande après l'acceptation de la proforma, et pas avant."
+            ),
+        )
+    # 9 novembre 2026 : une tranche, ou tout le reste. Un dossier engagé (PAYÉE) se
+    # règle encore tant qu'il n'est pas soldé.
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        situation_des_versements_de,
+    )
+
+    situation = situation_des_versements_de(dossier)
+    if situation.solde or not situation.reste:
+        raise HTTPException(
+            status_code=409, detail="Cette proposition est déjà réglée : il n'y a rien à payer."
+        )
+    a_payer = montant if montant is not None else situation.reste
+    if a_payer > situation.reste:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{a_payer} FCFA dépasse le reste à payer ({situation.reste} FCFA)."
             ),
         )
 
@@ -2334,7 +2715,7 @@ def solliciter_le_telephone(
         nature=NaturePaiement.PROFORMA,
         reference_reglee=proforma.numero,
         cle_idempotence=nouvelle_cle_idempotence(),
-        montant=proforma.tarif.montant,
+        montant=a_payer,
         telephone=telephone,
         initie_le=maintenant(),
     )
@@ -2356,6 +2737,8 @@ def solliciter_le_telephone(
         boutique.paiements.enregistrer(
             paiement.avec_reference(initiation.reference_externe)
         )
+    # 9 novembre 2026 : en recette, la tranche se valide seule (voir la fonction).
+    valider_d_office_en_recette(paiement.identifiant)
 
     return ReglementDemande(
         dossier=dossier.reference,
@@ -2445,7 +2828,9 @@ def demander_le_reglement(
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    return solliciter_le_telephone(proforma, dossier, depot, corps.slug, corps.telephone)
+    return solliciter_le_telephone(
+        proforma, dossier, depot, corps.slug, corps.telephone, corps.montant
+    )
 
 
 class ReglementDeCaisse(BaseModel):
@@ -2468,6 +2853,17 @@ class ReglementDeCaisse(BaseModel):
     payee_le: datetime | None = None
     #: Vrai seulement pour l'offre qui ouvre un espace : une adresse est alors due.
     ouvre_un_espace: bool = False
+    #: 9 novembre 2026 : les tranches. `montant` est le reste à payer tant que la
+    #: proforma n'est pas soldée, son total ensuite.
+    total: Decimal | None = None
+    paye: Decimal = Decimal(0)
+    reste: Decimal | None = None
+    #: Le seuil de démarrage est atteint : le cabinet travaille.
+    engage: bool = False
+    #: 9 novembre 2026 : `PROFORMA` ; `FRAIS_DE_TRAITEMENT`, des frais attendus avant toute
+    #: proforma ; `PENALITE_RENDEZ_VOUS`, une pénalité due ; `TROP_PERCU`, de l'argent reçu
+    #: de l'opérateur à restituer au client. `proforma` est vide pour les trois derniers.
+    objet: str = "PROFORMA"
 
 
 @routeur.get(
@@ -2497,10 +2893,73 @@ def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
     # 18 octobre 2026 : la matrice peut retirer cette famille de la vue de la caisse.
     exiger(acces, Permission.VOIR_VERSEMENTS_COMMERCE)
     proformas = depot_proformas()
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+    )
+    from app.contextes.souscription.application.versements import (
+        proforma_a_regler,
+        situation_du_dossier,
+    )
+
+    versements = comptoir().versements_du_parcours
+    regle = regle_des_versements()
     dus: list[tuple[datetime, ReglementDeCaisse]] = []
     regles: list[tuple[datetime, ReglementDeCaisse]] = []
+    from app.contextes.souscription.adaptateurs.entrant.routes_rendez_vous import penalite_due
+
     for dossier in depot_dossiers().lister():
+        # 9 novembre 2026 : ce que la caisse doit recevoir ou rendre, hors proforma.
+        situation_hors = situation_du_dossier(
+            dossier,
+            proforma_a_regler(proformas.par_dossier(dossier.reference)),
+            versements.pour(dossier.reference),
+            regle,
+        )
+        for objet, montant in (
+            ("PENALITE_RENDEZ_VOUS", penalite_due(dossier.reference, situation_hors)),
+            ("TROP_PERCU", situation_hors.trop_percu),
+        ):
+            if montant > 0:
+                dus.append(
+                    (
+                        dossier.depuis_le,
+                        ReglementDeCaisse(
+                            dossier=dossier.reference,
+                            client=dossier.demande.nom,
+                            telephone=dossier.demande.telephone,
+                            service=dossier.service,
+                            proforma="",
+                            montant=montant,
+                            etat="A_ENCAISSER" if objet != "TROP_PERCU" else "A_RESTITUER",
+                            objet=objet,
+                        ),
+                    )
+                )
         if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
+            # 9 novembre 2026 : les frais de traitement attendus d'une demande encore en
+            # cours (ni acceptée, ni classée) : la caisse les reçoit au guichet.
+            frais = regle.frais_de(dossier.service)
+            if (
+                frais is not None
+                and dossier.etat is not EtatDossier.SANS_SUITE
+                and not versements.pour(dossier.reference)
+            ):
+                dus.append(
+                    (
+                        dossier.depuis_le,
+                        ReglementDeCaisse(
+                            dossier=dossier.reference,
+                            client=dossier.demande.nom,
+                            telephone=dossier.demande.telephone,
+                            service=dossier.service,
+                            proforma="",
+                            montant=frais,
+                            etat="A_ENCAISSER",
+                            objet="FRAIS_DE_TRAITEMENT",
+                        ),
+                    )
+                )
             continue
         # ⚠️ C'est l'ÉTAT DU DOSSIER qui dit qu'un règlement est dû, pas celui
         # de la proforma. Un dossier accepté par téléphone, ou repris d'un
@@ -2517,18 +2976,25 @@ def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
         proforma = max(
             vivantes, key=lambda p: (p.etat is EtatProforma.ACCEPTEE, p.version)
         )
+        situation = situation_du_dossier(
+            dossier, proforma, versements.pour(dossier.reference), regle
+        )
         ligne = ReglementDeCaisse(
             dossier=dossier.reference,
             client=dossier.demande.nom,
             telephone=dossier.demande.telephone,
             service=proforma.service,
             proforma=proforma.numero,
-            montant=proforma.tarif.montant,
-            etat="ENCAISSE" if dossier.etat is EtatDossier.PAYEE else "A_ENCAISSER",
+            montant=proforma.tarif.montant if situation.solde else situation.reste,
+            etat="ENCAISSE" if situation.solde else "A_ENCAISSER",
             payee_le=dossier.payee_le,
             ouvre_un_espace=ouvre_un_locataire(proforma.service),
+            total=situation.total,
+            paye=situation.paye,
+            reste=situation.reste,
+            engage=dossier.etat is EtatDossier.PAYEE,
         )
-        if dossier.etat is EtatDossier.PAYEE:
+        if situation.solde:
             regles.append((dossier.payee_le or dossier.depuis_le, ligne))
         else:
             dus.append((dossier.depuis_le, ligne))
@@ -2553,6 +3019,10 @@ class DemandeDEncaissement(BaseModel):
     #: La référence du prestataire de paiement. ⚠️ Conservée pour le rapprochement
     #: comptable, jamais employée comme preuve : c'est le rapprochement qui fait foi.
     reference_externe: str = Field(default="", max_length=120)
+    #: 9 novembre 2026 : une tranche versée au guichet. Absent : tout le reste à payer.
+    #: ⚠️ Une tranche exige le numéro du reçu (`reference_externe`) : sans lui, un double
+    #: clic compterait deux fois le même versement.
+    montant: Decimal | None = Field(default=None, gt=0)
 
 
 class EncaissementConfirme(BaseModel):
@@ -2635,35 +3105,101 @@ def encaisser(
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
+    # 9 novembre 2026 : le guichet reçoit une tranche, ou tout le reste ; le dossier est
+    # engagé quand le seuil de démarrage est atteint. Voir `application/versements.py`.
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+    )
+    from app.contextes.souscription.application.versements import (
+        engager_si_le_seuil_est_atteint,
+        recevoir_un_versement,
+        situation_du_dossier,
+    )
+    from app.contextes.souscription.domaine.honoraires import CanalDeReglement
+    from app.contextes.souscription.domaine.versements_du_parcours import (
+        NatureVersement,
+        VersementDejaRecu,
+        VersementRefuse,
+    )
+
+    if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"dossier {dossier.reference} à l'état {dossier.etat} : l'encaissement "
+                "suit l'acceptation de la proforma."
+            ),
+        )
+    if corps.montant is not None and not corps.reference_externe.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Une tranche au guichet porte le numéro de son reçu de caisse.",
+        )
+    versements = comptoir().versements_du_parcours
+    regle = regle_des_versements()
+    situation = situation_du_dossier(dossier, proforma, versements.pour(dossier.reference), regle)
+    instant = maintenant()
+
+    def _confirme(d, *, rejeu: bool, engage: bool) -> EncaissementConfirme:
+        return EncaissementConfirme(
+            dossier=d.reference,
+            etat=d.etat.value,
+            tenant=f"tnt-{adresse}" if engage and adresse else None,
+            slug=adresse if engage else None,
+            rejeu=rejeu,
+        )
+
     try:
-        resultat = encaisser_l_acceptation(
-            dossier,
-            proforma,
+        if situation.solde or not situation.reste:
+            # Rien à recevoir : soldé (rejeu d'une confirmation), ou couvert par les
+            # frais de traitement. S'il reste à engager, on engage.
+            engagement = engager_si_le_seuil_est_atteint(
+                dossier, proforma, situation, boite=boite_du_parcours(),
+                a_l_instant=instant, reference_externe=corps.reference_externe,
+                slug=adresse or "",
+            )
+            if engagement is None:
+                return _confirme(dossier, rejeu=True, engage=False)
+            if not engagement.rejeu:
+                depot.enregistrer(engagement.dossier)
+            return _confirme(engagement.dossier, rejeu=engagement.rejeu, engage=True)
+
+        montant = corps.montant if corps.montant is not None else situation.reste
+        reference = (
+            f"guichet:{corps.reference_externe.strip()}"
+            if corps.reference_externe.strip()
+            # Tout le reste, sans reçu : la clé dit « ce reste-là », et un double clic
+            # tombe sur la même.
+            else f"guichet-solde:{proforma.numero}:{situation.paye}"
+        )
+        resultat = recevoir_un_versement(
+            dossier=dossier,
+            proforma=proforma,
+            versements=versements,
+            regle=regle,
+            nature=NatureVersement.TRANCHE,
+            montant=montant,
+            canal=CanalDeReglement.GUICHET,
+            reference_externe=reference,
+            constate_par=acces.compte,
+            a_l_instant=instant,
             boite=boite_du_parcours(),
             slug=adresse or "",
-            tenant=f"tnt-{adresse}" if adresse else "",
-            a_l_instant=maintenant(),
-            # ⚠️ L'identifiant dérive du **dossier**, non d'un tirage : le relais
-            # garantit « au moins une fois », et deux confirmations du même
-            # encaissement doivent porter le même événement.
-            identifiant_evenement=f"enc-{dossier.reference}",
-            reference_externe=corps.reference_externe,
         )
+    except VersementDejaRecu:
+        return _confirme(dossier, rejeu=True, engage=False)
+    except VersementRefuse as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
     except EncaissementRefuse as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     except TransitionDossierRefusee as echec:
         raise HTTPException(status_code=409, detail=str(echec)) from echec
 
-    if not resultat.rejeu:
-        depot.enregistrer(resultat.dossier)
-
-    return EncaissementConfirme(
-        dossier=resultat.dossier.reference,
-        etat=resultat.dossier.etat.value,
-        tenant=None if resultat.rejeu or not adresse else f"tnt-{adresse}",
-        slug=None if resultat.rejeu else adresse,
-        rejeu=resultat.rejeu,
-    )
+    engagement = resultat.engagement
+    if engagement is not None and not engagement.rejeu:
+        depot.enregistrer(engagement.dossier)
+    return _confirme(resultat.dossier, rejeu=False, engage=engagement is not None)
 
 
 

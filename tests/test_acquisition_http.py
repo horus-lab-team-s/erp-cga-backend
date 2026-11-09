@@ -230,6 +230,11 @@ class TestMontage:
         chemins = client.get("/openapi.json").json()["paths"]
         acquisition = sorted(c for c in chemins if c.startswith("/acquisition"))
         assert acquisition == [
+            # 9 novembre 2026 : PROTÉGÉES. L'agenda des rendez-vous de création, tenu par le
+            # responsable (`QUALIFIER_PROSPECT`) : il ferme ce qui ne lui convient pas.
+            "/acquisition/agenda",
+            "/acquisition/agenda/fermetures",
+            "/acquisition/agenda/reouvertures",
             # 14 octobre 2026 : PROTÉGÉE par `ENCAISSER`. Ce que la responsable
             # de caisse voit : les règlements dus et ceux qui sont constatés.
             "/acquisition/caisse",
@@ -238,6 +243,12 @@ class TestMontage:
             # l'écran ne recopie pas la liste des compositions.
             "/acquisition/compositions-proforma",
             "/acquisition/demandes",
+            # 9 novembre 2026 : PUBLIQUES, par le jeton opaque des frais de l'accusé.
+            # 9 novembre 2026 : PROTÉGÉE par `QUALIFIER_PROSPECT`. Le responsable saisit la
+            # demande d'un client venu au cabinet.
+            "/acquisition/demandes/au-cabinet",
+            "/acquisition/demandes/frais-de-traitement/etat",
+            "/acquisition/demandes/frais-de-traitement/paiement-en-ligne",
             # 19 octobre 2026 (point 22) : PUBLIQUE, par le jeton opaque de l'accusé.
             "/acquisition/demandes/pieces",
             "/acquisition/devis/{reference}/rappel",
@@ -246,6 +257,8 @@ class TestMontage:
             "/acquisition/dossiers/{reference}",
             "/acquisition/dossiers/{reference}/affectation",
             "/acquisition/dossiers/{reference}/chiffrage",
+            # 9 novembre 2026 : PROTÉGÉE par `ENCAISSER`. Des frais versés au guichet.
+            "/acquisition/dossiers/{reference}/frais-de-traitement/encaissement",
             # 16 octobre 2026 : PROTÉGÉE par `INSCRIRE_STATUT`, avec motif. L'entreprise
             # existante d'un dossier payé entre au portefeuille.
             "/acquisition/dossiers/{reference}/inscription",
@@ -255,6 +268,8 @@ class TestMontage:
             # d'exploitation sur un client identifié : `LIRE_PROSPECT`.
             "/acquisition/dossiers/{reference}/ouverture",
             # 19 octobre 2026 (point 22) : PROTÉGÉE par `LIRE_PROSPECT`.
+            # 9 novembre 2026 : PROTÉGÉE par `ENCAISSER`. La pénalité d'un rendez-vous manqué.
+            "/acquisition/dossiers/{reference}/penalite/encaissement",
             "/acquisition/dossiers/{reference}/pieces/{empreinte}",
             # Pas 137 : le seul geste qui engage l'échange sans qualification.
             "/acquisition/dossiers/{reference}/premier-contact",
@@ -264,6 +279,10 @@ class TestMontage:
             # Pas 150 : corriger le service après l'échange, sans réécrire ce
             # que la visiteuse a demandé.
             "/acquisition/dossiers/{reference}/service",
+            # 9 novembre 2026 : PROTÉGÉE par `ENCAISSER`, avec motif. Un trop-perçu rendu.
+            "/acquisition/dossiers/{reference}/trop-percu/restitution",
+            # 9 novembre 2026 : PROTÉGÉE par `LIRE_PROSPECT` ou `ENCAISSER`. Payé, reste.
+            "/acquisition/dossiers/{reference}/versements",
             # 16 octobre 2026 : PROTÉGÉE par `INSCRIRE_STATUT`. Les payées à inscrire.
             "/acquisition/inscriptions/en-attente",
             "/acquisition/motifs-de-classement",
@@ -291,6 +310,12 @@ class TestMontage:
             "/acquisition/rappels/{identifiant}/fait",
             # Pas 93 : protégée par LIRE_PROSPECT, source de la recherche globale.
             "/acquisition/recherche",
+            # 9 novembre 2026 : les rendez-vous de création. `creneaux` est PUBLIQUE (le site
+            # les propose) ; les autres PROTÉGÉES (`LIRE_PROSPECT`, `QUALIFIER_PROSPECT`).
+            "/acquisition/rendez-vous",
+            "/acquisition/rendez-vous/creneaux",
+            "/acquisition/rendez-vous/{identifiant}/constat",
+            "/acquisition/rendez-vous/{identifiant}/lien",
         ]
 
     def test_le_referentiel_se_charge_au_premier_appel(self, client):

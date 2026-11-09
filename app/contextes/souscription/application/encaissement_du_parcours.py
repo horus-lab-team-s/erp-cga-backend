@@ -364,7 +364,9 @@ class SuiteDeProforma:
     ─────────────────────────────────────────────────────────────────────────────
     """
 
-    def __init__(self, *, dossiers, proformas, boite, journal) -> None:
+    def __init__(
+        self, *, dossiers, proformas, boite, journal, versements=None, regle=None
+    ) -> None:
         """Tout est injecté, et rien n'est allé chercher.
 
         ⚠️ **La première version montait ses dépôts elle-même**, en important
@@ -380,6 +382,11 @@ class SuiteDeProforma:
         self._proformas = proformas
         self._boite = boite
         self._journal = journal
+        #: 9 novembre 2026 : les tranches. Sans dépôt de versements (cas d'essai
+        #: anciens), le règlement reste d'un seul coup, comme avant ce lot.
+        self._versements = versements
+        #: Une fonction : la règle se relit à chaque encaissement.
+        self._regle = regle
 
     def encaisser(self, paiement, a_l_instant: datetime):
         try:
@@ -399,6 +406,9 @@ class SuiteDeProforma:
                 "acquis ; l'ouverture attend un humain.",
                 a_l_instant,
             )
+
+        if self._versements is not None:
+            return self._encaisser_une_tranche(paiement, proforma, dossier, a_l_instant)
 
         try:
             resultat = encaisser_l_acceptation(
@@ -434,6 +444,57 @@ class SuiteDeProforma:
                 f"règlement encaissé ; l'espace « {dossier.slug_retenu} » s'ouvre"
                 if ouvre
                 else "règlement encaissé ; cette vente n'ouvre pas d'espace"
+            ),
+        )
+
+    def _encaisser_une_tranche(self, paiement, proforma, dossier, a_l_instant: datetime):
+        """9 novembre 2026 : le paiement est une tranche ; il engage le dossier au seuil.
+
+        ⚠️ La référence du versement dérive du PAIEMENT : un rappel rejoué tombe sur
+        `VersementDejaRecu`, et rien n'est compté deux fois.
+        """
+        from app.contextes.souscription.application.versements import recevoir_un_versement
+        from app.contextes.souscription.domaine.honoraires import CanalDeReglement
+        from app.contextes.souscription.domaine.versements_du_parcours import (
+            REGLE_SANS_FRAIS,
+            NatureVersement,
+            VersementDejaRecu,
+        )
+
+        regle = (self._regle() if self._regle else None) or REGLE_SANS_FRAIS
+        try:
+            resultat = recevoir_un_versement(
+                dossier=dossier,
+                proforma=proforma,
+                versements=self._versements,
+                regle=regle,
+                nature=NatureVersement.TRANCHE,
+                montant=paiement.montant,
+                canal=CanalDeReglement.MOBILE_MONEY,
+                reference_externe=f"paiement:{paiement.identifiant}",
+                constate_par="systeme",
+                a_l_instant=a_l_instant,
+                boite=self._boite,
+                # L'argent est arrivé : rien n'est refusé, l'excédent devient un trop-perçu.
+                notifie=True,
+            )
+        except VersementDejaRecu:
+            return Aboutissement(
+                abouti=True,
+                message=f"paiement {paiement.identifiant} déjà compté ; rejeu sans effet",
+            )
+        except Exception as echec:  # noqa: BLE001 — voir l'en-tête : on ne lève pas
+            return self._echec(paiement, f"{type(echec).__name__}: {echec}", a_l_instant)
+
+        if resultat.engagement is not None and not resultat.engagement.rejeu:
+            self._dossiers.enregistrer(resultat.dossier)
+        s = resultat.situation
+        return Aboutissement(
+            abouti=True,
+            message=(
+                f"tranche de {paiement.montant} FCFA reçue ; "
+                + ("proforma soldée" if s.solde else f"reste {s.reste} FCFA")
+                + ("; le dossier est engagé" if resultat.engagement else "")
             ),
         )
 

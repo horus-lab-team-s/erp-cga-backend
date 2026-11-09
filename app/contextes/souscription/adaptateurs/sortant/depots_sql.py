@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
+    CreneauDejaPris,
     DevisIntrouvable,
     DossierIntrouvable,
     PaiementIntrouvable,
@@ -17,7 +18,9 @@ from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     SouscriptionIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.tables import (
+    TableAgendaDeCreation,
     TableAppelDeFonds,
+    TableCodeDeDossier,
     TableContratDHonoraires,
     TableDevis,
     TableDossierCommercial,
@@ -27,11 +30,15 @@ from app.contextes.souscription.adaptateurs.sortant.tables import (
     TableQualification,
     TableRappelAPasser,
     TableRegleDeDepassement,
+    TableRegleDesVersements,
     TableReglementDHonoraires,
+    TableRendezVous,
     TableSouscription,
     TableSuiviDeRelance,
     TableTarifFixe,
+    TableVersementDuParcours,
 )
+from app.contextes.souscription.domaine.code_de_dossier import CodeDeDossier
 from app.contextes.souscription.domaine.devis import Devis
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
@@ -49,6 +56,7 @@ from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
 from app.contextes.souscription.domaine.rappels import RappelAPasser
 from app.contextes.souscription.domaine.relance import SuiviDeRelance
+from app.contextes.souscription.domaine.rendez_vous import AgendaDeCreation, RendezVous
 from app.contextes.souscription.domaine.situation_de_reglement import (
     GraceDeReglement,
     RegleDeDepassement,
@@ -56,6 +64,11 @@ from app.contextes.souscription.domaine.situation_de_reglement import (
 from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
+)
+from app.contextes.souscription.domaine.versements_du_parcours import (
+    RegleDesVersements,
+    VersementDejaRecu,
+    VersementDuParcours,
 )
 from app.infrastructure.depot_document import DepotDocument
 
@@ -708,3 +721,150 @@ class DepotGracesDeReglementSql(DepotDocument[GraceDeReglement]):
 
     def enregistrer(self, grace: GraceDeReglement) -> None:
         self._poser(grace)
+
+
+class DepotRegleDesVersementsSql(DepotDocument[RegleDesVersements]):
+    """La règle des versements du cabinet. Voir `TableRegleDesVersements`."""
+
+    _table = TableRegleDesVersements
+    _entite = RegleDesVersements
+
+    def _cle(self, entite: RegleDesVersements) -> dict[str, Any]:
+        return {"locataire": self.locataire}
+
+    def _colonnes(self, entite: RegleDesVersements) -> dict[str, Any]:
+        return {"fixee_le": entite.fixee_le}
+
+    def lire(self) -> RegleDesVersements | None:
+        return self._premier(self._requete())
+
+    def enregistrer(self, regle: RegleDesVersements) -> None:
+        self._poser(regle)
+
+
+class DepotVersementsDuParcoursSql(DepotDocument[VersementDuParcours]):
+    """Les versements du parcours. Voir `TableVersementDuParcours`."""
+
+    _table = TableVersementDuParcours
+    _entite = VersementDuParcours
+
+    def _cle(self, entite: VersementDuParcours) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: VersementDuParcours) -> dict[str, Any]:
+        return {
+            "dossier": entite.dossier,
+            "reference_externe": entite.reference_externe,
+            "constate_le": entite.constate_le,
+        }
+
+    def pour(self, dossier: str) -> list[VersementDuParcours]:
+        return self._tous(
+            self._requete()
+            .where(TableVersementDuParcours.dossier == dossier)
+            .order_by(TableVersementDuParcours.constate_le)
+        )
+
+    def enregistrer(self, versement: VersementDuParcours) -> None:
+        """⚠️ La lecture d'abord, pour un refus lisible ; la contrainte de la base
+        tranche la course entre deux canaux."""
+        deja = self._premier(
+            self._requete().where(
+                TableVersementDuParcours.reference_externe == versement.reference_externe
+            )
+        )
+        if deja is not None:
+            raise VersementDejaRecu(f"la référence {versement.reference_externe} est déjà comptée.")
+        try:
+            # Un point de reprise : un conflit n'invalide pas la transaction de la route.
+            with self._session.begin_nested():
+                self._poser(versement)
+        except IntegrityError as conflit:
+            raise VersementDejaRecu(
+                f"la référence {versement.reference_externe} vient d'être comptée."
+            ) from conflit
+
+    def lister(self) -> list[VersementDuParcours]:
+        return self._tous(self._requete().order_by(TableVersementDuParcours.constate_le))
+
+
+class DepotAgendaDeCreationSql(DepotDocument[AgendaDeCreation]):
+    """L'agenda des rendez-vous de création. Voir `TableAgendaDeCreation`."""
+
+    _table = TableAgendaDeCreation
+    _entite = AgendaDeCreation
+
+    def _cle(self, entite: AgendaDeCreation) -> dict[str, Any]:
+        return {"locataire": self.locataire}
+
+    def _colonnes(self, entite: AgendaDeCreation) -> dict[str, Any]:
+        return {"fixe_le": entite.fixe_le}
+
+    def lire(self) -> AgendaDeCreation | None:
+        return self._premier(self._requete())
+
+    def enregistrer(self, agenda: AgendaDeCreation) -> None:
+        self._poser(agenda)
+
+
+class DepotRendezVousSql(DepotDocument[RendezVous]):
+    """Les rendez-vous de création. Voir `TableRendezVous`."""
+
+    _table = TableRendezVous
+    _entite = RendezVous
+
+    def _cle(self, entite: RendezVous) -> dict[str, Any]:
+        return {"identifiant": entite.identifiant}
+
+    def _colonnes(self, entite: RendezVous) -> dict[str, Any]:
+        return {
+            "dossier": entite.dossier,
+            "creneau": entite.debut.isoformat() if entite.occupe_le_creneau else entite.identifiant,
+            "debut": entite.debut,
+        }
+
+    def lire(self, identifiant: str) -> RendezVous | None:
+        return self._premier(self._requete().where(TableRendezVous.identifiant == identifiant))
+
+    def pour(self, dossier: str) -> list[RendezVous]:
+        return self._tous(
+            self._requete()
+            .where(TableRendezVous.dossier == dossier)
+            .order_by(TableRendezVous.debut)
+        )
+
+    def depuis(self, debut: datetime) -> list[RendezVous]:
+        return self._tous(
+            self._requete().where(TableRendezVous.debut >= debut).order_by(TableRendezVous.debut)
+        )
+
+    def enregistrer(self, rdv: RendezVous) -> None:
+        try:
+            with self._session.begin_nested():
+                self._poser(rdv)
+        except IntegrityError as conflit:
+            raise CreneauDejaPris(
+                "ce créneau vient d'être pris : choisissez-en un autre."
+            ) from conflit
+
+
+class DepotCodesDeDossierSql(DepotDocument[CodeDeDossier]):
+    """Les codes de dossier. Voir `TableCodeDeDossier`."""
+
+    _table = TableCodeDeDossier
+    _entite = CodeDeDossier
+
+    def _cle(self, entite: CodeDeDossier) -> dict[str, Any]:
+        return {"code": entite.code}
+
+    def _colonnes(self, entite: CodeDeDossier) -> dict[str, Any]:
+        return {"dossier": entite.dossier}
+
+    def lire(self, code: str) -> CodeDeDossier | None:
+        return self._premier(self._requete().where(TableCodeDeDossier.code == code))
+
+    def du_dossier(self, dossier: str) -> CodeDeDossier | None:
+        return self._premier(self._requete().where(TableCodeDeDossier.dossier == dossier))
+
+    def enregistrer(self, code: CodeDeDossier) -> None:
+        self._poser(code)

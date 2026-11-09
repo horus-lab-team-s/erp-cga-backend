@@ -46,7 +46,7 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.contextes.portefeuille.contrats import FormeJuridique
 
@@ -267,6 +267,25 @@ class CanalDeLaPiece(StrEnum):
     COURRIEL = "COURRIEL"
 
 
+#: Les pièces qui s'établissent PENDANT la constitution, avec le cabinet (9 novembre 2026).
+#:
+#: ⚠️ À l'ouverture du dossier, l'entreprise n'existe pas encore : le fondateur n'a ni
+#: statuts signés (le cabinet les rédige, ou il apporte les siens), ni bail (il se signe au
+#: nom de la société), ni déclaration notariée, ni PV de nomination. Ces pièces restent au
+#: dossier, mais le client ne doit pas lire qu'on les lui demande dès maintenant.
+#: Déduit du CODE : les dossiers déjà ouverts en profitent sans migration.
+PIECES_DE_LA_CONSTITUTION: frozenset[str] = frozenset(
+    {
+        "STATUTS",
+        "JUSTIFICATIF_SIEGE",
+        "DECLARATION_SOUSCRIPTION",
+        "PV_NOMINATION",
+        "COMMISSAIRE_COMPTES",
+        "REGLEMENT_INTERIEUR",
+    }
+)
+
+
 class PieceConstitution(BaseModel):
     """Une pièce attendue au dossier de constitution.
 
@@ -293,6 +312,13 @@ class PieceConstitution(BaseModel):
     @property
     def fournie(self) -> bool:
         return self.fournie_le is not None
+
+    @computed_field
+    @property
+    def moment(self) -> str:
+        """`FONDATEUR` : il l'a déjà, à fournir dès l'ouverture. `CONSTITUTION` : elle
+        s'établit pendant la constitution, avec le cabinet. Voir `PIECES_DE_LA_CONSTITUTION`."""
+        return "CONSTITUTION" if self.code in PIECES_DE_LA_CONSTITUTION else "FONDATEUR"
 
 
 class Jalon(BaseModel):

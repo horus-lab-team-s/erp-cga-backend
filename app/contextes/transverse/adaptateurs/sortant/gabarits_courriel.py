@@ -439,10 +439,13 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Votre règlement est bien reçu, et le dossier de "
                 "<strong>{denomination}</strong> est ouvert. Nous préparons son "
                 "immatriculation.",
-                "Il nous faut maintenant vos pièces. Vous pouvez les envoyer "
-                "depuis votre suivi, en photographiant chaque document : la liste "
-                "s'y trouve, et vous y voyez à tout moment où en est votre "
-                "dossier.",
+                # 9 novembre 2026 : la société n'existe pas encore. On ne demande
+                # que ce que le fondateur a déjà ; le reste se prépare avec lui.
+                "Il nous faut maintenant les pièces que vous avez déjà en main. "
+                "Vous pouvez les envoyer depuis votre suivi, en photographiant "
+                "chaque document : la liste s'y trouve, et vous y voyez à tout "
+                "moment où en est votre dossier. Les statuts signés et le bail au "
+                "nom de la société se prépareront ensuite, avec le cabinet.",
                 "Gardez ce message : le lien ci-dessous reste valable jusqu'à "
                 "l'immatriculation de votre société.",
             ),
@@ -475,7 +478,9 @@ CATALOGUE: dict[str, Gabarit] = {
                 "immatriculation.",
                 "Votre espace client est créé à cette adresse. Choisissez votre "
                 "mot de passe : vous y verrez chaque étape de votre création, et "
-                "vous y enverrez vos pièces en photographiant chaque document.",
+                "vous y enverrez les pièces que vous avez déjà, en photographiant "
+                "chaque document. Les statuts signés et le bail au nom de la "
+                "société se prépareront ensuite, avec le cabinet.",
                 "Pas le temps maintenant ? Votre dossier s'ouvre aussi sans mot "
                 "de passe, depuis ce lien personnel, valable jusqu'à "
                 "l'immatriculation : {lien}",
@@ -615,6 +620,39 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Ce message confirme la réception de votre demande. Il ne vaut "
                 "ni devis ni engagement : le montant vous sera proposé après "
                 "examen."
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : l'accusé d'une demande qui porte son code de dossier, et le
+            # rendez-vous pris s'il y en a un. Le code est COURT et se dicte : c'est lui que
+            # le client saisira s'il revient remplir le formulaire.
+            code="demande.accuse_avec_code",
+            objet="Votre demande concernant {service} nous est bien parvenue",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Votre demande concernant <strong>{service}</strong> nous est bien parvenue.",
+                "Votre code de dossier : <strong>{code}</strong>. Gardez ce message : si vous "
+                "complétez votre demande plus tard sur le site, indiquez ce code. Vos frais de "
+                "dossier déjà versés seront retrouvés et déduits.",
+                "{rendez_vous}",
+                "Un responsable vous recontacte au <strong>{telephone}</strong>.",
+            ),
+            avertissement=(
+                "Ce message confirme la réception de votre demande. Il ne vaut "
+                "ni devis ni engagement : le montant vous sera proposé après "
+                "examen."
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : une demande rejointe à son dossier par le code.
+            code="demande.rattachee",
+            objet="Votre demande est jointe à votre dossier",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Les informations que vous venez d'envoyer sont jointes à votre dossier. Les "
+                "frais de dossier que vous avez déjà versés y sont retrouvés : ils seront "
+                "déduits du montant de votre proforma.",
+                "{rendez_vous}",
             ),
         ),
         Gabarit(

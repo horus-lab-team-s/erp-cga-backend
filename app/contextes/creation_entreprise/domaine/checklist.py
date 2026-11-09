@@ -93,8 +93,8 @@ _CASIER = PieceConstitution(
 _JUSTIFICATIF_SIEGE = PieceConstitution(
     code="JUSTIFICATIF_SIEGE",
     libelle=(
-        "Justificatif de domiciliation du siège : bail au nom de la société (signé une fois "
-        "les statuts prêts), titre foncier ou attestation d'hébergement"
+        "Justificatif du siège, établi une fois les statuts prêts : bail au nom de la "
+        "société, titre foncier ou attestation d'hébergement"
     ),
 )
 _PLAN_LOCALISATION = PieceConstitution(
@@ -104,10 +104,13 @@ _PLAN_LOCALISATION = PieceConstitution(
 )
 # ⚠️ 8 novembre 2026 : le cabinet rédige les statuts à partir de son modèle ; ceux qu'un
 # client apporte sont facultatifs (question `statuts_apportes`). Ce qui est attendu ici, ce
-# sont les statuts SIGNÉS, quel que soit leur auteur.
+# sont les statuts SIGNÉS, quel que soit leur auteur (9 novembre 2026 : le libellé le dit).
 _STATUTS = PieceConstitution(
     code="STATUTS",
-    libelle="Statuts rédigés par le cabinet et signés par tous les associés",
+    libelle=(
+        "Statuts signés par tous les associés : rédigés par le cabinet, ou les vôtres "
+        "s'ils sont déjà prêts"
+    ),
 )
 _DECLARATION_SOUSCRIPTION = PieceConstitution(
     code="DECLARATION_SOUSCRIPTION",

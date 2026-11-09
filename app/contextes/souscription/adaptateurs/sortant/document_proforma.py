@@ -129,6 +129,7 @@ def rendre_le_document(
     total_arrete: Decimal | None = None,
     validite_jours: int | None = None,
     cachet: Path | None = None,
+    frais_deja_verses: Decimal | None = None,
 ) -> bytes:
     """Le PDF, en octets.
 
@@ -153,6 +154,8 @@ def rendre_le_document(
         y = _rubrique(page, rubrique, y)
     total = composition.total if total_arrete is None else total_arrete
     y = _total(page, total, composition.total, y)
+    if frais_deja_verses:
+        y = _frais_deduits(page, total, frais_deja_verses, y)
     if validite_jours is not None:
         # La même échéance que le lien d'acceptation (`emise_le` + N jours), lue à Douala.
         echeance = jour_a_douala(emise_le + timedelta(days=validite_jours))
@@ -349,6 +352,32 @@ def _total(page: canvas.Canvas, total: Decimal, total_compose: Decimal, y: float
         page.setFillColor(black)
         y -= 6 * mm
     return y
+
+
+def _frais_deduits(page: canvas.Canvas, total: Decimal, frais: Decimal, y: float) -> float:
+    """Les frais de traitement versés à la soumission, déduits du total (9 novembre 2026).
+
+    ⚠️ Le TOTAL GÉNÉRAL reste celui de la procédure, en chiffres et en lettres : c'est ce
+    que le client accepte. Les frais déjà versés s'en déduisent ici, et le reste à régler
+    est ce qu'il lui reste à payer, en une ou plusieurs tranches.
+    """
+    droite = _LARGEUR - MARGE - 5 * mm
+    page.setFont("Helvetica", 9)
+    page.drawString(MARGE + 5 * mm, y, "Frais de traitement de dossier déjà versés")
+    page.drawRightString(droite, y, f"- {montant_imprime(frais)} FCFA")
+    y -= 5 * mm
+    page.setFont("Helvetica-Bold", 10)
+    page.setFillColor(INDIGO)
+    page.drawString(MARGE + 5 * mm, y, "RESTE À RÉGLER")
+    page.drawRightString(droite, y, f"{montant_imprime(max(total - frais, Decimal(0)))} FCFA")
+    page.setFillColor(black)
+    page.setFont("Helvetica", 8)
+    page.drawString(
+        MARGE + 5 * mm,
+        y - 4.5 * mm,
+        "Payable en une ou plusieurs tranches, par mobile money ou au cabinet.",
+    )
+    return y - 11 * mm
 
 
 def _validite(page: canvas.Canvas, jours: int, jusqu_au: date, y: float) -> float:

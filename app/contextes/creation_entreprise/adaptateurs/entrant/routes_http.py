@@ -323,6 +323,9 @@ class PieceAttendue(BaseModel):
     #: Un document est joint, et elle peut le relire depuis son compte. Un booléen,
     #: et non l'empreinte : elle n'a pas à manier un identifiant du magasin.
     document: bool = False
+    #: 9 novembre 2026 : `FONDATEUR` (à fournir dès maintenant) ou `CONSTITUTION` (s'établit
+    #: avec le cabinet : statuts signés, bail au nom de la société…). Voir l'entité.
+    moment: str = "FONDATEUR"
 
 
 class IdentifiantsDeMaSociete(BaseModel):
@@ -405,6 +408,7 @@ def _suivi(dossier) -> SuiviDeMaCreation:
                 fournie=p.fournie_le is not None,
                 fournie_le=p.fournie_le,
                 document=p.empreinte is not None,
+                moment=p.moment,
             )
             for p in dossier.pieces
         ],

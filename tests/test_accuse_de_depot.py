@@ -74,7 +74,11 @@ def _dossier(client, telephone):
 
 
 def _accuses(courriel=None):
-    envoyes = service_de_notification().derniers(CODE)
+    # 9 novembre 2026 : une demande déposée reçoit son code de dossier ; l'accusé qui le
+    # porte est `demande.accuse_avec_code`. Les deux codes sont des accusés.
+    envoyes = service_de_notification().derniers(CODE) + service_de_notification().derniers(
+        "demande.accuse_avec_code"
+    )
     if courriel is None:
         return envoyes
     return [m for m in envoyes if m.destinataire == courriel]

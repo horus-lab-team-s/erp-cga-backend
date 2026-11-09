@@ -160,6 +160,20 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "acceptee_le": "29/09/2026 à 16h03",
         "identite": "La gérante",
     },
+    "demande.accuse_avec_code": {
+        # Recopié de `abonne_d_accuse_de_depot.accuser_le_depot`.
+        "prenom": "Sylvie NGONO",
+        "reference": "dos-cf776b28a0db44b4",
+        "service": "Création d'entreprise",
+        "telephone": "+237699112233",
+        "code": "K7M4-Q2XP",
+        "rendez_vous": "Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, au cabinet.",
+    },
+    "demande.rattachee": {
+        # Recopié de `routes_acquisition._confirmer_le_rattachement`.
+        "prenom": "Sylvie NGONO",
+        "rendez_vous": "",
+    },
     "demande.accuse_de_depot": {
         # Recopié de `abonne_d_accuse_de_depot.accuser_le_depot`.
         "prenom": "Sylvie NGONO",

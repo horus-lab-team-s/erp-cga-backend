@@ -262,6 +262,12 @@ class ProformaConsultee(BaseModel):
     #: Le client peut régler en ligne depuis cette page. Faux pour une vente qui
     #: ouvre un espace : son adresse se choisit avec le cabinet.
     reglable_en_ligne: bool = False
+    #: 9 novembre 2026 : les tranches et les frais de traitement déduits. `payee` ne
+    #: devient vrai qu'au solde ; `engage` dit que le cabinet a commencé.
+    frais_verses: Decimal = Decimal(0)
+    paye: Decimal = Decimal(0)
+    reste: Decimal | None = None
+    engage: bool = False
 
 
 class DemandeDAcceptation(BaseModel):
@@ -439,6 +445,8 @@ def _document_a_emettre(
             if configuration().fichier_cachet_proforma
             else None
         ),
+        # 9 novembre 2026 : les frais de traitement déjà versés, déduits du total.
+        frais_deja_verses=_frais_verses(dossier),
     )
     magasin_des_proformas().deposer(
         empreinte(pdf), pdf, type_mime="application/pdf"
@@ -1030,17 +1038,38 @@ def consulter_la_proforma(
         ],
         expire_le=expire_le,
         acceptee=proforma.etat.value == "ACCEPTEE",
-        payee=_dossier_regle(proforma),
         reglable_en_ligne=not ouvre_un_locataire(proforma.service),
+        **_versements_consultes(proforma),
     )
 
 
-def _dossier_regle(proforma: Proforma) -> bool:
-    """Le dossier de cette proposition est-il encaissé ? Faux si on ne sait pas."""
+def _frais_verses(dossier) -> Decimal | None:
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        situation_des_versements_de,
+    )
+
+    frais = situation_des_versements_de(dossier).frais_verses
+    return frais or None
+
+
+def _versements_consultes(proforma: Proforma) -> dict:
+    """Payé, reste, frais déduits, soldé. Rien de connu : rien d'affiché."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        situation_des_versements_de,
+    )
+
     try:
-        return depot_dossiers().lire(proforma.dossier).etat is EtatDossier.PAYEE
+        dossier = depot_dossiers().lire(proforma.dossier)
     except DossierIntrouvable:
-        return False
+        return {"payee": False}
+    situation = situation_des_versements_de(dossier)
+    return {
+        "payee": situation.solde,
+        "frais_verses": situation.frais_verses,
+        "paye": situation.paye,
+        "reste": situation.reste,
+        "engage": dossier.etat is EtatDossier.PAYEE,
+    }
 
 
 class DemandeDePaiementEnLigne(BaseModel):
@@ -1055,6 +1084,8 @@ class DemandeDePaiementEnLigne(BaseModel):
     version: int = Field(ge=1)
     #: Le numéro à débiter. Vide : celui que le client a donné à sa demande.
     telephone: str = Field(default="", max_length=30)
+    #: 9 novembre 2026 : une tranche. Absent : tout le reste à payer.
+    montant: Decimal | None = Field(default=None, gt=0)
 
 
 class PaiementEnLigneDemande(BaseModel):
@@ -1128,10 +1159,8 @@ def payer_en_ligne(numero: str, corps: DemandeDePaiementEnLigne) -> PaiementEnLi
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    if dossier.etat is EtatDossier.PAYEE:
-        raise HTTPException(
-            status_code=409, detail="Cette proposition est déjà réglée : il n'y a rien à payer."
-        )
+    # 9 novembre 2026 : un dossier engagé se règle encore jusqu'au solde ;
+    # `solliciter_le_telephone` refuse ce qui est soldé.
     if ouvre_un_locataire(proforma.service):
         raise HTTPException(
             status_code=409,
@@ -1142,7 +1171,9 @@ def payer_en_ligne(numero: str, corps: DemandeDePaiementEnLigne) -> PaiementEnLi
         )
     from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
 
-    demande = solliciter_le_telephone(proforma, dossier, depot, None, corps.telephone)
+    demande = solliciter_le_telephone(
+        proforma, dossier, depot, None, corps.telephone, corps.montant
+    )
     return PaiementEnLigneDemande(
         accepte=demande.accepte,
         message=demande.message,

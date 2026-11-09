@@ -79,6 +79,20 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Le visiteur joint ses pièces à la demande qu'il vient de déposer : pas de "
         "compte non plus, mais le jeton de l'accusé, propre à cette demande (point 22)."
     ),
+    ("GET", "/acquisition/rendez-vous/creneaux"): (
+        "Le visiteur qui préfère un rendez-vous voit les créneaux encore libres : des heures, "
+        "rien d'autre — ni nom, ni dossier (9 novembre 2026)."
+    ),
+    ("POST", "/acquisition/demandes/frais-de-traitement/etat"): (
+        "Le visiteur voit si ses frais de traitement sont versés, sur la page d'après "
+        "l'envoi : sans compte, par le jeton de l'accusé, propre à cette demande et à cet "
+        "usage. Rien d'autre que le montant et un booléen (9 novembre 2026)."
+    ),
+    ("POST", "/acquisition/demandes/frais-de-traitement/paiement-en-ligne"): (
+        "Le visiteur règle ses frais de traitement par mobile money, par le même jeton. "
+        "La route demande le débit d'un montant fixé par le cabinet ; c'est la "
+        "notification de l'opérateur qui constate le versement (9 novembre 2026)."
+    ),
     ("GET", "/missions/{identifiant}/suivi"): (
         "Le client suit sa prestation par le lien reçu, sans compte : le sceau est propre "
         "à la mission et à cet usage (point 22)."

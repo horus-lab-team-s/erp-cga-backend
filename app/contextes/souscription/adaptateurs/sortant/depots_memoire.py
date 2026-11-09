@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from app.contextes.souscription.domaine.code_de_dossier import CodeDeDossier
 from app.contextes.souscription.domaine.devis import Devis
 from app.contextes.souscription.domaine.dossier_commercial import (
     DossierCommercial,
@@ -41,6 +42,7 @@ from app.contextes.souscription.domaine.proforma import EtatProforma, Proforma
 from app.contextes.souscription.domaine.qualification import Qualification
 from app.contextes.souscription.domaine.rappels import RappelAPasser
 from app.contextes.souscription.domaine.relance import SuiviDeRelance
+from app.contextes.souscription.domaine.rendez_vous import AgendaDeCreation, RendezVous
 from app.contextes.souscription.domaine.situation_de_reglement import (
     GraceDeReglement,
     RegleDeDepassement,
@@ -48,6 +50,11 @@ from app.contextes.souscription.domaine.situation_de_reglement import (
 from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
+)
+from app.contextes.souscription.domaine.versements_du_parcours import (
+    RegleDesVersements,
+    VersementDejaRecu,
+    VersementDuParcours,
 )
 from app.partage.depot_memoire import EntrepotMemoire
 
@@ -488,6 +495,100 @@ class DepotRegleDeDepassementMemoire:
 
     def enregistrer(self, regle: RegleDeDepassement) -> None:
         self._regle = regle
+
+
+class DepotRegleDesVersementsMemoire:
+    """La règle des versements, en mémoire (9 novembre 2026)."""
+
+    def __init__(self) -> None:
+        self._regle: RegleDesVersements | None = None
+
+    def lire(self) -> RegleDesVersements | None:
+        return self._regle
+
+    def enregistrer(self, regle: RegleDesVersements) -> None:
+        self._regle = regle
+
+
+class CreneauDejaPris(ValueError):
+    """Le créneau vient d'être pris par un autre dossier."""
+
+
+class DepotAgendaDeCreationMemoire:
+    def __init__(self) -> None:
+        self._agenda: AgendaDeCreation | None = None
+
+    def lire(self) -> AgendaDeCreation | None:
+        return self._agenda
+
+    def enregistrer(self, agenda: AgendaDeCreation) -> None:
+        self._agenda = agenda
+
+
+class DepotRendezVousMemoire:
+    """⚠️ La même garde que la contrainte de la base : un créneau, un rendez-vous."""
+
+    def __init__(self) -> None:
+        self._rdv: dict[str, RendezVous] = {}
+
+    def lire(self, identifiant: str) -> RendezVous | None:
+        return self._rdv.get(identifiant)
+
+    def pour(self, dossier: str) -> list[RendezVous]:
+        return sorted(
+            (r for r in self._rdv.values() if r.dossier == dossier), key=lambda r: r.debut
+        )
+
+    def depuis(self, debut: datetime) -> list[RendezVous]:
+        return sorted((r for r in self._rdv.values() if r.debut >= debut), key=lambda r: r.debut)
+
+    def enregistrer(self, rdv: RendezVous) -> None:
+        if rdv.occupe_le_creneau and any(
+            r.identifiant != rdv.identifiant and r.occupe_le_creneau and r.debut == rdv.debut
+            for r in self._rdv.values()
+        ):
+            raise CreneauDejaPris("ce créneau vient d'être pris : choisissez-en un autre.")
+        self._rdv[rdv.identifiant] = rdv
+
+
+class DepotCodesDeDossierMemoire:
+    def __init__(self) -> None:
+        self._codes: dict[str, CodeDeDossier] = {}
+
+    def lire(self, code: str) -> CodeDeDossier | None:
+        return self._codes.get(code)
+
+    def du_dossier(self, dossier: str) -> CodeDeDossier | None:
+        return next((c for c in self._codes.values() if c.dossier == dossier), None)
+
+    def enregistrer(self, code: CodeDeDossier) -> None:
+        self._codes[code.code] = code
+
+
+class DepotVersementsDuParcoursMemoire:
+    """Les versements du parcours, en mémoire (9 novembre 2026).
+
+    ⚠️ La même garde que la clé unique de la base : une référence comptée une fois.
+    """
+
+    def __init__(self) -> None:
+        self._versements: dict[str, VersementDuParcours] = {}
+
+    def pour(self, dossier: str) -> list[VersementDuParcours]:
+        return sorted(
+            (v for v in self._versements.values() if v.dossier == dossier),
+            key=lambda v: v.constate_le,
+        )
+
+    def enregistrer(self, versement: VersementDuParcours) -> None:
+        if any(
+            v.reference_externe == versement.reference_externe for v in self._versements.values()
+        ):
+            raise VersementDejaRecu(f"la référence {versement.reference_externe} est déjà comptée.")
+        self._versements[versement.identifiant] = versement
+
+    def lister(self) -> list[VersementDuParcours]:
+        return sorted(self._versements.values(), key=lambda v: v.constate_le)
 
 
 class DepotGracesDeReglementMemoire:

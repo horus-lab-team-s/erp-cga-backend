@@ -40,22 +40,32 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
+    DepotAgendaDeCreationMemoire,
     DepotAppelsDeFondsMemoire,
+    DepotCodesDeDossierMemoire,
     DepotContratsDHonorairesMemoire,
     DepotGracesDeReglementMemoire,
     DepotRegleDeDepassementMemoire,
+    DepotRegleDesVersementsMemoire,
     DepotReglementsDHonorairesMemoire,
+    DepotRendezVousMemoire,
+    DepotVersementsDuParcoursMemoire,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+    DepotAgendaDeCreationSql,
     DepotAppelsDeFondsSql,
+    DepotCodesDeDossierSql,
     DepotContratsDHonorairesSql,
     DepotDevisSql,
     DepotGracesDeReglementSql,
     DepotPaiementsSql,
     DepotRegleDeDepassementSql,
+    DepotRegleDesVersementsSql,
     DepotReglementsDHonorairesSql,
+    DepotRendezVousSql,
     DepotSouscriptionsSql,
     DepotTarifsFixesSql,
+    DepotVersementsDuParcoursSql,
 )
 from app.contextes.souscription.api import (
     CatalogueArrete,
@@ -136,6 +146,11 @@ class Comptoir:
             self.appels_de_fonds = DepotAppelsDeFondsMemoire()
             self.regle_de_depassement = DepotRegleDeDepassementMemoire()
             self.graces_de_reglement = DepotGracesDeReglementMemoire()
+            self.regle_des_versements = DepotRegleDesVersementsMemoire()
+            self.versements_du_parcours = DepotVersementsDuParcoursMemoire()
+            self.agenda_de_creation = DepotAgendaDeCreationMemoire()
+            self.rendez_vous = DepotRendezVousMemoire()
+            self.codes_de_dossier = DepotCodesDeDossierMemoire()
         else:
             self.devis = DepotDevisSql(session, courant())
             self.souscriptions = DepotSouscriptionsSql(session, courant())
@@ -146,6 +161,11 @@ class Comptoir:
             self.appels_de_fonds = DepotAppelsDeFondsSql(session, courant())
             self.regle_de_depassement = DepotRegleDeDepassementSql(session, courant())
             self.graces_de_reglement = DepotGracesDeReglementSql(session, courant())
+            self.regle_des_versements = DepotRegleDesVersementsSql(session, courant())
+            self.versements_du_parcours = DepotVersementsDuParcoursSql(session, courant())
+            self.agenda_de_creation = DepotAgendaDeCreationSql(session, courant())
+            self.rendez_vous = DepotRendezVousSql(session, courant())
+            self.codes_de_dossier = DepotCodesDeDossierSql(session, courant())
         # ⚠️ LE JOUR ANNONCÉ EST ARRIVÉ. Ce commentaire disait : « il aura sa
         # table le jour où la direction devra changer un tarif sans
         # redéploiement ». La structure de l'offre reste en code ; les PRIX sont
@@ -195,6 +215,7 @@ class Comptoir:
         from app.contextes.souscription.application.reglement_des_honoraires import (
             SuiteDHonoraires,
         )
+        from app.contextes.souscription.application.versements import SuiteDeFraisDeTraitement
 
         return {
             NaturePaiement.SOUSCRIPTION: SuiteDeSouscription(
@@ -207,6 +228,9 @@ class Comptoir:
                 proformas=depot_proformas(),
                 boite=boite_du_parcours(),
                 journal=self.journal,
+                # 9 novembre 2026 : la proforma se règle en tranches.
+                versements=self.versements_du_parcours,
+                regle=self.regle_des_versements.lire,
             ),
             # ⚠️ 14 octobre 2026 : les honoraires des adhérents, réglés depuis leur
             # espace. Voir `SuiteDHonoraires`.
@@ -214,6 +238,15 @@ class Comptoir:
                 reglements=self.reglements_honoraires,
                 journal=self.journal,
                 boite=boite_du_parcours(),
+            ),
+            # 9 novembre 2026 : les frais de traitement versés à la soumission.
+            NaturePaiement.FRAIS_DE_TRAITEMENT: SuiteDeFraisDeTraitement(
+                dossiers=depot_dossiers(),
+                proformas=depot_proformas(),
+                versements=self.versements_du_parcours,
+                regle=self.regle_des_versements.lire,
+                boite=boite_du_parcours(),
+                journal=self.journal,
             ),
             # ⚠️ 14 octobre 2026 : les fonds de tiers (TVA, CNPS sous mandat de paiement).
             NaturePaiement.FONDS_DE_TIERS: SuiteDeFondsDeTiers(

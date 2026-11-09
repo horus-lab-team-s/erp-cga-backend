@@ -240,3 +240,22 @@ def test_le_cachet_fourni_est_pose_et_son_absence_ne_bloque_rien(tmp_path):
     images_avec = avec.count(b"/Subtype /Image") + avec.count(b"/Subtype/Image")
     # Un PNG à transparence donne deux objets (l'image et son masque) : plus, c'est posé.
     assert images_avec > images_sans
+
+
+# ── 9 novembre 2026 : l'entreprise n'existe pas encore à l'ouverture du dossier ─────────
+
+
+def test_les_pieces_de_la_constitution_ne_sont_pas_demandees_au_fondateur_d_emblee():
+    # FormeJuridique et checklist_de : déjà importés en tête du module.
+
+    moments = {p.code: p.moment for p in checklist_de(FormeJuridique.SARL)}
+    # Ce qu'il a déjà en main.
+    assert moments["ID_FONDATEUR"] == moments["CASIER_JUDICIAIRE"] == "FONDATEUR"
+    assert moments["LISTE_ASSOCIES"] == "FONDATEUR"
+    # Ce qui s'établit avec le cabinet : statuts signés, bail au nom de la société…
+    for code in ("STATUTS", "JUSTIFICATIF_SIEGE", "DECLARATION_SOUSCRIPTION", "PV_NOMINATION"):
+        assert moments[code] == "CONSTITUTION", code
+    # Et le moment voyage avec la pièce, jusqu'aux écrans.
+    statuts = next(p for p in checklist_de(FormeJuridique.SARL) if p.code == "STATUTS")
+    assert statuts.model_dump(mode="json")["moment"] == "CONSTITUTION"
+    assert "les vôtres s'ils sont déjà prêts" in statuts.libelle

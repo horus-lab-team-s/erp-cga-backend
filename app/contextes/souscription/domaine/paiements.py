@@ -138,6 +138,9 @@ class NaturePaiement(StrEnum):
     #: Des fonds de tiers (14 octobre 2026) : l'adhérent remet au cabinet ce qu'il doit à
     #: l'administration. `reference_reglee` est l'identifiant de l'appel de fonds.
     FONDS_DE_TIERS = "FONDS_DE_TIERS"
+    #: Les frais de traitement versés à la soumission d'une demande (9 novembre 2026).
+    #: `reference_reglee` est la référence du dossier commercial.
+    FRAIS_DE_TRAITEMENT = "FRAIS_DE_TRAITEMENT"
 
 
 class StrategieRapprochement(StrEnum):

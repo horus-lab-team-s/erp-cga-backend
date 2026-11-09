@@ -181,7 +181,7 @@ class TestTunnel:
         dossier = avancer(_dossier(), EtapeCreation.CONSTITUTION, JOUR)
         with pytest.raises(TransitionInterdite) as refus:
             avancer(dossier, EtapeCreation.DEPOT_CFCE, JOUR)
-        assert "Statuts rédigés par le cabinet et signés par tous les associés" in str(refus.value)
+        assert "Statuts signés par tous les associés" in str(refus.value)
 
     def test_on_ne_livre_pas_sans_rccm_ni_niu(self):
         dossier = _tout_fournir(_dossier())
