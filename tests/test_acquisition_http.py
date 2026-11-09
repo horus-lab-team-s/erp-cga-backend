@@ -269,7 +269,11 @@ class TestMontage:
             "/acquisition/dossiers/{reference}/ouverture",
             # 19 octobre 2026 (point 22) : PROTÉGÉE par `LIRE_PROSPECT`.
             # 9 novembre 2026 : PROTÉGÉE par `ENCAISSER`. La pénalité d'un rendez-vous manqué.
+            # Lot 4 (9 novembre 2026) : les pénalités de retard.
+            "/acquisition/dossiers/{reference}/penalite-de-retard/encaissement",
             "/acquisition/dossiers/{reference}/penalite/encaissement",
+            "/acquisition/dossiers/{reference}/penalites",
+            "/acquisition/dossiers/{reference}/penalites/{numero}/levee",
             "/acquisition/dossiers/{reference}/pieces/{empreinte}",
             # Pas 137 : le seul geste qui engage l'échange sans qualification.
             "/acquisition/dossiers/{reference}/premier-contact",
@@ -316,6 +320,9 @@ class TestMontage:
             "/acquisition/rendez-vous/creneaux",
             "/acquisition/rendez-vous/{identifiant}/constat",
             "/acquisition/rendez-vous/{identifiant}/lien",
+            # Lot 4 (9 novembre 2026) : PROTÉGÉE (`LIRE_PROSPECT`, ou la direction et la caisse
+            # pour les honoraires). Les retards du commerce, par responsable.
+            "/acquisition/retards",
         ]
 
     def test_le_referentiel_se_charge_au_premier_appel(self, client):

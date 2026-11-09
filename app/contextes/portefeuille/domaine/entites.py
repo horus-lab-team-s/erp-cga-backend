@@ -38,6 +38,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.contextes.portefeuille.domaine.documents_a_echeance import DocumentAEcheance
 from app.contextes.portefeuille.domaine.fiche_signaletique import FicheSignaletique
 from app.contextes.portefeuille.domaine.temporel import (
     MotifChangement,
@@ -445,6 +446,9 @@ class Entreprise(BaseModel):
     dirigeants: list[Dirigeant] = Field(default_factory=list)
     associes: list[Associe] = Field(default_factory=list)
     tiers: list[Tiers] = Field(default_factory=list)
+    #: Lot 4 (9 novembre 2026) : les documents à échéance (ACF, attestations…), datés. Voir
+    #: `documents_a_echeance.py`. Une liste vide pour tous les dossiers d'avant.
+    documents_a_echeance: list[DocumentAEcheance] = Field(default_factory=list)
 
     # ── Invariants ──────────────────────────────────────────────────────────
 

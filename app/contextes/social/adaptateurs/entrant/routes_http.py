@@ -55,10 +55,12 @@ from app.contextes.social.domaine.arrete_des_charges import (
     RubriqueSociale,
     proposition_des_charges,
 )
+from app.contextes.social.domaine.entites import PIECES_DE_L_EMPLOYE
 from app.contextes.transverse.api import (
     AccesRequis,
     Permission,
     atelier,
+    exiger,
     exiger_dossier,
     exiger_dossier_pour_l_un_de,
 )
@@ -101,6 +103,8 @@ class LigneSalarie(BaseModel):
     salaire_base: Decimal | None
     #: Vrai si aucun contrat ne couvre la date demandée — sorti, ou pas encore entré.
     sans_contrat: bool
+    #: 9 novembre 2026 : ce qui manque pour l'immatriculer (liste du responsable juridique).
+    a_completer: list[str] = Field(default_factory=list)
 
 
 class SyntheseDeclaration(BaseModel):
@@ -131,6 +135,25 @@ class DemandeSalarie(BaseModel):
     matricule_cnps: str | None = None
     date_naissance: date | None = None
     enfants_a_charge: int = Field(default=0, ge=0)
+    # 9 novembre 2026 : pour son immatriculation. Voir `Salarie`.
+    telephone: str | None = Field(default=None, max_length=30)
+    quartier: str | None = Field(default=None, max_length=120)
+    courriel: str | None = Field(default=None, max_length=200)
+    arrondissement_naissance_pere: str | None = Field(default=None, max_length=120)
+    arrondissement_naissance_mere: str | None = Field(default=None, max_length=120)
+
+
+class CoordonneesDuSalarie(BaseModel):
+    """Compléter, après l'embauche, ce que l'immatriculation demande."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    date_naissance: date | None = None
+    telephone: str | None = Field(default=None, max_length=30)
+    quartier: str | None = Field(default=None, max_length=120)
+    courriel: str | None = Field(default=None, max_length=200)
+    arrondissement_naissance_pere: str | None = Field(default=None, max_length=120)
+    arrondissement_naissance_mere: str | None = Field(default=None, max_length=120)
 
 
 class DemandeContrat(BaseModel):
@@ -210,6 +233,7 @@ def lister_salaries(
                 depuis=contrat.debut if contrat else None,
                 salaire_base=contrat.salaire_base if contrat else None,
                 sans_contrat=contrat is None,
+                a_completer=list(salarie.a_completer_pour_l_immatriculation),
             )
         )
     return lignes
@@ -598,11 +622,48 @@ def inscrire(acces: AccesRequis, entreprise: str, demande: DemandeSalarie) -> Sa
         matricule_cnps=demande.matricule_cnps,
         date_naissance=demande.date_naissance,
         enfants_a_charge=demande.enfants_a_charge,
+        telephone=demande.telephone,
+        quartier=demande.quartier,
+        courriel=demande.courriel,
+        arrondissement_naissance_pere=demande.arrondissement_naissance_pere,
+        arrondissement_naissance_mere=demande.arrondissement_naissance_mere,
     )
     try:
         return inscrire_un_salarie(salarie, salaries=depot_salaries, contrats=depot_contrats)
     except MatriculeDejaAttribue as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
+
+
+@routeur.put(
+    "/dossiers/{entreprise}/salaries/{matricule}/coordonnees",
+    summary="Compléter ce que l'immatriculation d'un salarié demande",
+)
+def completer_les_coordonnees(
+    acces: AccesRequis, entreprise: str, matricule: str, demande: CoordonneesDuSalarie
+) -> Salarie:
+    """9 novembre 2026 : la liste du responsable juridique (téléphone, quartier, adresse
+    mail, arrondissements de naissance des parents). Seuls les champs envoyés changent."""
+    exiger_dossier_pour_l_un_de(acces, TENUE_DE_LA_PAIE, entreprise)
+    depot_salaries, _ = depots()
+    salarie = next(
+        (s for s in depot_salaries.du_dossier(entreprise) if s.matricule == matricule), None
+    )
+    if salarie is None:
+        raise HTTPException(status_code=404, detail=f"salarié {matricule} introuvable.")
+    complete = salarie.model_copy(update=demande.model_dump(exclude_unset=True))
+    depot_salaries.enregistrer(complete)
+    return complete
+
+
+@routeur.get(
+    "/pieces-de-l-employe",
+    summary="Les pièces à fournir pour l'immatriculation de chaque employé",
+)
+def lire_les_pieces_de_l_employe(acces: AccesRequis) -> list[str]:
+    # Une liste fixe, sans donnée d'aucun dossier : la lecture du dossier suffit.
+    if not acces.detient(Permission.TENIR_SA_PAIE):
+        exiger(acces, Permission.LIRE_DOSSIER)
+    return list(PIECES_DE_L_EMPLOYE)
 
 
 @routeur.post(

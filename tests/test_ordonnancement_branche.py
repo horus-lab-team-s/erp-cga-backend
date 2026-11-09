@@ -107,6 +107,8 @@ class TestLeTourHorsRequete:
             "rappels-d-echeance",
             # 9 novembre 2026 : le rappel de la veille des rendez-vous de création, après.
             "rappel-des-rendez-vous",
+            # Lot 4 (9 novembre 2026) : les alertes d'expiration, en dernier.
+            "alertes-d-expiration",
         ]
 
     def test_le_passage_survit_au_tour_suivant(self, en_base, moteur_test):
@@ -125,6 +127,7 @@ class TestLeTourHorsRequete:
         # ⚠️ Trié par **nom** en SQL, et non par ordre d'exécution : le cas
         # précédent garde l'ordre d'exécution, celui-ci garde la persistance.
         assert [ligne.travail for ligne in lignes] == [
+            "alertes-d-expiration",
             "lecture-au-depot",
             "rappel-des-rendez-vous",
             "rappels-d-echeance",

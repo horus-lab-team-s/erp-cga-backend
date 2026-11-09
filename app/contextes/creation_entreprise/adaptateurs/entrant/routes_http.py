@@ -18,18 +18,15 @@ import logging
 import re
 from datetime import date, timedelta
 from decimal import Decimal
-from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from app.contextes.creation_entreprise.adaptateurs.sortant.donnees_demo import PIPELINE_DEMO
 from app.contextes.creation_entreprise.api import (
     CanalDeLaPiece,
     ConversionImpossible,
     DepotDossiersCreation,
-    DepotDossiersCreationMemoire,
     DepotDossiersCreationSql,
     DossierCreation,
     DossierCreationIntrouvable,
@@ -43,6 +40,7 @@ from app.contextes.creation_entreprise.api import (
     avancer,
     checklist_de,
     convertir,
+    creations_en_memoire,
     depasse_le_delai_annonce,
     diagnostiquer,
     enregistrer_identifiant,
@@ -113,9 +111,9 @@ def depot() -> DepotDossiersCreation:
     return DepotDossiersCreationSql(session, courant())
 
 
-@lru_cache
-def _depot_memoire() -> DepotDossiersCreationMemoire:
-    return DepotDossiersCreationMemoire(list(PIPELINE_DEMO))
+# Lot 4 (9 novembre 2026) : la fabrique unique, partagée avec le pilotage (mémoïsée, donc
+# `cache_clear` reste disponible pour les cas qui repartent d'un magasin vierge).
+_depot_memoire = creations_en_memoire
 
 
 def parametres() -> ServiceParametres:
@@ -1189,3 +1187,7 @@ def _lire(reference: str, magasin: DepotDossiersCreation | None = None) -> Dossi
 
 
 __all__ = ["Immatriculation", "Jalon", "routeur"]
+
+
+#: Lot 4 (9 novembre 2026) : les routes des délais lisent un dossier comme les autres.
+lire_un_dossier_de_creation = _lire

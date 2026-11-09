@@ -169,6 +169,22 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "code": "K7M4-Q2XP",
         "rendez_vous": "Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, au cabinet.",
     },
+    "penalite.infligee": {
+        # Recopié de `routes_penalites._prevenir_le_client`.
+        "prenom": "Ngono Couture",
+        "motif": "Retard de retrait des originaux",
+        "montant": "10 000",
+        "explication": (
+            "Vos originaux sont prêts depuis le 1er octobre ; le délai de retrait est de 30 jours."
+        ),
+    },
+    "expiration.adherent": {
+        # Recopié de `routes_expirations.alerter_des_expirations`.
+        "prenom": "Sylvie NGONO",
+        "denomination": "SARL BATIMENT PLUS",
+        "libelle": "Attestation de conformité fiscale (ACF)",
+        "echeance": "expire le 15/12/2026",
+    },
     "rendez_vous.lien": {
         # Recopié de `routes_rendez_vous.envoyer_le_lien`.
         "prenom": "Sylvie NGONO",

@@ -1099,6 +1099,8 @@ class PaiementEnLigneDemande(BaseModel):
     #: Aucun débit réel n'a été demandé : la plateforme n'a pas d'identifiants
     #: marchands. La page le dit au client plutôt que de le laisser attendre.
     simule: bool
+    #: 9 novembre 2026 : validé d'office (recette ou période d'essai) — aucun débit réel.
+    valide_d_office: bool = False
 
 
 @routeur.post(
@@ -1179,6 +1181,7 @@ def payer_en_ligne(numero: str, corps: DemandeDePaiementEnLigne) -> PaiementEnLi
         message=demande.message,
         telephone=f"…{demande.telephone[-4:]}",
         simule=bool(comptoir().fournisseur.simule),
+        valide_d_office=demande.valide_d_office,
     )
 
 

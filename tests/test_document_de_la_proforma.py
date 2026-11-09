@@ -329,11 +329,14 @@ class TestLaSecondePageDuCabinet:
 
         assert "DOCUMENTS A FOURNIR" in texte
         assert "DOCUMENTS A RECEVOIR" in texte
-        assert len(composition.documents_a_fournir) == 12
+        # 12 au 14 octobre 2026, 16 depuis la liste du responsable juridique (9 novembre 2026).
+        assert len(composition.documents_a_fournir) == 16
         assert len(composition.documents_a_recevoir) == 6
         # La première et la dernière pièce : la liste est entière, pas amorcée.
         assert "Le nom de votre entreprise" in texte
-        assert "cachet de l'entreprise, une fois celle-ci créée" in texte
+        assert "Cachet de l'entreprise" in texte
+        # 9 novembre 2026 : les lignes ajoutées par le responsable juridique.
+        assert "arrondissements de naissance des parents de l'employé" in texte
         assert "Un registre de commerce" in texte
 
     def test_le_delai_et_les_moyens_de_reglement_sont_imprimes(self):

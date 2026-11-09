@@ -104,6 +104,8 @@ class RegleDesVersementsAFixer(BaseModel):
     seuil_demarrage_pourcent: int = Field(ge=1, le=100)
     #: 9 novembre 2026 : la pénalité d'un rendez-vous manqué. Absente : aucune.
     penalite_rendez_vous: Decimal | None = Field(default=None, gt=0)
+    #: Lot 4 : le montant par défaut d'une pénalité de retard, par motif. Absent : saisi.
+    penalites_de_retard: dict[str, Decimal] = Field(default_factory=dict)
     motif: str = Field(min_length=10, max_length=500)
 
 
@@ -119,6 +121,7 @@ def fixer_la_regle_des_versements(
             frais_par_service=demande.frais_par_service,
             seuil_demarrage_pourcent=demande.seuil_demarrage_pourcent,
             penalite_rendez_vous=demande.penalite_rendez_vous,
+            penalites_de_retard=demande.penalites_de_retard,
             motif=demande.motif,
             fixee_par=acces.compte,
             fixee_le=maintenant(),
@@ -138,6 +141,7 @@ def fixer_la_regle_des_versements(
             "penalite_rendez_vous": (
                 str(regle.penalite_rendez_vous) if regle.penalite_rendez_vous else None
             ),
+            "penalites_de_retard": {k: str(v) for k, v in regle.penalites_de_retard.items()},
         },
         motif=demande.motif,
     )

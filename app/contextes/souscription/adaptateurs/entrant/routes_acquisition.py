@@ -626,6 +626,8 @@ class PaiementDesFraisDemande(BaseModel):
     telephone: str
     simule: bool
     montant: Decimal
+    #: 9 novembre 2026 : validé d'office (recette ou période d'essai) — aucun débit réel.
+    valide_d_office: bool = False
 
 
 def _dossier_du_jeton_de_frais(jeton: str):
@@ -708,13 +710,14 @@ def payer_les_frais_en_ligne(corps: FraisAPayer) -> PaiementDesFraisDemande:
     )
     if initiation.reference_externe:
         boutique.paiements.enregistrer(paiement.avec_reference(initiation.reference_externe))
-    valider_d_office_en_recette(paiement.identifiant)
+    valide = valider_d_office_en_recette(paiement.identifiant)
     return PaiementDesFraisDemande(
         accepte=initiation.accepte,
         message=initiation.message,
         telephone=f"…{telephone[-4:]}",
         simule=bool(boutique.fournisseur.simule),
         montant=montant,
+        valide_d_office=valide,
     )
 
 
@@ -725,9 +728,10 @@ def valider_d_office_en_recette(identifiant_paiement: str) -> bool:
     9 NOVEMBRE 2026 : « pour les tests, active les validations de paiement automatiques »
 
     ⚠️ LA MÊME RÈGLE QUE L'ABONNEMENT EN LIGNE (`routes_http.engager_une_souscription`) : ce
-    raccourci n'existe QUE sous `CGA_MODE_DEMONSTRATION`, drapeau déclaré que la production
-    refuse au démarrage, et seulement quand le fournisseur est simulé (sans clé Tara). Il ne
-    se déduit jamais d'une clé absente.
+    raccourci n'existe QUE sous `CGA_MODE_DEMONSTRATION` (recette, refusé en production) ou
+    `CGA_PAIEMENTS_D_ESSAI` (la période d'essai du serveur de la cliente, qui ignore alors les
+    clés Tara), et seulement quand le fournisseur est simulé. Il ne se déduit jamais d'une
+    clé absente.
 
     ⚠️ RIEN N'EST COURT-CIRCUITÉ : on emprunte le chemin d'une vraie notification de
     l'opérateur (`traiter_notification`), donc le rapprochement, la vérification du
@@ -735,7 +739,8 @@ def valider_d_office_en_recette(identifiant_paiement: str) -> bool:
     l'opérateur est simulé.
     ─────────────────────────────────────────────────────────────────────────
     """
-    if not configuration().mode_demonstration:
+    config = configuration()
+    if not config.paiements_valides_d_office:
         return False
     from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
     from app.contextes.souscription.application.encaissement import traiter_notification
@@ -749,11 +754,20 @@ def valider_d_office_en_recette(identifiant_paiement: str) -> bool:
     traiter_notification(
         {
             "productId": paiement.cle_idempotence,
-            "paymentId": f"DEMONSTRATION-{paiement.identifiant}",
+            # « ESSAI- » en période d'essai : on doit pouvoir les retrouver pour les purger.
+            "paymentId": (
+                f"ESSAI-{paiement.identifiant}"
+                if config.paiements_d_essai
+                else f"DEMONSTRATION-{paiement.identifiant}"
+            ),
             "status": "SUCCESS",
             "amount": str(paiement.montant),
             "phoneNumber": paiement.telephone,
-            "message": "validé d'office — mode démonstration",
+            "message": (
+                "validé d'office — période d'essai"
+                if config.paiements_d_essai
+                else "validé d'office — mode démonstration"
+            ),
         },
         fournisseur=boutique.fournisseur,
         paiements=boutique.paiements,
@@ -2640,6 +2654,8 @@ class ReglementDemande(BaseModel):
     #: preuve de paiement : le client n'a pas encore saisi son code.
     accepte: bool
     message: str
+    #: 9 novembre 2026 : validé d'office (recette ou période d'essai) — aucun débit réel.
+    valide_d_office: bool = False
 
 
 def solliciter_le_telephone(
@@ -2737,8 +2753,8 @@ def solliciter_le_telephone(
         boutique.paiements.enregistrer(
             paiement.avec_reference(initiation.reference_externe)
         )
-    # 9 novembre 2026 : en recette, la tranche se valide seule (voir la fonction).
-    valider_d_office_en_recette(paiement.identifiant)
+    # 9 novembre 2026 : en recette ou en période d'essai, la tranche se valide seule.
+    valide = valider_d_office_en_recette(paiement.identifiant)
 
     return ReglementDemande(
         dossier=dossier.reference,
@@ -2749,6 +2765,7 @@ def solliciter_le_telephone(
         paiement=paiement.identifiant,
         accepte=initiation.accepte,
         message=initiation.message,
+        valide_d_office=valide,
     )
 
 
@@ -2863,6 +2880,7 @@ class ReglementDeCaisse(BaseModel):
     #: 9 novembre 2026 : `PROFORMA` ; `FRAIS_DE_TRAITEMENT`, des frais attendus avant toute
     #: proforma ; `PENALITE_RENDEZ_VOUS`, une pénalité due ; `TROP_PERCU`, de l'argent reçu
     #: de l'opérateur à restituer au client. `proforma` est vide pour les trois derniers.
+    #: Lot 4 : `PENALITE_DE_RETARD`, des pénalités de retard infligées et non levées.
     objet: str = "PROFORMA"
 
 
@@ -2906,6 +2924,9 @@ def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
     regle = regle_des_versements()
     dus: list[tuple[datetime, ReglementDeCaisse]] = []
     regles: list[tuple[datetime, ReglementDeCaisse]] = []
+    from app.contextes.souscription.adaptateurs.entrant.routes_penalites import (
+        penalite_de_retard_due,
+    )
     from app.contextes.souscription.adaptateurs.entrant.routes_rendez_vous import penalite_due
 
     for dossier in depot_dossiers().lister():
@@ -2918,6 +2939,8 @@ def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
         )
         for objet, montant in (
             ("PENALITE_RENDEZ_VOUS", penalite_due(dossier.reference, situation_hors)),
+            # Lot 4 : les pénalités de retard infligées et non levées.
+            ("PENALITE_DE_RETARD", penalite_de_retard_due(dossier, situation_hors)),
             ("TROP_PERCU", situation_hors.trop_percu),
         ):
             if montant > 0:
@@ -3361,3 +3384,8 @@ def chercher_un_dossier_commercial(
             )
         )
     return classer_les_resultats("souscription", resultats, reglages)
+
+
+#: Lot 4 (9 novembre 2026) : la vue des retards lit les mêmes délais et le même annuaire.
+referentiel_de_veille = _referentiel_de_veille
+noms_des_collaborateurs = _noms_des_collaborateurs

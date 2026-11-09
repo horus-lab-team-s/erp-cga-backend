@@ -286,6 +286,17 @@ PIECES_DE_LA_CONSTITUTION: frozenset[str] = frozenset(
 )
 
 
+#: Les pièces de l'IMMATRICULATION de l'entreprise et de son personnel (9 novembre 2026).
+#:
+#: ⚠️ Liste du responsable juridique du cabinet : « les documents dont nous avons besoin pour
+#: votre immatriculation et celles de vos employés ». Elles viennent APRÈS la création — la
+#: société a alors son cachet, son téléphone, son adresse — et ne bloquent donc pas le dépôt
+#: du dossier de constitution : voir `pieces_manquantes`.
+PIECES_DE_L_IMMATRICULATION: frozenset[str] = frozenset(
+    {"ID_GERANT", "COORDONNEES_ENTREPRISE", "LISTE_PERSONNEL", "CACHET_ENTREPRISE"}
+)
+
+
 class PieceConstitution(BaseModel):
     """Une pièce attendue au dossier de constitution.
 
@@ -318,6 +329,8 @@ class PieceConstitution(BaseModel):
     def moment(self) -> str:
         """`FONDATEUR` : il l'a déjà, à fournir dès l'ouverture. `CONSTITUTION` : elle
         s'établit pendant la constitution, avec le cabinet. Voir `PIECES_DE_LA_CONSTITUTION`."""
+        if self.code in PIECES_DE_L_IMMATRICULATION:
+            return "IMMATRICULATION"
         return "CONSTITUTION" if self.code in PIECES_DE_LA_CONSTITUTION else "FONDATEUR"
 
 
@@ -376,6 +389,11 @@ class DossierCreation(BaseModel):
     #: portefeuille. Sert de lien, et évite de reconvertir deux fois.
     converti_en: str | None = None
     motif_abandon: str | None = None
+    # ── Lot 4 (9 novembre 2026) : les points de départ et d'arrivée des délais ──
+    #: Le cabinet a transmis les statuts au client (fin de la rédaction, début de la validation).
+    statuts_transmis_le: date | None = None
+    #: Le client a retiré ses originaux (fin du délai de retrait).
+    originaux_remis_le: date | None = None
 
     @model_validator(mode="after")
     def _un_abandon_porte_son_motif(self) -> DossierCreation:
@@ -399,8 +417,25 @@ class DossierCreation(BaseModel):
     # ── Lectures ────────────────────────────────────────────────────────────
     @property
     def pieces_manquantes(self) -> tuple[PieceConstitution, ...]:
-        """Les pièces obligatoires encore absentes."""
-        return tuple(p for p in self.pieces if p.obligatoire and not p.fournie)
+        """Les pièces obligatoires de la CONSTITUTION encore absentes.
+
+        ⚠️ 9 novembre 2026 : celles de l'immatriculation (cachet, liste du personnel…) n'y
+        sont pas : elles suivent la création et ne retiennent pas le dépôt du dossier.
+        """
+        return tuple(
+            p
+            for p in self.pieces
+            if p.obligatoire and not p.fournie and p.moment != "IMMATRICULATION"
+        )
+
+    @property
+    def pieces_d_immatriculation_manquantes(self) -> tuple[PieceConstitution, ...]:
+        """Ce qui manque encore pour immatriculer l'entreprise et son personnel."""
+        return tuple(
+            p
+            for p in self.pieces
+            if p.obligatoire and not p.fournie and p.moment == "IMMATRICULATION"
+        )
 
     @property
     def constitution_achevee(self) -> bool:

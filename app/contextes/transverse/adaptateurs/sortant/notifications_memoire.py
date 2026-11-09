@@ -76,6 +76,8 @@ CODES_MESSAGES: dict[str, str] = {
     "demande.rattachee": "Une demande jointe à son dossier par le code de dossier",
     "rendez_vous.lien": "Le lien de visioconférence d'un rendez-vous de création",
     "rendez_vous.rappel": "Le rappel de la veille d'un rendez-vous de création",
+    "expiration.adherent": "Un document ou une adhésion qui expire, prévenu à l'adhérent",
+    "penalite.infligee": "Une pénalité de retard appliquée au dossier, avec son explication",
     # Pas 133 : une fondatrice n'a pas souscrit, elle a fait immatriculer sa
     # société — et son accès s'ouvre le jour du NIU, pas celui du paiement.
     "compte.activation_creation": (

@@ -258,12 +258,14 @@ class TestLaSondeDuPilotage:
     def test_elle_se_tait_sur_le_referentiel_livre(self):
         assert sonde_du_pilotage() is None
 
-    def test_les_sept_reglages_sont_couverts(self):
-        """Le compte est écrit ici pour qu'un huitième réglage ajouté sans sonde se voie."""
+    def test_les_huit_reglages_sont_couverts(self):
+        """Le compte est écrit ici pour qu'un neuvième réglage ajouté sans sonde se voie.
+
+        Huit depuis le lot 4 (9 novembre 2026) : les paliers des alertes d'expiration."""
         fichiers = sorted(
             p.name for p in Path(configuration().dossier_referentiel, "pilotage").glob("*.yaml")
         )
-        assert len(REGLAGES) == len(fichiers) == 7, fichiers
+        assert len(REGLAGES) == len(fichiers) == 8, fichiers
 
     def test_un_reglage_mal_forme_est_suspect_et_nomme_l_ecran(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CGA_DOSSIER_REFERENTIEL", str(tmp_path))

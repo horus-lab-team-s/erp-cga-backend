@@ -104,6 +104,7 @@ def _lignes(familles: list[FamilleDeVersement]) -> list[LigneDuJournal]:
                             f"Frais de traitement · {dossier.service.lower()}"
                         ),
                         NatureVersement.PENALITE_RENDEZ_VOUS: "Pénalité · rendez-vous manqué",
+                        NatureVersement.PENALITE_DE_RETARD: "Pénalité · retard",
                         NatureVersement.TROP_PERCU: "Trop-perçu à restituer",
                         NatureVersement.RESTITUTION: "Restitution d'un trop-perçu",
                     }.get(v.nature, f"Proforma {v.proforma} · tranche")

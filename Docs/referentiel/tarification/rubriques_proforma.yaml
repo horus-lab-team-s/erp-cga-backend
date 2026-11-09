@@ -39,9 +39,9 @@ variantes:
     source: Docs/PROFORMA SARL SOUS SEING PRIVEE.pdf
     applicable_du: 2026-01-01
     # ⚠️ LA SECONDE PAGE DU DOCUMENT, transcrite mot pour mot (14 octobre 2026).
-    # ⚠️ 9 novembre 2026 : quatre lignes précisées, l'entreprise n'existant pas encore à ce
-    # stade (futur siège, contacts à venir, personnel prévu, cachet une fois créée). À faire
-    # valider par le cabinet, auteur du texte d'origine.
+    # ⚠️ 9 novembre 2026 : la liste du responsable juridique du cabinet (« les documents dont
+    # nous avons besoin pour votre immatriculation et celles de vos employés ») confirme le
+    # texte d'origine, rétabli tel quel, et y ajoute les quatre dernières lignes.
     # Elle est identique sur les deux proformas du cabinet : écrite une fois ici,
     # sous ancres, et reprise par la variante suivante. La recopier ferait deux
     # listes de pièces qui divergeraient à la première correction.
@@ -53,14 +53,18 @@ variantes:
       - La division des parts sociales et des pourcentages
       - La localisation de l'entreprise
       - La photocopie de la CNI du gérant
-      - Le plan de localisation du futur siège de votre entreprise
-      - Le numéro de téléphone et l'adresse mail que l'entreprise utilisera
-      - La liste du personnel prévu, s'il y en a
-      - Le cachet de l'entreprise, une fois celle-ci créée
+      - Le plan de localisation de votre entreprise
+      - Le numéro de téléphone de l'entreprise et son adresse mail
+      - Liste du personnel
+      - Cachet de l'entreprise
       - >-
         Une copie certifiée non timbrée de la CNI ou de l'acte de naissance de l'employé
       - >-
         Une photocopie simple de la CNI et de l'acte de naissance de l'employé
+      - Le numéro de téléphone de l'employé, et son quartier
+      - L'adresse mail de l'employé
+      - Le plan de localisation de l'employé
+      - Les arrondissements de naissance des parents de l'employé (père et mère)
     documents_a_recevoir: &a_recevoir
       - Un registre de commerce et du crédit mobilier
       - Une attestation de création d'entreprise

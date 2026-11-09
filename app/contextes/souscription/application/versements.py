@@ -209,6 +209,9 @@ def recevoir_un_versement(
             )
     elif nature is NatureVersement.RESTITUTION:
         pass  # bornée au trop-perçu en attente par `verifier_le_versement`
+    elif nature is NatureVersement.PENALITE_DE_RETARD:
+        # Lot 4 : bornée à ce qui reste dû par la route (pénalités infligées, non levées).
+        pass
     elif nature is NatureVersement.PENALITE_RENDEZ_VOUS:
         # 9 novembre 2026 : ni proforma ni acceptation ; le montant fixé, et lui seul.
         if regle.penalite_rendez_vous is None:

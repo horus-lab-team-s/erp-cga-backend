@@ -95,6 +95,16 @@ abonnements:
     texte: "Accusé de réception {accuse}, pour le dossier {dossier}."
     lien: "/obligations"
 
+  # ── Lot 4 (9 novembre 2026) : ce qui expire au portefeuille ──
+  # L'adhérent, lui, est prévenu par courriel (gabarit `expiration.adherent`).
+  - action: expiration.signalee
+    destinataires:
+      permissions: [SAISIR_ECRITURE, LIRE_PILOTAGE]
+      dossier: dossier
+    titre: "{libelle} : {denomination}"
+    texte: "Échéance le {expire_le} ({jours} jours). À renouveler avec l'adhérent."
+    lien: "/portefeuille/{dossier}"
+
   # ── Accès : celui qui reçoit un accès ou un dossier le sait ──
   - action: habilitation.accordee
     destinataires:

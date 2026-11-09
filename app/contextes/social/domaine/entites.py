@@ -222,6 +222,41 @@ class Salarie(BaseModel):
     #: Nombre d'enfants à charge — porté pour le DIPE, sans effet sur le calcul :
     #: le Cameroun n'applique pas de quotient familial sur les salaires.
     enfants_a_charge: int = Field(default=0, ge=0)
+    # ── Pour son immatriculation (9 novembre 2026, liste du responsable juridique) ──
+    #
+    # « Le numéro de téléphone de l'employé, et son quartier ; son adresse mail ; les
+    # arrondissements de naissance de ses parents (père et mère). » Facultatifs à la
+    # saisie, comme le matricule CNPS : on les complète, `a_completer_pour_l_immatriculation`
+    # dit ce qui manque.
+    telephone: str | None = Field(default=None, max_length=30)
+    quartier: str | None = Field(default=None, max_length=120)
+    courriel: str | None = Field(default=None, max_length=200)
+    arrondissement_naissance_pere: str | None = Field(default=None, max_length=120)
+    arrondissement_naissance_mere: str | None = Field(default=None, max_length=120)
+
+    @property
+    def a_completer_pour_l_immatriculation(self) -> tuple[str, ...]:
+        """Les informations de la liste du cabinet qui manquent encore, en clair."""
+        manques = []
+        for valeur, libelle in (
+            (self.date_naissance, "date de naissance"),
+            (self.telephone, "téléphone"),
+            (self.quartier, "quartier"),
+            (self.courriel, "adresse mail"),
+            (self.arrondissement_naissance_pere, "arrondissement de naissance du père"),
+            (self.arrondissement_naissance_mere, "arrondissement de naissance de la mère"),
+        ):
+            if not valeur:
+                manques.append(libelle)
+        return tuple(manques)
+
+
+#: Les pièces à fournir pour chaque employé (9 novembre 2026, liste du responsable juridique).
+PIECES_DE_L_EMPLOYE: tuple[str, ...] = (
+    "Une copie certifiée non timbrée de la CNI ou de l'acte de naissance de l'employé",
+    "Une photocopie simple de la CNI et de l'acte de naissance de l'employé",
+    "Le plan de localisation de l'employé",
+)
 
 
 class Contrat(BaseModel):

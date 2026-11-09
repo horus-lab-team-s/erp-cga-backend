@@ -79,6 +79,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.souscription.domaine.demande_de_contact import DemandeDeContact
+from app.contextes.souscription.domaine.penalites import PenaliteInfligee
 
 __all__ = [
     "JOURS_POUR_JOINDRE",
@@ -368,6 +369,9 @@ class DossierCommercial(BaseModel):
     #: Les documents joints par le visiteur au moment de sa demande (point 22).
     #: ⚠️ Non promu en colonne : lu sur le dossier déjà chargé, comme `signale_le`.
     pieces_jointes: tuple[PieceJointe, ...] = ()
+    #: Lot 4 (9 novembre 2026) : les pénalités de retard infligées par un responsable.
+    #: Voir `domaine/penalites.py`. Levées, elles restent ici, datées et motivées.
+    penalites: tuple[PenaliteInfligee, ...] = ()
 
     # ── Ce que le dossier sait dire de lui-même ─────────────────────────────
 

@@ -137,6 +137,30 @@ _REGLEMENT_INTERIEUR = PieceConstitution(
     libelle="Règlement intérieur du groupement",
 )
 
+# ── L'immatriculation de l'entreprise et du personnel (9 novembre 2026) ─────────
+#
+# La liste du responsable juridique, dans ses mots. Ce qui concerne CHAQUE employé (copies
+# de la CNI ou de l'acte de naissance, téléphone, quartier, adresse, plan, arrondissements
+# de naissance des parents) se recueille sur la fiche du salarié, au module social.
+
+_ID_GERANT = PieceConstitution(code="ID_GERANT", libelle="Photocopie de la CNI du gérant")
+_COORDONNEES_ENTREPRISE = PieceConstitution(
+    code="COORDONNEES_ENTREPRISE",
+    libelle="Le numéro de téléphone de l'entreprise et son adresse mail",
+)
+_LISTE_PERSONNEL = PieceConstitution(code="LISTE_PERSONNEL", libelle="Liste du personnel")
+_CACHET_ENTREPRISE = PieceConstitution(
+    code="CACHET_ENTREPRISE", libelle="Le cachet de l'entreprise (une empreinte)"
+)
+
+#: Ce que toute entreprise ajoute pour son immatriculation et celle de ses employés.
+_IMMATRICULATION: tuple[PieceConstitution, ...] = (
+    _ID_GERANT,
+    _COORDONNEES_ENTREPRISE,
+    _LISTE_PERSONNEL,
+    _CACHET_ENTREPRISE,
+)
+
 # ── Les pièces de situation (8 novembre 2026, réunion du 4 novembre) ──────────
 #
 # Elles ne dépendent pas de la forme mais de QUI crée et de QUOI : un promoteur étranger,
@@ -287,4 +311,6 @@ def checklist_de(
     socle = _SOCLE
     if situation.etranger:
         socle = tuple(_PASSEPORT_FONDATEUR if p is _IDENTITE_FONDATEUR else p for p in socle)
-    return socle + _PAR_FORME.get(forme, ()) + _pieces_de_situation(situation)
+    return (
+        socle + _PAR_FORME.get(forme, ()) + _pieces_de_situation(situation) + _IMMATRICULATION
+    )

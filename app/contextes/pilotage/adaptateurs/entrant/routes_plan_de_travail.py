@@ -186,4 +186,7 @@ def lire_le_plan_de_travail(
     )
 
 
-__all__ = ["routeur"]
+#: Lot 4 (9 novembre 2026) : la vue des retards relit les dossiers comme le plan.
+etat_du_dossier_pour_le_plan = _etat_du_dossier
+
+__all__ = ["etat_du_dossier_pour_le_plan", "routeur"]

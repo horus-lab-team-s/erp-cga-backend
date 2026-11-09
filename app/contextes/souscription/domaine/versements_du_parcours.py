@@ -72,6 +72,8 @@ class NatureVersement(StrEnum):
     #: La pénalité d'un rendez-vous manqué (9 novembre 2026). ⚠️ JAMAIS déduite du total :
     #: elle sanctionne l'absence, elle ne paie pas la prestation.
     PENALITE_RENDEZ_VOUS = "PENALITE_RENDEZ_VOUS"
+    #: Lot 4 (9 novembre 2026) : une pénalité de retard infligée par un responsable.
+    PENALITE_DE_RETARD = "PENALITE_DE_RETARD"
     #: De l'argent reçu de l'opérateur que rien ne peut absorber (9 novembre 2026) : au-delà
     #: du reste, sur une proforma soldée, sur un dossier classé. ⚠️ JAMAIS perdu, jamais
     #: déduit : il attend à la caisse d'être restitué au client.
@@ -109,9 +111,24 @@ class RegleDesVersements(BaseModel):
     seuil_demarrage_pourcent: int = Field(default=100, ge=1, le=100)
     #: 9 novembre 2026 : la pénalité d'un rendez-vous manqué. Absente : aucune.
     penalite_rendez_vous: Decimal | None = Field(default=None, gt=0)
+    #: Lot 4 (9 novembre 2026) : le montant par défaut d'une pénalité de retard, par motif
+    #: (`MotifDePenalite`). Absent : le responsable le saisit.
+    penalites_de_retard: dict[str, Decimal] = Field(default_factory=dict)
     motif: str = Field(min_length=5, max_length=500)
     fixee_par: str = Field(min_length=1)
     fixee_le: datetime
+
+    @field_validator("penalites_de_retard")
+    @classmethod
+    def _penalites_positives(cls, montants: dict[str, Decimal]) -> dict[str, Decimal]:
+        from app.contextes.souscription.domaine.penalites import MotifDePenalite
+
+        for motif, montant in montants.items():
+            if motif not in MotifDePenalite.__members__:
+                raise ValueError(f"pénalité : motif inconnu {motif}.")
+            if montant <= 0:
+                raise ValueError(f"pénalité {motif} : un montant positif, ou la retirer.")
+        return montants
 
     @field_validator("frais_par_service")
     @classmethod
@@ -145,6 +162,8 @@ class SituationDesVersements(BaseModel):
     tranches_versees: Decimal
     #: Les pénalités de rendez-vous manqués versées. Hors du « payé ».
     penalites_versees: Decimal = Decimal(0)
+    #: Lot 4 : les pénalités de retard versées (hors rendez-vous manqués).
+    penalites_de_retard_versees: Decimal = Decimal(0)
     #: Reçu de l'opérateur sans pouvoir être absorbé, et pas encore restitué.
     trop_percu: Decimal = Decimal(0)
     #: Frais de traitement compris : ils sont déduits du total.
@@ -175,6 +194,10 @@ def situation_des_versements(
         (v.montant for v in siens if v.nature is NatureVersement.PENALITE_RENDEZ_VOUS),
         Decimal(0),
     )
+    penalites_de_retard = sum(
+        (v.montant for v in siens if v.nature is NatureVersement.PENALITE_DE_RETARD),
+        Decimal(0),
+    )
     paye = frais + tranches
     trop_percu = sum(
         (v.montant for v in siens if v.nature is NatureVersement.TROP_PERCU), Decimal(0)
@@ -186,6 +209,7 @@ def situation_des_versements(
             frais_verses=frais,
             tranches_versees=tranches,
             penalites_versees=penalites,
+            penalites_de_retard_versees=penalites_de_retard,
             trop_percu=trop_percu,
             paye=paye,
             reste=None,
@@ -206,6 +230,7 @@ def situation_des_versements(
         frais_verses=frais,
         tranches_versees=tranches,
         penalites_versees=penalites,
+        penalites_de_retard_versees=penalites_de_retard,
         trop_percu=trop_percu,
         paye=paye,
         reste=reste,
@@ -226,6 +251,7 @@ def verifier_le_versement(
     if nature in (
         NatureVersement.FRAIS_DE_TRAITEMENT,
         NatureVersement.PENALITE_RENDEZ_VOUS,
+        NatureVersement.PENALITE_DE_RETARD,
         NatureVersement.TROP_PERCU,
     ):
         # ⚠️ 9 novembre 2026 : des frais versés deux fois (au rendez-vous, puis au formulaire)

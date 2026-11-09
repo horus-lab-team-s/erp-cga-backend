@@ -661,6 +661,30 @@ CATALOGUE: dict[str, Gabarit] = {
             ),
         ),
         Gabarit(
+            # Lot 4 (9 novembre 2026) : une pénalité de retard décidée par un responsable.
+            code="penalite.infligee",
+            objet="Votre dossier : une pénalité de retard",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Le cabinet a appliqué à votre dossier une pénalité : <strong>{motif}</strong>, "
+                "de <strong>{montant} FCFA</strong>.",
+                "{explication}",
+                "Elle se règle au cabinet. Une question, un empêchement : répondez à ce "
+                "courriel ou appelez votre interlocuteur, qui peut la revoir.",
+            ),
+        ),
+        Gabarit(
+            # Lot 4 (9 novembre 2026) : un document ou une adhésion qui expire, à l'adhérent.
+            code="expiration.adherent",
+            objet="{libelle} : à renouveler",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Pour <strong>{denomination}</strong> : {libelle} {echeance}.",
+                "Pensez à le renouveler, et à transmettre le nouveau document au cabinet depuis "
+                "votre espace. Votre interlocuteur au cabinet en est aussi prévenu.",
+            ),
+        ),
+        Gabarit(
             # 9 novembre 2026 : le rappel de la veille d'un rendez-vous de création.
             code="rendez_vous.rappel",
             objet="Rappel : votre rendez-vous avec le cabinet",

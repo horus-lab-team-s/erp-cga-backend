@@ -102,6 +102,9 @@ from app.contextes.pilotage.adaptateurs.entrant.routes_rapport import (
 from app.contextes.pilotage.adaptateurs.entrant.routes_relance import (
     routeur as routeur_relance_des_pieces,
 )
+from app.contextes.pilotage.adaptateurs.entrant.routes_retards import (
+    routeur as routeur_retards,
+)
 from app.contextes.portefeuille.adaptateurs.entrant.routes_acces_adherent import (
     routeur as routeur_acces_adherents,
 )
@@ -672,6 +675,13 @@ def _inscrire_les_travaux_periodiques() -> None:
     )
 
     inscrire_un_travail(travail_de_rappel_des_rendez_vous(), rappeler_les_rendez_vous)
+    # Lot 4 (9 novembre 2026) : les alertes d'expiration, après tout le reste.
+    from app.contextes.pilotage.adaptateurs.entrant.routes_expirations import (
+        alerter_des_expirations,
+        travail_des_alertes_d_expiration,
+    )
+
+    inscrire_un_travail(travail_des_alertes_d_expiration(), alerter_des_expirations)
 
 
 def creer_application() -> FastAPI:
@@ -740,6 +750,12 @@ def creer_application() -> FastAPI:
     # obligations déclarent.
     application.include_router(routeur_referentiel)
     application.include_router(routeur_portefeuille)
+    # Lot 4 (9 novembre 2026) : les documents à échéance des adhérents.
+    from app.contextes.portefeuille.adaptateurs.entrant.routes_documents_a_echeance import (
+        routeur as routeur_documents_a_echeance,
+    )
+
+    application.include_router(routeur_documents_a_echeance)
     application.include_router(routeur_collecte)
     application.include_router(routeur_facture_lue)
     # 20 octobre 2026 : la conformité contrôle les factures réelles, lues et confirmées,
@@ -772,7 +788,21 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_acces_adherents)
     application.include_router(routeur_file_d_anomalies)
     application.include_router(routeur_obligations)
+    # Lot 4 (9 novembre 2026) : les délais de la création (statuts, originaux).
+    # ⚠️ AVANT `routeur_creations` : sinon `/creations/{reference}` prendrait
+    # « regle-des-delais » pour une référence de dossier.
+    from app.contextes.creation_entreprise.adaptateurs.entrant.routes_delais import (
+        routeur as routeur_delais_de_creation,
+    )
+
+    application.include_router(routeur_delais_de_creation)
     application.include_router(routeur_creations)
+    # Lot 4 (9 novembre 2026) : les pénalités de retard, décidées par un responsable.
+    from app.contextes.souscription.adaptateurs.entrant.routes_penalites import (
+        routeur as routeur_penalites,
+    )
+
+    application.include_router(routeur_penalites)
     application.include_router(routeur_social)
     application.include_router(routeur_cloture)
     application.include_router(routeur_dsf)
@@ -784,6 +814,14 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_pilotage)
     # Pas 104 : le plan de travail des collaborateurs, qui réutilise les relevés du pilotage.
     application.include_router(routeur_plan_de_travail)
+    # Lot 4 (9 novembre 2026) : les retards du cabinet, par responsable.
+    application.include_router(routeur_retards)
+    # Lot 4 (9 novembre 2026) : ce qui expire au portefeuille.
+    from app.contextes.pilotage.adaptateurs.entrant.routes_expirations import (
+        routeur as routeur_expirations,
+    )
+
+    application.include_router(routeur_expirations)
     # Pas 105 : la charge et la production des collaborateurs, et les réaffectations proposées.
     application.include_router(routeur_charge)
     # Pas 106 : le rapport mensuel de la direction, daté, archivé et intègre.
@@ -829,6 +867,12 @@ def creer_application() -> FastAPI:
     )
 
     application.include_router(routeur_rendez_vous)
+    # Lot 4 (9 novembre 2026) : les retards du commerce, des rendez-vous et des honoraires.
+    from app.contextes.souscription.adaptateurs.entrant.routes_retards import (
+        routeur as routeur_retards_du_commerce,
+    )
+
+    application.include_router(routeur_retards_du_commerce)
     # 18 octobre 2026 : l'identité fiscale du cabinet, que la facture définitive attend.
     from app.contextes.souscription.adaptateurs.entrant.routes_facturation import (
         routeur as routeur_facturation,
@@ -907,6 +951,10 @@ def creer_application() -> FastAPI:
         # production.
         if config.mode_demonstration:
             etat["mode_demonstration"] = True
+        # 9 novembre 2026 : la période d'essai s'annonce aussi ; les écrans affichent leur
+        # bandeau à partir de ce champ.
+        if config.paiements_d_essai:
+            etat["paiements_d_essai"] = True
         if not config.en_base:
             return etat
 

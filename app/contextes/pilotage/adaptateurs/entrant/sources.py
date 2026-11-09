@@ -32,6 +32,7 @@ from app.contextes.transverse.api import session_de_travail
 from app.partage.locataire import courant
 
 __all__ = [
+    "depot_creations",
     "depot_demandes",
     "depot_dossiers",
     "depot_ecritures",
@@ -83,6 +84,19 @@ def echeancier_du_dossier(dossier, exercice: str, jour: date):
         # (pas 58).
         accuse_de=accuses_du_portail(),
     )
+
+
+def depot_creations():
+    """Les dossiers de création (lot 4, 9 novembre 2026), pour les retards au guichet."""
+    from app.contextes.creation_entreprise.api import (
+        DepotDossiersCreationSql,
+        creations_en_memoire,
+    )
+
+    session = session_de_travail()
+    if session is None:
+        return creations_en_memoire()
+    return DepotDossiersCreationSql(session, courant())
 
 
 def sans_echouer(lecture, repli):
