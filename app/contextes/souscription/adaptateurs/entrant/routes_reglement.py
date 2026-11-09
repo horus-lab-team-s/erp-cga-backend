@@ -91,10 +91,16 @@ def _raison_de_la_suspension(niu: str) -> str | None:
     situation = situation_du_dossier(niu)
     if situation.acces_ouvert:
         return None
+    # ⚠️ 9 novembre 2026 : le message promettait « l'accès se rouvre dès le règlement
+    # constaté ». Faux pour un règlement partiel : la suspension court depuis la plus
+    # ancienne échéance impayée, et l'accès ne se rouvre que lorsqu'aucune échéance de
+    # plus de N mois ne reste due (ou par une grâce).
+    mois = _regle(_comptoir()).acces_client_mois
     return (
         f"Votre espace est suspendu : {montant_fcfa(situation.du)} d'honoraires restent "
-        f"dus depuis plus de {_regle(_comptoir()).acces_client_mois} mois. Réglez-les "
-        "depuis la page Honoraires : l'accès se rouvre dès le règlement constaté."
+        f"dus, dont une échéance impayée depuis plus de {mois} mois. Réglez-les depuis la "
+        f"page Honoraires : l'accès se rouvre dès que les échéances impayées depuis plus "
+        f"de {mois} mois sont réglées, ou sur accord du cabinet."
     )
 
 

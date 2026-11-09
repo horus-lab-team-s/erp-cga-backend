@@ -152,6 +152,29 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "denomination": "SARL BATIMENT PLUS",
         "lien": "https://app.cga-brcg.cm/fr/mon-espace/honoraires",
     },
+    # 9 novembre 2026 : recopiés de `travail_des_relances_d_honoraires.contexte_de_la_relance`,
+    # le même contexte pour les quatre paliers.
+    **{
+        code: {
+            "prenom": "Jean-Pierre",
+            "denomination": "SARL BATIMENT PLUS",
+            "periode": "novembre 2026",
+            "montant": "45 000",
+            "du": "90 000",
+            "exigible_le": "1 novembre 2026",
+            "limite": "16 novembre 2026",
+            "suspension_le": "1 février 2027",
+            "jours": "15",
+            "mois": "3",
+            "lien": "https://app.cga-brcg.cm/fr/mon-espace/honoraires",
+        }
+        for code in (
+            "honoraires.echeance_a_regler",
+            "honoraires.en_retard",
+            "honoraires.preavis_suspension",
+            "honoraires.acces_suspendu",
+        )
+    },
     "proforma.acceptation": {
         # Recopié de `routes_acquisition._accuser_l_acceptation`.
         "prenom": "Sylvie NGONO",

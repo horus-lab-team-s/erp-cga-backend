@@ -107,8 +107,10 @@ class TestLeTourHorsRequete:
             "rappels-d-echeance",
             # 9 novembre 2026 : le rappel de la veille des rendez-vous de création, après.
             "rappel-des-rendez-vous",
-            # Lot 4 (9 novembre 2026) : les alertes d'expiration, en dernier.
+            # Lot 4 (9 novembre 2026) : les alertes d'expiration.
             "alertes-d-expiration",
+            # 9 novembre 2026 : les relances d'honoraires, en dernier.
+            "relances-des-honoraires",
         ]
 
     def test_le_passage_survit_au_tour_suivant(self, en_base, moteur_test):
@@ -134,6 +136,7 @@ class TestLeTourHorsRequete:
             "reconciliation-des-paiements",
             "relais",
             "relance",
+            "relances-des-honoraires",
             "reprise-des-dossiers",
             "veille-des-dossiers",
         ]

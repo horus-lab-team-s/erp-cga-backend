@@ -57,6 +57,11 @@ CODES_MESSAGES: dict[str, str] = {
     "adherent.quittance_refusee": "Quittance à renvoyer, avec le motif",
     "adherent.fonds_recus": "Fonds reçus par le cabinet, qui règle l'administration",
     "adherent.honoraires_regles": "Honoraires réglés : le reçu est dans l'espace",
+    # 9 novembre 2026 : les relances d'honoraires (travail `relances-des-honoraires`).
+    "honoraires.echeance_a_regler": "Honoraires exigibles : montant, période et date limite",
+    "honoraires.en_retard": "Honoraires en retard : le délai de règlement est dépassé",
+    "honoraires.preavis_suspension": "Préavis : l'espace sera suspendu à la date dite",
+    "honoraires.acces_suspendu": "Espace suspendu pour honoraires impayés",
     # 18 octobre 2026 (point 25) : la réponse relue du cabinet à un candidat.
     "recrutement.reponse": "Réponse du cabinet à un candidat",
     # 19 octobre 2026 (point 25) : l'accusé automatique, au dépôt de la candidature.

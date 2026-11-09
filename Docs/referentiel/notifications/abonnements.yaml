@@ -298,6 +298,16 @@ abonnements:
     texte: "{periode}, dans {jours} jour(s). Une fois réglée, envoyez la quittance depuis vos échéances."
     lien: "/mon-espace/echeances"
 
+  # 9 novembre 2026 : les relances d'honoraires (échéance à régler, retard, préavis de
+  # suspension, accès suspendu) arrivent aussi dans l'espace de l'adhérent. Le titre et le
+  # texte sont composés par le travail `relances-des-honoraires`, selon le palier.
+  - action: honoraires.relance_adressee
+    destinataires:
+      compte: compte
+    titre: "{titre}"
+    texte: "{texte}"
+    lien: "/mon-espace/honoraires"
+
   # Pas 110 : le comptable signale une écriture au réviseur, depuis sa fiche, à tout moment.
   - action: comptabilite.ecriture_signalee
     destinataires:

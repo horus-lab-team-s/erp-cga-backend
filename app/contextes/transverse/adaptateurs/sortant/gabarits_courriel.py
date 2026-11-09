@@ -394,6 +394,21 @@ def _bandeau() -> str:
 # `test_courriel.py` vérifie chaque gabarit contre le contexte réel de son site
 # d'appel — c'est ce qui empêche qu'un renommage passe inaperçu.
 
+#: 9 novembre 2026 : les phrases communes aux quatre relances d'honoraires. Les moyens
+#: de règlement sont ceux de l'espace adhérent (décision du 14 octobre 2026).
+_MOYENS_DE_REGLEMENT = (
+    "Vous pouvez régler par mobile money (Tara) depuis la page Honoraires de votre "
+    "espace, ou au guichet du cabinet, contre reçu."
+)
+_DEJA_REGLE = (
+    "Si votre règlement vient de partir, merci de ne pas tenir compte de ce message. Pour "
+    "toute question, votre interlocuteur au cabinet reste à votre disposition."
+)
+_AVERTISSEMENT_ESPACE = (
+    "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre mot de "
+    "passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+)
+
 CATALOGUE: dict[str, Gabarit] = {
     g.code: g
     for g in (
@@ -1124,6 +1139,79 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
                 "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
             ),
+        ),
+        # 9 novembre 2026 : les relances d'honoraires, du travail `relances-des-honoraires`
+        # (réunion du 4 novembre : « leur faire comprendre, à l'avance »). Courtoises et
+        # fermes ; chaque délai cité vient de la règle du cabinet, aucun n'est écrit ici.
+        Gabarit(
+            code="honoraires.echeance_a_regler",
+            objet="Vos honoraires de {periode} sont à régler",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Les honoraires de <strong>{periode}</strong> de <strong>{denomination}"
+                "</strong>, soit <strong>{montant} FCFA</strong>, sont exigibles depuis le "
+                "{exigible_le}. Nous vous remercions de les régler au plus tard le "
+                "<strong>{limite}</strong>.",
+                "Total restant dû à ce jour : <strong>{du} FCFA</strong>.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
+        ),
+        Gabarit(
+            code="honoraires.en_retard",
+            objet="Honoraires de {periode} : règlement en retard",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Sauf erreur de notre part, les honoraires de <strong>{periode}</strong> de "
+                "<strong>{denomination}</strong> ({montant} FCFA), exigibles le {exigible_le}, "
+                "ne sont pas réglés, et le délai de règlement est dépassé.",
+                "Total restant dû à ce jour : <strong>{du} FCFA</strong>. Nous vous prions de "
+                "régulariser sans tarder : au-delà de {mois} mois d'impayé, l'accès à votre "
+                "espace est suspendu.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
+        ),
+        Gabarit(
+            code="honoraires.preavis_suspension",
+            objet="Préavis : votre espace sera suspendu le {suspension_le}",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Des honoraires de <strong>{denomination}</strong> restent impayés depuis "
+                "le {exigible_le} (échéance de {periode}). Total restant dû : <strong>{du} "
+                "FCFA</strong>.",
+                "Sans règlement, l'accès à votre espace sera <strong>suspendu le "
+                "{suspension_le}</strong>, dans {jours} jour(s). Vous pourrez encore consulter "
+                "et régler vos honoraires ; le reste de l'espace sera fermé jusqu'à la "
+                "régularisation. Pour l'éviter, réglez les honoraires en retard avant cette "
+                "date.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
+        ),
+        Gabarit(
+            code="honoraires.acces_suspendu",
+            objet="Votre espace est suspendu : honoraires impayés",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Les honoraires de <strong>{denomination}</strong> exigibles depuis le "
+                "{exigible_le} (échéance de {periode}) ne sont pas réglés : l'accès à votre "
+                "espace est suspendu depuis le {suspension_le}. Total restant dû : <strong>"
+                "{du} FCFA</strong>.",
+                "Vous pouvez toujours consulter et régler vos honoraires. L'accès complet se "
+                "rouvre dès que les échéances impayées depuis plus de {mois} mois sont "
+                "réglées, ou sur accord du cabinet.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
         ),
     )
 }

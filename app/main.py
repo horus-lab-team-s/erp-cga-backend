@@ -682,6 +682,15 @@ def _inscrire_les_travaux_periodiques() -> None:
     )
 
     inscrire_un_travail(travail_des_alertes_d_expiration(), alerter_des_expirations)
+    # 9 novembre 2026 : les relances d'honoraires (réunion du 4 novembre : « leur faire
+    # comprendre, à l'avance »). En dernier : elles ne sont pas à la minute, et passent
+    # après la réconciliation, qui aura constaté un règlement mobile arrivé entre-temps.
+    from app.contextes.souscription.adaptateurs.entrant.travail_des_relances_d_honoraires import (
+        relancer_les_honoraires,
+        travail_des_relances_d_honoraires,
+    )
+
+    inscrire_un_travail(travail_des_relances_d_honoraires(), relancer_les_honoraires)
 
 
 def creer_application() -> FastAPI:

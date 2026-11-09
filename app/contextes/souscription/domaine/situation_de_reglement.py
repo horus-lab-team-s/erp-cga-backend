@@ -39,7 +39,8 @@ C'est une seconde lecture, distincte du traitement :
 * `preavis_acces_jours` (15 par défaut) avant, il est **AVERTI** : l'espace le lui dit,
   avec la date ;
 * suspendu, il garde ce qui sert à régulariser : lire ses honoraires et **payer**. Le
-  reste de son espace rend 423. Un règlement rouvre l'accès à l'instant ;
+  reste de son espace rend 423. L'accès se rouvre à l'instant où plus aucune échéance
+  impayée n'a dépassé ce délai (un règlement partiel peut ne pas suffire) ;
 * une grâce du super administrateur rouvre aussi l'accès, pour la même durée.
 ─────────────────────────────────────────────────────────────────────────────────
 """
