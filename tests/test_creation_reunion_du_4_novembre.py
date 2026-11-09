@@ -191,3 +191,52 @@ def test_la_consultation_prealable_est_proposee_en_premier(client):
     questions = client.get("/acquisition/questionnaires/CREATION/visiteur").json()["questions"]
     assert questions[0]["code"] == "consultation_prealable"
     assert questions[0]["type"] == "BOOLEEN"
+
+
+# ── Lot 2 : la proforma (demandes n° 10 et 11) ──────────────────────────────
+
+
+def _proforma(**options) -> bytes:
+    from datetime import datetime
+
+    from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
+        rendre_le_document,
+    )
+    from tests.test_document_de_la_proforma import _composition
+
+    return rendre_le_document(
+        _composition(),
+        numero="PRO-2026-0042",
+        version=1,
+        emise_le=datetime(2026, 11, 8, 10, 0),
+        client="NGONO COUTURE SARL",
+        **options,
+    )
+
+
+def test_la_validite_est_imprimee_avec_sa_date():
+    from tests.test_document_de_la_proforma import _texte_du_pdf
+
+    texte = _texte_du_pdf(_proforma(validite_jours=15))
+    assert "Proforma valable 15 jours, jusqu'au 23/11/2026." in texte
+    assert "elle expire" in texte
+
+
+def test_sans_validite_rien_n_est_annonce():
+    from tests.test_document_de_la_proforma import _texte_du_pdf
+
+    trouve = "valable" in _texte_du_pdf(_proforma())
+    assert not trouve
+
+
+def test_le_cachet_fourni_est_pose_et_son_absence_ne_bloque_rien(tmp_path):
+    from PIL import Image
+
+    cachet = tmp_path / "cachet.png"
+    Image.new("RGBA", (300, 200), (30, 60, 150, 255)).save(cachet)
+    avec = _proforma(cachet=cachet)
+    sans = _proforma(cachet=tmp_path / "absent.png")
+    images_sans = sans.count(b"/Subtype /Image") + sans.count(b"/Subtype/Image")
+    images_avec = avec.count(b"/Subtype /Image") + avec.count(b"/Subtype/Image")
+    # Un PNG à transparence donne deux objets (l'image et son masque) : plus, c'est posé.
+    assert images_avec > images_sans

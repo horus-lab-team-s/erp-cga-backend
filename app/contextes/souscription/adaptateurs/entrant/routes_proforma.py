@@ -431,6 +431,14 @@ def _document_a_emettre(
         # porter les deux, sans quoi la cliente signerait un total que le détail
         # sous ses yeux ne justifie pas.
         total_arrete=tarif.montant,
+        # 8 novembre 2026 (réunion du 4 novembre) : la validité en rouge, la même que celle
+        # du lien d'acceptation, et le cachet du cabinet s'il est fourni.
+        validite_jours=configuration().validite_lien_acceptation_jours,
+        cachet=(
+            Path(configuration().fichier_cachet_proforma)
+            if configuration().fichier_cachet_proforma
+            else None
+        ),
     )
     magasin_des_proformas().deposer(
         empreinte(pdf), pdf, type_mime="application/pdf"

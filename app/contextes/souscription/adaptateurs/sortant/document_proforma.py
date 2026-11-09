@@ -25,9 +25,10 @@ que le système a enregistré.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 
 from reportlab.lib.colors import HexColor, black
 from reportlab.lib.pagesizes import A4
@@ -38,6 +39,7 @@ from reportlab.pdfgen import canvas
 from app.contextes.souscription.domaine.composition_proforma import CompositionProforma
 from app.partage.formats import ESPACE_FINE, en_toutes_lettres
 from app.partage.formats import montant as _montant_ecran
+from app.partage.horloge import jour_a_douala
 from app.partage.marque import LOGO
 
 __all__ = [
@@ -95,6 +97,9 @@ MARGE = 20 * mm
 #: marque en accent seulement (titre, total) ; plus de bandeau plein. L'indigo est celui
 #: de la console (`--brand-indigo-900`), et non plus un voisin approximatif.
 INDIGO = HexColor("#2E1B4D")
+#: 8 novembre 2026 : le rouge de la mention de validité, que la responsable veut « bien
+#: visible » (réunion du 4 novembre). Assez sombre pour rester lisible en noir et blanc.
+ROUGE = HexColor("#B42318")
 _MAGENTA = HexColor("#8C2D86")
 #: Le gris des mentions secondaires, assez foncé pour rester lisible à
 #: l'impression en noir et blanc, que le cabinet pratique.
@@ -122,6 +127,8 @@ def rendre_le_document(
     emise_le: datetime,
     client: str,
     total_arrete: Decimal | None = None,
+    validite_jours: int | None = None,
+    cachet: Path | None = None,
 ) -> bytes:
     """Le PDF, en octets.
 
@@ -146,6 +153,11 @@ def rendre_le_document(
         y = _rubrique(page, rubrique, y)
     total = composition.total if total_arrete is None else total_arrete
     y = _total(page, total, composition.total, y)
+    if validite_jours is not None:
+        # La même échéance que le lien d'acceptation (`emise_le` + N jours), lue à Douala.
+        echeance = jour_a_douala(emise_le + timedelta(days=validite_jours))
+        y = _validite(page, validite_jours, echeance, y)
+    y = _signature(page, cachet, y)
     if composition.a_une_suite:
         _suite(page, composition, y)
     pied_de_document(page)
@@ -337,6 +349,63 @@ def _total(page: canvas.Canvas, total: Decimal, total_compose: Decimal, y: float
         page.setFillColor(black)
         y -= 6 * mm
     return y
+
+
+def _validite(page: canvas.Canvas, jours: int, jusqu_au: date, y: float) -> float:
+    """La durée de validité, EN ROUGE (réunion du 4 novembre 2026, demande n° 11).
+
+    « Une mention en rouge, bien visible : cela pousse le client à payer rapidement. Et s'il
+    revient bien après avec la même proforma, on doit pouvoir lui dire qu'elle a expiré. »
+    La date est celle où le lien d'acceptation cesse de fonctionner : le document et le lien
+    disent la même chose.
+    """
+    page.setFillColor(ROUGE)
+    page.setFont("Helvetica-Bold", 10)
+    page.drawString(MARGE, y, f"Proforma valable {jours} jours, jusqu'au {jusqu_au:%d/%m/%Y}.")
+    page.setFont("Helvetica", 8.5)
+    page.drawString(
+        MARGE,
+        y - 4.5 * mm,
+        "Passé ce délai, elle expire : les montants seront revus et une nouvelle proforma établie.",
+    )
+    page.setFillColor(black)
+    return y - 11 * mm
+
+
+#: La place du cachet, à droite sous le total.
+_HAUTEUR_CACHET = 28 * mm
+
+
+def _signature(page: canvas.Canvas, cachet: Path | None, y: float) -> float:
+    """« Pour le cabinet », et le cachet signé s'il est fourni (demande n° 10).
+
+    ⚠️ Le cachet est une IMAGE fournie par le cabinet (`CGA_FICHIER_CACHET_PROFORMA`). Sans
+    elle, le bloc dit seulement qui émet le document : on ne fabrique pas un cachet. Le
+    numéro unique et le lien scellé restent la preuve que la proforma est bien celle du client.
+    """
+    droite = _LARGEUR - MARGE
+    page.setFillColor(GRIS)
+    page.setFont("Helvetica-Bold", 7.5)
+    page.drawRightString(droite, y, "POUR LE CABINET")
+    y -= 3 * mm
+    if cachet is not None and cachet.is_file():
+        try:
+            image = ImageReader(str(cachet))
+            largeur, hauteur = image.getSize()
+            largeur_rendue = _HAUTEUR_CACHET * largeur / hauteur
+            page.drawImage(
+                image,
+                droite - largeur_rendue,
+                y - _HAUTEUR_CACHET,
+                width=largeur_rendue,
+                height=_HAUTEUR_CACHET,
+                mask="auto",
+            )
+            y -= _HAUTEUR_CACHET + 2 * mm
+        except Exception:  # noqa: BLE001 — une image illisible ne bloque pas l'émission
+            y -= 2 * mm
+    page.setFillColor(black)
+    return y - 4 * mm
 
 
 #: Sous cette hauteur, on tourne la page : le pied occupe 22 mm.

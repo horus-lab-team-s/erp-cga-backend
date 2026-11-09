@@ -197,6 +197,10 @@ class Configuration(BaseSettings):
     #: jours couvrent le délai de réflexion habituel sans laisser traîner un
     #: engagement.
     validite_lien_acceptation_jours: int = 15
+    #: 8 novembre 2026 : l'image du cachet signé du cabinet, posée sur chaque proforma
+    #: (réunion du 4 novembre, demande n° 10). Un PNG à fond transparent, de préférence.
+    #: Vide ou absent : la proforma sort sans cachet, avec « Pour le cabinet ».
+    fichier_cachet_proforma: str = ""
 
     #: ⚠️ **La cadence du balayage de relance, en minutes.**
     #:
