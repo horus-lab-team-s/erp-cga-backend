@@ -662,6 +662,16 @@ def _inscrire_les_travaux_periodiques() -> None:
     )
 
     inscrire_un_travail(travail_des_rappels(), envoyer_les_rappels)
+    # 9 novembre 2026 : le rappel de la veille des rendez-vous de création, en dernier :
+    # il n'est pas à la minute, et ne doit retarder ni un encaissement ni une relance.
+    from app.contextes.souscription.adaptateurs.entrant.travail_de_rappel_des_rendez_vous import (
+        rappeler as rappeler_les_rendez_vous,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.travail_de_rappel_des_rendez_vous import (
+        travail_de_rappel_des_rendez_vous,
+    )
+
+    inscrire_un_travail(travail_de_rappel_des_rendez_vous(), rappeler_les_rendez_vous)
 
 
 def creer_application() -> FastAPI:

@@ -290,3 +290,59 @@ def test_les_heures_de_l_agenda_sont_celles_de_douala():
 
     assert a_douala(INSTANT) == LUNDI_8H
     assert time(9) == MARDI_9H.time()
+
+
+@exige_postgresql
+class TestLeLienEtLeRappel:
+    """9 novembre 2026 : le lien de visioconférence part chez le client dès qu'il est posé,
+    et la veille, un rappel — une seule fois."""
+
+    def _rendez_vous_en_ligne(self, client) -> str:
+        client.cookies.clear()
+        pris = client.post(
+            "/acquisition/demandes",
+            json=_demande(rendez_vous={"mode": "EN_LIGNE", "debut": MARDI_9H.isoformat()}),
+        )
+        assert pris.status_code == 201, pris.text
+        _en(client, DIRECTRICE)
+        (ligne,) = client.get("/acquisition/rendez-vous").json()
+        return ligne["rendez_vous"]["identifiant"]
+
+    def test_le_lien_pose_part_chez_le_client(self, plateforme):
+        from app.contextes.transverse.api import service_de_notification
+
+        client = plateforme
+        with horloge_figee(INSTANT):
+            identifiant = self._rendez_vous_en_ligne(client)
+            pose = client.put(
+                f"/acquisition/rendez-vous/{identifiant}/lien",
+                json={"lien": "https://meet.exemple.cm/cga-1234"},
+            )
+            assert pose.status_code == 200, pose.text
+            assert pose.json()["rendez_vous"]["lien_envoye_le"] is not None
+        (message,) = service_de_notification().derniers("rendez_vous.lien")
+        assert message.destinataire == "ngono@exemple.cm"
+
+    def test_le_rappel_part_la_veille_et_une_seule_fois(self, plateforme):
+        from app.contextes.souscription.adaptateurs.entrant import (
+            travail_de_rappel_des_rendez_vous as travail,
+        )
+        from app.contextes.transverse.api import service_de_notification, unite_de_travail
+        from app.partage.locataire import etabli
+
+        def rappeler() -> str:
+            # Comme l'ordonnanceur : hors requête, dans une unité de travail du cabinet.
+            with etabli("CGA-BRCG"), unite_de_travail("CGA-BRCG"):
+                return travail.rappeler()
+
+        client = plateforme
+        with horloge_figee(INSTANT):
+            self._rendez_vous_en_ligne(client)
+            # Lundi 8 h : le rendez-vous est mardi 9 h, à 25 h — trop tôt.
+            assert rappeler().startswith("0 ")
+        # Lundi 10 h à Douala : à 23 h du rendez-vous, le rappel part.
+        with horloge_figee(INSTANT + timedelta(hours=2)):
+            assert rappeler().startswith("1 ")
+            assert rappeler().startswith("0 ")
+        (message,) = service_de_notification().derniers("rendez_vous.rappel")
+        assert message.destinataire == "ngono@exemple.cm"

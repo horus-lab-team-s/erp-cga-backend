@@ -644,6 +644,35 @@ CATALOGUE: dict[str, Gabarit] = {
             ),
         ),
         Gabarit(
+            # 9 novembre 2026 : le lien de visioconférence d'un rendez-vous en ligne, posé
+            # par le responsable. L'accusé l'avait promis (« le lien vous sera envoyé »).
+            code="rendez_vous.lien",
+            objet="Le lien de votre rendez-vous en ligne",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "{rendez_vous}",
+                "Le jour venu, ouvrez le lien ci-dessous quelques minutes avant l'heure : un "
+                "conseiller du cabinet vous y attend pour remplir votre dossier avec vous.",
+            ),
+            action=("Rejoindre le rendez-vous", "{lien}"),
+            avertissement=(
+                "Ce lien n'est valable que pour ce rendez-vous. Empêché ? Prévenez le cabinet "
+                "avant l'heure : un rendez-vous manqué sans prévenir peut être pénalisé."
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : le rappel de la veille d'un rendez-vous de création.
+            code="rendez_vous.rappel",
+            objet="Rappel : votre rendez-vous avec le cabinet",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "{rendez_vous}",
+                "{acces}",
+                "Empêché ? Prévenez le cabinet avant l'heure : un rendez-vous manqué sans "
+                "prévenir peut être pénalisé.",
+            ),
+        ),
+        Gabarit(
             # 9 novembre 2026 : une demande rejointe à son dossier par le code.
             code="demande.rattachee",
             objet="Votre demande est jointe à votre dossier",

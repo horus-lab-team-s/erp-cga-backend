@@ -138,6 +138,10 @@ class RendezVous(BaseModel):
     constate_le: datetime | None = None
     constate_par: str | None = None
     motif: str | None = None
+    #: Le lien de visioconférence est parti chez le client.
+    lien_envoye_le: datetime | None = None
+    #: Le rappel de la veille est parti (garde du rejeu du travail de rappel).
+    rappel_envoye_le: datetime | None = None
 
     @property
     def occupe_le_creneau(self) -> bool:

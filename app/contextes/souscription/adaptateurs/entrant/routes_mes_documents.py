@@ -48,12 +48,28 @@ class ProformaDeLaCliente(BaseModel):
     emise_le: datetime
 
 
+class MesVersements(BaseModel):
+    """Ce qu'elle a versé, et ce qui reste (9 novembre 2026).
+
+    ⚠️ LE RESTE N'EXISTE QU'APRÈS L'ÉCHANGE. Tant qu'aucune proforma ne lui a été
+    transmise, le montant de la procédure n'est pas arrêté : `total` et `reste` sont
+    absents, et seuls les frais de dossier se lisent.
+    """
+
+    frais_verses: Decimal
+    total: Decimal | None = None
+    paye: Decimal = Decimal(0)
+    reste: Decimal | None = None
+    solde: bool = False
+
+
 class MesDocumentsDeCreation(BaseModel):
     dossier: str
     denomination: str | None
     proformas: list[ProformaDeLaCliente]
     reglee: bool
     reglee_le: datetime | None = None
+    versements: MesVersements | None = None
 
 
 def _proforma_payee(dossier_commercial: str):
@@ -97,6 +113,12 @@ def mes_documents(acces: AccesRequis) -> list[MesDocumentsDeCreation]:
             if p.etat in _TRANSMISES
         ]
         payee = dossier.etat is EtatDossier.PAYEE and dossier.payee_le is not None
+        from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+            situation_des_versements_de,
+        )
+
+        situation = situation_des_versements_de(dossier)
+        transmise = bool(proformas) and situation.total is not None
         vues.append(
             MesDocumentsDeCreation(
                 dossier=reference,
@@ -104,6 +126,13 @@ def mes_documents(acces: AccesRequis) -> list[MesDocumentsDeCreation]:
                 proformas=proformas,
                 reglee=payee,
                 reglee_le=dossier.payee_le if payee else None,
+                versements=MesVersements(
+                    frais_verses=situation.frais_verses,
+                    total=situation.total if transmise else None,
+                    paye=situation.paye,
+                    reste=situation.reste if transmise else None,
+                    solde=transmise and situation.solde,
+                ),
             )
         )
     return vues

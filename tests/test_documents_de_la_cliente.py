@@ -121,3 +121,28 @@ class TestRienDUneAutre:
         client = plateforme
         ouvrir_une_session(client, CAISSIERE)
         assert client.get("/mes-documents/creation").status_code == 403
+
+
+class TestCeQuElleAPayeEtCeQuiReste:
+    """9 novembre 2026 : payé et reste dans son espace — le reste n'existe qu'une fois la
+    proforma transmise, c'est-à-dire après l'échange avec le cabinet."""
+
+    def test_avant_le_reglement_tout_reste(self, plateforme):
+        client = plateforme
+        reference, _ = _vente(client, reglee=False)
+        _sa_session(client, reference)
+        (vue,) = client.get("/mes-documents/creation").json()
+        assert vue["versements"] == {
+            "frais_verses": "0",
+            "total": "250000",
+            "paye": "0",
+            "reste": "250000",
+            "solde": False,
+        }
+
+    def test_regle_au_guichet_c_est_solde(self, plateforme):
+        client = plateforme
+        reference, _ = _vente(client, reglee=True)
+        _sa_session(client, reference)
+        (vue,) = client.get("/mes-documents/creation").json()
+        assert vue["versements"]["solde"] is True and vue["versements"]["reste"] == "0"

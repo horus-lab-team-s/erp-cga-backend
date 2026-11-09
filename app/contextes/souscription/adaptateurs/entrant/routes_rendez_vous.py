@@ -361,8 +361,46 @@ def poser_le_lien(acces: AccesRequis, identifiant: str, corps: LienDeVisio) -> R
     if rdv.mode is not ModeRendezVous.EN_LIGNE:
         raise HTTPException(status_code=409, detail="Ce rendez-vous se tient au cabinet.")
     pose = rdv.model_copy(update={"lien": corps.lien})
+    if envoyer_le_lien(pose):
+        pose = pose.model_copy(update={"lien_envoye_le": maintenant()})
     _comptoir().rendez_vous.enregistrer(pose)
     return _du_cabinet(pose)
+
+
+def courriel_du_dossier(dossier: DossierCommercial) -> str:
+    """L'adresse la plus récente donnée par le client (une demande rattachée peut la porter)."""
+    return (dossier.derniere_demande.courriel or dossier.demande.courriel or "").strip()
+
+
+def envoyer_le_lien(rdv: RendezVous) -> bool:
+    """Le lien de visioconférence au client. Rend vrai s'il est parti.
+
+    ⚠️ Un échec d'envoi ne défait pas le lien posé : le responsable le voit à l'écran et
+    peut le donner au téléphone. Le rappel de la veille le reprendra.
+    """
+    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+        phrase_du_rendez_vous,
+    )
+    from app.contextes.transverse.api import service_de_notification
+
+    dossier = _dossier(rdv.dossier)
+    courriel = courriel_du_dossier(dossier)
+    if not courriel or not rdv.lien:
+        return False
+    demande = dossier.demande
+    try:
+        service_de_notification().envoyer(
+            "rendez_vous.lien",
+            destinataire=courriel,
+            contexte={
+                "prenom": demande.nom,
+                "rendez_vous": phrase_du_rendez_vous(rdv),
+                "lien": rdv.lien,
+            },
+        )
+    except Exception:  # noqa: BLE001 — voir l'en-tête de la fonction
+        return False
+    return True
 
 
 # ── La pénalité ───────────────────────────────────────────────────────────────────

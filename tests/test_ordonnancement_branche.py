@@ -105,6 +105,8 @@ class TestLeTourHorsRequete:
             # Pas 115 : les rappels d'échéance des adhérents, en dernier. Un rappel à J-7 n'est pas
             # à la minute, et il ne doit retarder ni l'ouverture d'un tenant payé ni une relance.
             "rappels-d-echeance",
+            # 9 novembre 2026 : le rappel de la veille des rendez-vous de création, après.
+            "rappel-des-rendez-vous",
         ]
 
     def test_le_passage_survit_au_tour_suivant(self, en_base, moteur_test):
@@ -124,6 +126,7 @@ class TestLeTourHorsRequete:
         # précédent garde l'ordre d'exécution, celui-ci garde la persistance.
         assert [ligne.travail for ligne in lignes] == [
             "lecture-au-depot",
+            "rappel-des-rendez-vous",
             "rappels-d-echeance",
             "reconciliation-des-paiements",
             "relais",

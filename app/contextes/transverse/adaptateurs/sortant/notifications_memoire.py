@@ -74,6 +74,8 @@ CODES_MESSAGES: dict[str, str] = {
     "demande.accuse_de_depot": "Accusé de réception d'une demande de contact",
     "demande.accuse_avec_code": "Accusé de réception, avec le code de dossier et le rendez-vous",
     "demande.rattachee": "Une demande jointe à son dossier par le code de dossier",
+    "rendez_vous.lien": "Le lien de visioconférence d'un rendez-vous de création",
+    "rendez_vous.rappel": "Le rappel de la veille d'un rendez-vous de création",
     # Pas 133 : une fondatrice n'a pas souscrit, elle a fait immatriculer sa
     # société — et son accès s'ouvre le jour du NIU, pas celui du paiement.
     "compte.activation_creation": (

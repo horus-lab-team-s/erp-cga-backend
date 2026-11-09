@@ -169,6 +169,18 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "code": "K7M4-Q2XP",
         "rendez_vous": "Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, au cabinet.",
     },
+    "rendez_vous.lien": {
+        # Recopié de `routes_rendez_vous.envoyer_le_lien`.
+        "prenom": "Sylvie NGONO",
+        "rendez_vous": "Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, en ligne.",
+        "lien": "https://meet.exemple.cm/cga-1234",
+    },
+    "rendez_vous.rappel": {
+        # Recopié de `travail_de_rappel_des_rendez_vous.rappeler`.
+        "prenom": "Sylvie NGONO",
+        "rendez_vous": "Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, au cabinet.",
+        "acces": "Le cabinet vous reçoit à son adresse habituelle.",
+    },
     "demande.rattachee": {
         # Recopié de `routes_acquisition._confirmer_le_rattachement`.
         "prenom": "Sylvie NGONO",
