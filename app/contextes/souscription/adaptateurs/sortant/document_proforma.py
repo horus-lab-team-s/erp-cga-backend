@@ -36,6 +36,9 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
+from app.contextes.souscription.adaptateurs.sortant.identite_des_documents import (
+    identite_des_documents,
+)
 from app.contextes.souscription.domaine.composition_proforma import CompositionProforma
 from app.partage.formats import ESPACE_FINE, en_toutes_lettres
 from app.partage.formats import montant as _montant_ecran
@@ -108,15 +111,8 @@ GRIS = HexColor("#5B556B")
 FILET = HexColor("#E2DDEA")
 FOND = HexColor("#F6F4FB")
 
-#: Le pied de page, tel qu'il figure sur les documents du cabinet.
-#: ⚠️ Le point médian « · » et non le tiret cadratin : aucun tiret cadratin
-#: nulle part dans ce que le client lit.
-_PIED = (
-    "+237 233 424 847   ·   +237 699 902 184   ·   WhatsApp +237 699 902 184",
-    "contact@cga-brcgroup.com   ·   www.cga-brcgroup.com",
-    "Douala Akwa, B.P. 7761   ·   Yaoundé Elig-Essono   ·   Bafoussam Quartier Haoussa",
-    "Agrément n° 00000048/MINFI/DGI du 28 janvier 2020",
-)
+#: Le pied de page et l'en-tête : 9 novembre 2026, lus dans le référentiel
+#: (`cabinet/identite_des_documents.yaml`), la même source que la page web de la proforma.
 
 
 def rendre_le_document(
@@ -202,18 +198,15 @@ def entete_de_document(page: canvas.Canvas) -> float:
             mask=None,
         )
         gauche = MARGE + hauteur_logo * 288 / 162 + 5 * mm
+    identite = identite_des_documents()
     page.setFillColor(INDIGO)
     page.setFont("Helvetica-Bold", 11)
-    page.drawString(gauche, haut - 5 * mm, "CGA BROAD RANGE CONSULTING")
+    page.drawString(gauche, haut - 5 * mm, identite.raison_sociale)
     page.setFillColor(GRIS)
     page.setFont("Helvetica", 7.5)
-    page.drawString(
-        gauche,
-        haut - 9.5 * mm,
-        "Centre de gestion agréé  ·  Comptabilité, fiscalité, juridique, formations",
-    )
-    page.drawRightString(_LARGEUR - MARGE, haut - 5 * mm, "www.cga-brcgroup.com")
-    page.drawRightString(_LARGEUR - MARGE, haut - 9.5 * mm, "contact@cga-brcgroup.com")
+    page.drawString(gauche, haut - 9.5 * mm, identite.activite)
+    page.drawRightString(_LARGEUR - MARGE, haut - 5 * mm, identite.site)
+    page.drawRightString(_LARGEUR - MARGE, haut - 9.5 * mm, identite.courriel)
     page.setStrokeColor(FILET)
     page.setLineWidth(0.8)
     page.line(MARGE, haut - 16 * mm, _LARGEUR - MARGE, haut - 16 * mm)
@@ -517,7 +510,7 @@ def pied_de_document(page: canvas.Canvas) -> None:
     page.setFillColor(GRIS)
     page.setFont("Helvetica", 7)
     y = bas - 5 * mm
-    for ligne in _PIED:
+    for ligne in identite_des_documents().pied:
         page.drawCentredString(_LARGEUR / 2, y, ligne)
         y -= 3.8 * mm
     page.setFillColor(black)

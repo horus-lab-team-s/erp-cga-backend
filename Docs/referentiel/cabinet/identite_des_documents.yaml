@@ -1,0 +1,18 @@
+# L'identité du cabinet telle qu'elle s'imprime (9 novembre 2026).
+#
+# Une seule source pour l'en-tête et le pied de page des documents du cabinet (proformas,
+# factures, reçus, notes d'honoraires) ET pour la page web de la proforma, que le client lit
+# avant d'accepter. Un numéro de téléphone qui change se corrige ici, une fois.
+#
+# ⚠️ Le point médian « · » et non le tiret cadratin : aucun tiret cadratin dans ce que le
+# client lit.
+raison_sociale: CGA BROAD RANGE CONSULTING
+activite: "Centre de gestion agréé  ·  Comptabilité, fiscalité, juridique, formations"
+site: www.cga-brcgroup.com
+courriel: contact@cga-brcgroup.com
+#: Les lignes du pied, dans l'ordre. La dernière porte l'agrément.
+pied:
+  - "+237 233 424 847   ·   +237 699 902 184   ·   WhatsApp +237 699 902 184"
+  - "contact@cga-brcgroup.com   ·   www.cga-brcgroup.com"
+  - "Douala Akwa, B.P. 7761   ·   Yaoundé Elig-Essono   ·   Bafoussam Quartier Haoussa"
+  - "Agrément n° 00000048/MINFI/DGI du 28 janvier 2020"

@@ -44,6 +44,10 @@ from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
 from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
     rendre_le_document,
 )
+from app.contextes.souscription.adaptateurs.sortant.identite_des_documents import (
+    IdentiteDesDocuments,
+    identite_des_documents,
+)
 from app.contextes.souscription.adaptateurs.sortant.magasins_memoire import (
     proformas_memoire,
 )
@@ -268,6 +272,12 @@ class ProformaConsultee(BaseModel):
     paye: Decimal = Decimal(0)
     reste: Decimal | None = None
     engage: bool = False
+    #: 9 novembre 2026 : l'en-tête et le pied du document, pour que la page web porte la
+    #: même identité que la proforma imprimée (référentiel `cabinet/`).
+    cabinet: IdentiteDesDocuments | None = None
+    #: 9 novembre 2026 : un PDF existe (proforma émise avec un modèle de document). Sans
+    #: lui, la page ne propose ni de lire ni de télécharger ce qui rendrait une erreur.
+    document_disponible: bool = False
 
 
 class DemandeDAcceptation(BaseModel):
@@ -1011,6 +1021,8 @@ def consulter_la_proforma(
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
     return ProformaConsultee(
+        cabinet=identite_des_documents(),
+        document_disponible=bool(proforma.rubriques),
         numero=proforma.numero,
         version=proforma.version,
         service=proforma.service,
