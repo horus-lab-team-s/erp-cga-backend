@@ -485,6 +485,8 @@ def tolerer_les_retards_d_honoraires() -> None:
         DepotRegleDeDepassementSql(boutique.session, "CGA-BRCG").enregistrer(
             RegleDeDepassement(
                 delai_jours=365,
+                # 4 novembre 2026 : l'accès du client non plus ne se suspend pas ici.
+                acces_client_mois=24,
                 motif="cas de test hors règlement",
                 fixee_par="test",
                 fixee_le=datetime(2026, 10, 18),

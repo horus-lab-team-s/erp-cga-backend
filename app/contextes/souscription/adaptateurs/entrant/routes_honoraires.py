@@ -227,7 +227,8 @@ def caisse_des_honoraires(acces: AccesRequis) -> list[LigneDeCaisseHonoraires]:
 
 @routeur.get("/{niu}", summary="Le contrat et l'échéancier d'honoraires d'un dossier")
 def honoraires_du_dossier(acces: AccesRequis, niu: str) -> MesHonoraires:
-    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    # 4 novembre 2026 : un client suspendu lit encore ce qu'il doit, pour le régler.
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu, pour_regulariser=True)
     return _mes_honoraires(niu)
 
 
@@ -391,7 +392,8 @@ def note_de_l_echeance(acces: AccesRequis, niu: str, periode: date) -> Response:
 
     ⚠️ Même garde que son échéancier ; l'échéance est cherchée DANS ce dossier.
     """
-    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    # 4 novembre 2026 : un client suspendu lit encore ce qu'il doit, pour le régler.
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu, pour_regulariser=True)
     from app.contextes.souscription.adaptateurs.sortant.document_note_d_honoraires import (
         numero_de_la_note,
         rendre_la_note,
@@ -428,7 +430,8 @@ def facture_de_l_echeance(acces: AccesRequis, niu: str, periode: date) -> Respon
     que l'identité fiscale du cabinet est incomplète, rien ne s'émet et le refus dit ce
     qui manque ; la note d'honoraires reste disponible.
     """
-    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    # 4 novembre 2026 : un client suspendu lit encore ce qu'il doit, pour le régler.
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu, pour_regulariser=True)
     from app.contextes.souscription.adaptateurs.sortant.depots_facturation import (
         depot_de_l_identite_fiscale,
         depot_des_factures,
@@ -498,7 +501,8 @@ def recu_du_reglement(acces: AccesRequis, niu: str, identifiant: str) -> Respons
     ⚠️ Même garde que son échéancier (son dossier, ou le cabinet) ; le règlement est
     cherché DANS ce dossier : l'identifiant d'un autre adhérent rend 404.
     """
-    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    # 4 novembre 2026 : un client suspendu lit encore ce qu'il doit, pour le régler.
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu, pour_regulariser=True)
     from app.contextes.souscription.adaptateurs.sortant.document_recu_honoraires import (
         rendre_le_recu,
     )

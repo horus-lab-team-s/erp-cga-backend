@@ -24,6 +24,23 @@ dossier traitable à 10 h, sans que personne n'ait à « débloquer » quoi que 
 surtout **paie** : couper ces portes-là empêcherait précisément de régulariser. Ce
 qui s'arrête, c'est le travail du cabinet (saisie, validation, déclarations, DSF).
 Voir `PERMISSIONS_DE_TRAITEMENT` dans `transverse/domaine/roles.py`.
+
+L'ACCÈS DU CLIENT (réunion du 4 novembre 2026, demandes 14 et 18)
+
+La responsable : « Après trois mois d'impayés, le compte doit se bloquer
+automatiquement. Le client n'a alors plus accès à son espace. Le gestionnaire peut
+continuer à travailler dans le dossier, mais pour retrouver l'accès, le client doit
+payer. » Et : « leur faire comprendre, à l'avance, que leur compte sera bloqué ».
+
+C'est une seconde lecture, distincte du traitement :
+
+* `acces_client_mois` (3 par défaut) après l'exigibilité de la plus ancienne échéance
+  impayée, l'accès du client est **SUSPENDU** ;
+* `preavis_acces_jours` (15 par défaut) avant, il est **AVERTI** : l'espace le lui dit,
+  avec la date ;
+* suspendu, il garde ce qui sert à régulariser : lire ses honoraires et **payer**. Le
+  reste de son espace rend 423. Un règlement rouvre l'accès à l'instant ;
+* une grâce du super administrateur rouvre aussi l'accès, pour la même durée.
 ─────────────────────────────────────────────────────────────────────────────────
 """
 
@@ -36,6 +53,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.contextes.souscription.domaine.abonnements import mois_apres
 from app.contextes.souscription.domaine.honoraires import (
     DELAI_DE_REGLEMENT,
     ContratDHonoraires,
@@ -45,6 +63,7 @@ from app.contextes.souscription.domaine.honoraires import (
 )
 
 __all__ = [
+    "EtatDAccesClient",
     "EtatDeReglement",
     "GraceDeReglement",
     "RegleDeDepassement",
@@ -60,6 +79,11 @@ class RegleDeDepassement(BaseModel):
 
     #: 0 : d'office, dès qu'une échéance est en retard. Au plus un an.
     delai_jours: int = Field(ge=0, le=365)
+    #: Mois d'impayé après lesquels le client perd l'accès à son espace (réunion du
+    #: 4 novembre 2026 : trois). Compté depuis l'exigibilité de la plus ancienne échéance.
+    acces_client_mois: int = Field(default=3, ge=1, le=24)
+    #: Jours, avant la suspension, pendant lesquels le client en est averti.
+    preavis_acces_jours: int = Field(default=15, ge=0, le=90)
     motif: str = Field(min_length=5, max_length=500)
     fixee_par: str = Field(min_length=1)
     fixee_le: datetime
@@ -112,6 +136,14 @@ class EtatDeReglement(StrEnum):
     BLOQUE = "BLOQUE"
 
 
+class EtatDAccesClient(StrEnum):
+    OUVERT = "OUVERT"
+    #: Ouvert, mais la suspension approche : l'espace l'annonce, avec sa date.
+    AVERTI = "AVERTI"
+    #: Le client ne garde que ses honoraires : les lire et les régler.
+    SUSPENDU = "SUSPENDU"
+
+
 class SituationDeReglement(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -124,10 +156,18 @@ class SituationDeReglement(BaseModel):
     #: Le jour où le traitement s'arrête (ou s'est arrêté), selon la règle.
     bloque_le: date | None = None
     grace: GraceDeReglement | None = None
+    #: L'accès du client à son espace (4 novembre 2026), distinct du traitement.
+    acces_client: EtatDAccesClient = EtatDAccesClient.OUVERT
+    #: Le jour où l'accès du client se suspend (ou s'est suspendu), selon la règle.
+    acces_suspendu_le: date | None = None
 
     @property
     def traitable(self) -> bool:
         return self.etat is not EtatDeReglement.BLOQUE
+
+    @property
+    def acces_ouvert(self) -> bool:
+        return self.acces_client is not EtatDAccesClient.SUSPENDU
 
 
 def situation_de_reglement(
@@ -153,12 +193,22 @@ def situation_de_reglement(
     plus_ancienne = min(retards, key=lambda e: e.exigible_le)
     en_retard_depuis = plus_ancienne.exigible_le + DELAI_DE_REGLEMENT + timedelta(days=1)
     bloque_le = en_retard_depuis + timedelta(days=regle.delai_jours)
+    grace_en_cours = next((g for g in graces if g.niu == niu and g.couvre(a_la_date)), None)
     if a_la_date < bloque_le:
         etat = EtatDeReglement.EN_RETARD
         grace = None
     else:
-        grace = next((g for g in graces if g.niu == niu and g.couvre(a_la_date)), None)
+        grace = grace_en_cours
         etat = EtatDeReglement.SOUS_GRACE if grace else EtatDeReglement.BLOQUE
+    acces_suspendu_le = mois_apres(plus_ancienne.exigible_le, regle.acces_client_mois)
+    if grace_en_cours is not None:
+        acces = EtatDAccesClient.OUVERT
+    elif a_la_date >= acces_suspendu_le:
+        acces = EtatDAccesClient.SUSPENDU
+    elif a_la_date >= acces_suspendu_le - timedelta(days=regle.preavis_acces_jours):
+        acces = EtatDAccesClient.AVERTI
+    else:
+        acces = EtatDAccesClient.OUVERT
     return SituationDeReglement(
         niu=niu,
         etat=etat,
@@ -166,4 +216,6 @@ def situation_de_reglement(
         en_retard_depuis=en_retard_depuis,
         bloque_le=bloque_le,
         grace=grace,
+        acces_client=acces,
+        acces_suspendu_le=acces_suspendu_le,
     )

@@ -846,6 +846,7 @@ def exiger_dossier(
     *,
     motif: str | None = None,
     introuvable: str | None = None,
+    pour_regulariser: bool = False,
 ) -> None:
     """Contrôle le droit **et** le périmètre sur un dossier nommé.
 
@@ -899,16 +900,54 @@ def exiger_dossier(
             ),
         )
     _exiger_le_dossier_en_regle(permission, niu)
+    _exiger_l_acces_du_client(acces, permission, niu, pour_regulariser=pour_regulariser)
 
 
 #: Dit pourquoi un dossier ne se traite plus, ou `None` (18 octobre 2026). Posé par le
 #: contexte qui connaît les honoraires (`souscription`) : le transverse ne le connaît pas.
 _controle_de_reglement: Callable[[str], str | None] | None = None
 
+#: Dit pourquoi le CLIENT ne peut plus agir sur son dossier, ou `None` (réunion du
+#: 4 novembre 2026 : l'accès se suspend après trois mois d'impayés). Posé avec l'autre.
+_controle_d_acces_client: Callable[[str], str | None] | None = None
 
-def installer_le_controle_de_reglement(controle: Callable[[str], str | None] | None) -> None:
-    global _controle_de_reglement
+#: Ce que le client suspendu garde : régler. La lecture de ses honoraires passe par
+#: `pour_regulariser=True` sur les routes qui la servent.
+PERMISSIONS_DE_REGULARISATION: frozenset[Permission] = frozenset(
+    {Permission.REGLER_SES_HONORAIRES}
+)
+
+#: Les rôles dont l'accès se suspend : les clients, pas l'inspecteur.
+_ROLES_CLIENTS = frozenset({Role.ADHERENT, Role.CLIENT_CREATION})
+
+
+def installer_le_controle_de_reglement(
+    controle: Callable[[str], str | None] | None,
+    *,
+    acces_client: Callable[[str], str | None] | None = None,
+) -> None:
+    global _controle_de_reglement, _controle_d_acces_client
     _controle_de_reglement = controle
+    _controle_d_acces_client = acces_client
+
+
+def _exiger_l_acces_du_client(
+    acces: Acces, permission: Permission, niu: str, *, pour_regulariser: bool = False
+) -> None:
+    """Un client dont l'accès est suspendu reçoit 423, sauf pour régulariser.
+
+    ⚠️ Le cabinet n'est pas concerné : « le gestionnaire peut continuer à travailler
+    dans le dossier ». Seul un compte client (et aucun rôle interne) est arrêté.
+    """
+    if _controle_d_acces_client is None or pour_regulariser:
+        return
+    if permission in PERMISSIONS_DE_REGULARISATION:
+        return
+    if acces.interne or not any(r in _ROLES_CLIENTS for r in acces.roles):
+        return
+    raison = _controle_d_acces_client(niu)
+    if raison is not None:
+        raise HTTPException(status_code=423, detail=raison)
 
 
 def _exiger_le_dossier_en_regle(permission: Permission, niu: str) -> None:
@@ -987,6 +1026,7 @@ def exiger_dossier_pour_l_un_de(
             ),
         )
     _exiger_le_dossier_en_regle(detenue, niu)
+    _exiger_l_acces_du_client(acces, detenue, niu)
 
 
 def _acces_sous_mandat(

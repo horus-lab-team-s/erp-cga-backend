@@ -87,7 +87,18 @@ def _raison_du_blocage(niu: str) -> str | None:
     )
 
 
-installer_le_controle_de_reglement(_raison_du_blocage)
+def _raison_de_la_suspension(niu: str) -> str | None:
+    situation = situation_du_dossier(niu)
+    if situation.acces_ouvert:
+        return None
+    return (
+        f"Votre espace est suspendu : {montant_fcfa(situation.du)} d'honoraires restent "
+        f"dus depuis plus de {_regle(_comptoir()).acces_client_mois} mois. Réglez-les "
+        "depuis la page Honoraires : l'accès se rouvre dès le règlement constaté."
+    )
+
+
+installer_le_controle_de_reglement(_raison_du_blocage, acces_client=_raison_de_la_suspension)
 
 
 def _journal(acces, *, action: str, objet_id: str, apres: dict, motif: str) -> None:
@@ -123,14 +134,28 @@ class RegleAFixer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     delai_jours: int = Field(ge=0, le=365)
+    #: 4 novembre 2026. Absents : ceux de la règle en vigueur sont gardés.
+    acces_client_mois: int | None = Field(default=None, ge=1, le=24)
+    preavis_acces_jours: int | None = Field(default=None, ge=0, le=90)
     motif: str = Field(min_length=10, max_length=500)
 
 
 @routeur.put("/reglement/regle", summary="Fixer la règle de dépassement")
 def fixer_la_regle(acces: AccesRequis, demande: RegleAFixer) -> RegleEnVigueur:
     exiger(acces, Permission.ACCORDER_FAVEURS, motif=demande.motif)
+    en_vigueur = _regle(_comptoir())
     regle = RegleDeDepassement(
         delai_jours=demande.delai_jours,
+        acces_client_mois=(
+            demande.acces_client_mois
+            if demande.acces_client_mois is not None
+            else en_vigueur.acces_client_mois
+        ),
+        preavis_acces_jours=(
+            demande.preavis_acces_jours
+            if demande.preavis_acces_jours is not None
+            else en_vigueur.preavis_acces_jours
+        ),
         motif=demande.motif,
         fixee_par=acces.compte,
         fixee_le=maintenant(),
@@ -140,7 +165,11 @@ def fixer_la_regle(acces: AccesRequis, demande: RegleAFixer) -> RegleEnVigueur:
         acces,
         action="regle",
         objet_id="regle-de-depassement",
-        apres={"delai_jours": regle.delai_jours},
+        apres={
+            "delai_jours": regle.delai_jours,
+            "acces_client_mois": regle.acces_client_mois,
+            "preavis_acces_jours": regle.preavis_acces_jours,
+        },
         motif=demande.motif,
     )
     return RegleEnVigueur(regle=regle, d_office=False)
