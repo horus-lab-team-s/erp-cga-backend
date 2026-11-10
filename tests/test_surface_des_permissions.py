@@ -292,6 +292,10 @@ def _sans_controle():
             # 19 octobre 2026 : la permission ET la session renforcée, pour les gestes
             # qui modifient les comptes.
             "exiger_un_geste_fort(",
+            # 9 novembre 2026 : lire une création d'entreprise, pour le chargé des
+            # formalités OU la direction (`LIRE_PILOTAGE`) ; voir `routes_http.py` de la
+            # création. La garde appelle `exiger` quand la direction n'est pas en cause.
+            "_exiger_la_lecture(",
         )
         if any(appel in source for appel in gardes):
             continue

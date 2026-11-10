@@ -422,6 +422,18 @@ class TestLeParcoursParLesRoutes:
         assert refus.status_code == 409, refus.text
         assert "déjà déposée à la DGI" in refus.json()["detail"]
 
+    def test_l_ecran_sait_d_emblee_qu_elle_est_deposee(self, plateforme):
+        """10 novembre 2026 : l'écran disait « Aucune version préparée » et offrait de
+        préparer ; le refus n'arrivait qu'au clic. La lecture porte désormais le dépôt."""
+        client = plateforme
+        _en_tant_que(client, REVISEUR)
+
+        deposee = client.get(f"/cloture/dossiers/{BATIMENT}/dsf/2025").json()
+        libre = client.get(f"/cloture/dossiers/{NGUEMA}/dsf/2025").json()
+
+        assert deposee["depot_hors_plateforme"]["numero"].startswith("DGI-2025-DSF-")
+        assert libre["depot_hors_plateforme"] is None
+
     def test_un_exercice_ouvert_ne_se_prepare_pas(self, plateforme):
         client = plateforme
         _en_tant_que(client, COMPTABLE)

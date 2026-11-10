@@ -831,6 +831,12 @@ def creer_application() -> FastAPI:
     )
 
     application.include_router(routeur_expirations)
+    # 10 novembre 2026 : ce que la loi impose au Centre lui-même (CGI art. 118 et 119).
+    from app.contextes.pilotage.adaptateurs.entrant.routes_conformite_du_centre import (
+        routeur as routeur_conformite_du_centre,
+    )
+
+    application.include_router(routeur_conformite_du_centre)
     # Pas 105 : la charge et la production des collaborateurs, et les réaffectations proposées.
     application.include_router(routeur_charge)
     # Pas 106 : le rapport mensuel de la direction, daté, archivé et intègre.

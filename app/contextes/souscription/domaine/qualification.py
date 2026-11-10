@@ -60,6 +60,7 @@ là. La collecter après coup serait impossible.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -86,6 +87,8 @@ __all__ = [
 #: mérite un compte rendu mérite une question.
 LONGUEUR_NOTE = 4_000
 
+
+_journal = logging.getLogger(__name__)
 
 class ReponseInvalide(ValueError):
     """La réponse ne correspond pas à ce que la question attend.
@@ -461,12 +464,25 @@ def _convertir(question: Question, valeur: object) -> Any | None:
     except ReponseInvalide:
         raise
     except (ValueError, TypeError, InvalidOperation) as echec:
+        # ⚠️ 10 novembre 2026 : le message s'affiche tel quel au collaborateur. Il citait
+        # le code technique de la question et l'exception Python (« invalid literal for
+        # int() with base 10 ») : il nomme maintenant la question et ce qu'elle attend.
+        # Le détail technique reste au journal.
+        _journal.info("réponse refusée pour %s : %r (%s)", question.code, valeur, echec)
         raise ReponseInvalide(
-            f"« {question.code} » attend {attendu}, « {valeur} » n'en est pas un : "
-            f"{echec}"
+            f"« {question.libelle} » : {_ATTENDU.get(attendu, 'une autre forme de réponse')} "
+            f"est attendu, « {valeur} » ne convient pas."
         ) from echec
 
     return str(valeur).strip()
+
+
+#: Ce que chaque type attend, dit pour un collaborateur et non pour un développeur.
+_ATTENDU = {
+    TypeFait.ENTIER: "un nombre entier (par exemple 3)",
+    TypeFait.DECIMAL: "un montant (par exemple 150000)",
+    TypeFait.DATE: "une date (jj/mm/aaaa)",
+}
 
 
 def _booleen(valeur: object) -> bool:

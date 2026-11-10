@@ -774,10 +774,17 @@ def exiger(
     try:
         acces.exiger(permission, dossier=dossier, motif=motif)
     except AccesRefuse as refus:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Action non permise : {permission} est requise. ({type(refus).__name__})",
-        ) from refus
+        # ⚠️ 10 novembre 2026 : le refus faute de second facteur disait « ACCORDER_FAVEURS
+        # est requise » au super administrateur qui la détient. Il dit maintenant la vraie
+        # cause et le geste à faire ; le nom du refus reste, pour l'intégration.
+        if type(refus).__name__ == "SecondFacteurRequis":
+            detail = (
+                "Ce geste exige le second facteur : renforcez la session avec le code de "
+                "votre application d'authentification, puis recommencez. (SecondFacteurRequis)"
+            )
+        else:
+            detail = f"Action non permise : {permission} est requise. ({type(refus).__name__})"
+        raise HTTPException(status_code=403, detail=detail) from refus
 
 
 def exiger_un_geste_fort(acces: Acces, permission: Permission) -> None:

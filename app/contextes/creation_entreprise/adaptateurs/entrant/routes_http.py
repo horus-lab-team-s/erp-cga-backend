@@ -53,9 +53,11 @@ from app.contextes.portefeuille.api import (
     FormeJuridique,
     RegimeFiscal,
     depot_entreprises,
+    prochain_numero_d_adhesion,
 )
 from app.contextes.referentiel.api import ServiceParametres, service_parametres
 from app.contextes.transverse.api import (
+    Acces,
     AccesRequis,
     Permission,
     exiger,
@@ -244,6 +246,19 @@ class DemandeConversion(BaseModel):
 
 
 # ── Lectures ─────────────────────────────────────────────────────────────────
+def _exiger_la_lecture(acces: Acces) -> None:
+    """Lire une création : le chargé des formalités, ou la direction (9 novembre 2026).
+
+    ⚠️ LECTURE SEULEMENT. La direction suit les créations sans les mener : elle lit le
+    pipeline, la fiche et les documents ; elle ne fait avancer, ne réceptionne, n'abandonne
+    ni ne convertit rien — ces gestes restent à `SUIVRE_FORMALITE`. Même règle que la
+    lecture des délais (`routes_delais.py`) : `LIRE_PILOTAGE` ouvre la lecture. Le lien de
+    suivi, qui vaut accès pour la fondatrice, reste aux formalités.
+    """
+    if not acces.detient(Permission.LIRE_PILOTAGE):
+        exiger(acces, Permission.SUIVRE_FORMALITE)
+
+
 @routeur.get("/pipeline", summary="Le pipeline des créations en cours")
 def lister(
     acces: AccesRequis,
@@ -285,7 +300,7 @@ def lister(
     cette question-là se lit dans l'ordre rendu ici, sans filtre.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.SUIVRE_FORMALITE)
+    _exiger_la_lecture(acces)
     jour = a_la_date or _aujourd_hui()
     seuil = None
     if immobiles_depuis_jours is not None:
@@ -306,7 +321,7 @@ def checklist(acces: AccesRequis, forme_juridique: FormeJuridique) -> list[Piece
     Consultable dès la qualification, avant même qu'un dossier existe : c'est la
     réponse à « qu'est-ce qu'il me faut ? », première question de tout fondateur.
     """
-    exiger(acces, Permission.SUIVRE_FORMALITE)
+    _exiger_la_lecture(acces)
     return list(checklist_de(forme_juridique))
 
 
@@ -491,7 +506,7 @@ def lire(
     reference: str,
     a_la_date: date | None = Query(None),
 ) -> FicheDossier:
-    exiger(acces, Permission.SUIVRE_FORMALITE)
+    _exiger_la_lecture(acces)
     jour = a_la_date or _aujourd_hui()
     dossier = _lire(reference)
     diagnostic = diagnostiquer(dossier, parametres(), jour)
@@ -876,7 +891,7 @@ def document_de_la_piece(acces: AccesRequis, reference: str, code: str) -> Respo
     `no-store`. L'aperçu se fait dans la console, qui sait ce qu'elle affiche.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.SUIVRE_FORMALITE)
+    _exiger_la_lecture(acces)
     return _le_document(_lire(reference), code)
 
 
@@ -1069,13 +1084,20 @@ def convertir_dossier(
     magasin = depot()
     dossier = _lire(reference, magasin)
     try:
+        jour = _aujourd_hui()
         clos, entreprise = convertir(
             dossier,
-            a_la_date=_aujourd_hui(),
+            a_la_date=jour,
             regime=demande.regime,
             centre=demande.centre,
             adherent=demande.adherent,
             par=acces.compte,
+            # Le numéro suit la séquence de tout le registre, comme une inscription.
+            numero_d_adhesion=(
+                prochain_numero_d_adhesion(depot_entreprises().lister(), jour.year)
+                if demande.adherent
+                else None
+            ),
         )
     except ConversionImpossible as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus

@@ -113,10 +113,19 @@ class VersionDSF(BaseModel):
         )
 
 
+class DepotHorsPlateforme(BaseModel):
+    numero: str
+    depose_le: datetime
+
+
 class DSFDeLExercice(BaseModel):
     entreprise: str
     exercice: str
     versions: list[VersionDSF]
+    #: 10 novembre 2026 : une DSF consignée à l'échéancier sans version préparée ici (déposée
+    #: avant la plateforme, ou hors d'elle). L'écran le dit d'emblée, au lieu d'offrir une
+    #: préparation que le serveur refuse au clic (constaté à la recette).
+    depot_hors_plateforme: DepotHorsPlateforme | None = None
 
 
 def _versions(entreprise: str, exercice: str) -> list[DeclarationDSF]:
@@ -135,10 +144,25 @@ def _version(entreprise: str, exercice: str, version: int) -> DeclarationDSF:
 @routeur.get("/dossiers/{entreprise}/dsf/{exercice}", summary="Les versions de la DSF")
 def lire_les_versions(acces: AccesRequis, entreprise: str, exercice: str) -> DSFDeLExercice:
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    versions = _versions(entreprise, exercice)
+    hors = None
+    if not any(d.etat is EtatDSF.DEPOSEE for d in versions):
+        try:
+            exercices = depot_dossiers().lire(entreprise).exercices
+            periodes = [e for e in exercices if e.libelle == exercice]
+        except EntrepriseIntrouvable:
+            periodes = []
+        if periodes:
+            accuse = atelier().portail.retrouver(
+                reference_de_depot(entreprise, "DSF", periodes[0].ouverture, periodes[0].cloture)
+            )
+            if accuse is not None:
+                hors = DepotHorsPlateforme(numero=accuse.numero, depose_le=accuse.depose_le)
     return DSFDeLExercice(
         entreprise=entreprise,
         exercice=exercice,
-        versions=[VersionDSF.de(d) for d in _versions(entreprise, exercice)],
+        versions=[VersionDSF.de(d) for d in versions],
+        depot_hors_plateforme=hors,
     )
 
 
