@@ -40,12 +40,22 @@ from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
 from app.contextes.cloture.domaine.etats_dgi import EtatsDgi
+from app.contextes.cloture.domaine.etats_smt import LIGNES_ACTIF, LIGNES_PASSIF, EtatsSmt
 
-__all__ = ["NOM_DU_MODELE", "ModeleIncompatible", "remplir_la_dsf_normal"]
+__all__ = [
+    "NOM_DU_MODELE",
+    "NOM_DU_MODELE_SMT",
+    "ModeleIncompatible",
+    "remplir_la_dsf_normal",
+    "remplir_la_dsf_smt",
+]
 
 MODELE = Path(__file__).parent / "modeles_dgi" / "DSF_Normal_DGIFORMAT_VERROUILLEVF.xlsx"
 #: Le nom sous lequel le fichier se téléverse : celui du modèle, sans rien ajouter.
 NOM_DU_MODELE = MODELE.name
+#: 11 novembre 2026 : le modèle du Système minimal de trésorerie (adhérents à l'IGS).
+MODELE_SMT = Path(__file__).parent / "modeles_dgi" / "DSF_SMT_VEROUILLE-09-03-2021.xlsx"
+NOM_DU_MODELE_SMT = MODELE_SMT.name
 
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _BILAN = "BILAN PAYSAGE"
@@ -57,8 +67,8 @@ class ModeleIncompatible(RuntimeError):
 
 
 @cache
-def _archive() -> bytes:
-    return MODELE.read_bytes()
+def _archive(modele: Path = MODELE) -> bytes:
+    return modele.read_bytes()
 
 
 def _chemins_des_feuilles(z: zipfile.ZipFile) -> dict[str, str]:
@@ -174,6 +184,122 @@ def remplir_la_dsf_normal(
         if chemin is None:
             raise ModeleIncompatible(f"la feuille « {feuille} » manque au modèle")
         remplacees[chemin] = _ecrire(source.read(chemin).decode(), cellules).encode()
+    sortie = io.BytesIO()
+    with zipfile.ZipFile(sortie, "w", zipfile.ZIP_DEFLATED) as cible:
+        for entree in source.infolist():
+            contenu = remplacees.get(entree.filename) or source.read(entree.filename)
+            cible.writestr(entree, contenu)
+    return sortie.getvalue()
+
+
+# ── Le Système minimal de trésorerie (11 novembre 2026) ───────────────────────────
+#
+# La feuille « MOD BILAN » : un bilan de neuf lignes, un compte de résultat de trésorerie.
+# Les totaux (lignes 16, 26, 33, 34) sont des FORMULES du modèle : on ne les remplace pas,
+# mais on met à jour la valeur qu'elles gardent en cache (le portail lit la cellule, pas la
+# formule), et le classeur demande un recalcul complet à l'ouverture. Le résultat G
+# (ligne 42) n'a pas de formule dans le modèle : il s'écrit.
+
+_MOD_BILAN = "MOD BILAN"
+_LIGNE_ACTIF = dict(zip(LIGNES_ACTIF, range(11, 16), strict=True))
+_LIGNE_PASSIF = dict(zip(LIGNES_PASSIF, range(11, 15), strict=True))
+_LIGNE_RESULTAT = {
+    "recettes_ventes": 24,
+    "autres_recettes": 25,
+    "depenses_achats": 27,
+    "depenses_loyers": 28,
+    "depenses_salaires": 29,
+    "depenses_impots": 30,
+    "charges_interets": 31,
+    "autres_depenses": 32,
+    "variation_stocks": 36,
+    "variation_creances": 37,
+    "variation_dettes": 38,
+    "dotations": 40,
+}
+
+
+def _valeurs_smt(etats: EtatsSmt, colonnes: tuple[str, str, str]) -> dict[str, Decimal]:
+    """Les cellules de saisie : `colonnes` = (actif, passif, résultat)."""
+    actif, passif, resultat = colonnes
+    valeurs: dict[str, Decimal] = {}
+    for ligne, rang in _LIGNE_ACTIF.items():
+        valeurs[f"{actif}{rang}"] = etats.actif[ligne]
+    for ligne, rang in _LIGNE_PASSIF.items():
+        valeurs[f"{passif}{rang}"] = etats.passif[ligne]
+    for ligne, rang in _LIGNE_RESULTAT.items():
+        valeurs[f"{resultat}{rang}"] = etats.resultat[ligne]
+    valeurs[f"{resultat}42"] = etats.resultat_g
+    return valeurs
+
+
+def _totaux_smt(etats: EtatsSmt, colonnes: tuple[str, str, str]) -> dict[str, Decimal]:
+    """Les valeurs en cache des formules du modèle."""
+    actif, passif, resultat = colonnes
+    return {
+        f"{actif}16": etats.total_actif,
+        f"{passif}16": etats.total_passif,
+        f"{resultat}26": etats.total_recettes,
+        f"{resultat}33": etats.total_depenses,
+        f"{resultat}34": etats.solde_de_tresorerie,
+    }
+
+
+def _mettre_en_cache(xml: str, valeurs: dict[str, Decimal]) -> str:
+    """La valeur gardée par une cellule à formule, la formule intacte."""
+    for coordonnee, valeur in valeurs.items():
+        motif = re.compile(rf'<c r="{coordonnee}"(?P<attrs>[^>]*?)(?:/>|>(?P<corps>.*?)</c>)', re.S)
+        m = motif.search(xml)
+        if m is None or "<f" not in (m.group("corps") or ""):
+            raise ModeleIncompatible(f"la cellule {coordonnee} n'est pas une formule du modèle")
+        corps = re.sub(r"<v>.*?</v>", "", m.group("corps"), flags=re.S)
+        cellule = f'<c r="{coordonnee}"{m.group("attrs")}>{corps}<v>{_nombre(valeur)}</v></c>'
+        xml = xml[: m.start()] + cellule + xml[m.end() :]
+    return xml
+
+
+def remplir_la_dsf_smt(
+    etats: EtatsSmt,
+    *,
+    precedents: EtatsSmt | None,
+    denomination: str,
+    niu: str,
+    cloture: date,
+    duree_en_mois: int,
+) -> bytes:
+    """Le modèle officiel « DSF SMT », bilan et compte de résultat remplis.
+
+    Refuse des états dont G ne retombe pas sur le résultat comptable, ou déséquilibrés :
+    l'appelant les a déjà écartés, ceci est le dernier verrou."""
+    if not etats.equilibre or not etats.concorde:
+        raise ModeleIncompatible("états SMT incohérents : le fichier ne sort pas.")
+    source = zipfile.ZipFile(io.BytesIO(_archive(MODELE_SMT)))
+    chemins = _chemins_des_feuilles(source)
+    if _MOD_BILAN not in chemins:
+        raise ModeleIncompatible(f"la feuille « {_MOD_BILAN} » manque au modèle")
+    feuille = source.read(chemins[_MOD_BILAN]).decode()
+    valeurs: dict[str, Decimal | str] = {
+        "A4": f"Désignation entité : {denomination}",
+        "A5": f"Numéro d'identification : {niu}",
+        "G4": f"Exercice clos le {cloture:%d/%m/%Y}",
+        "G5": f"Durée (en mois) : {duree_en_mois}",
+        "A7": f"BILAN SMT AU {cloture:%d/%m/%Y}",
+        "A20": f"COMPTE DE RESULTAT SMT AU {cloture:%d/%m/%Y}",
+        **_valeurs_smt(etats, ("E", "J", "E")),
+    }
+    totaux = _totaux_smt(etats, ("E", "J", "E"))
+    if precedents is not None:
+        valeurs |= _valeurs_smt(precedents, ("F", "K", "F"))
+        totaux |= _totaux_smt(precedents, ("F", "K", "F"))
+    feuille = _mettre_en_cache(_ecrire(feuille, valeurs), totaux)
+
+    # Le classeur se recalcule entièrement à l'ouverture : les totaux affichés suivent.
+    classeur = source.read("xl/workbook.xml").decode()
+    classeur = re.sub(
+        r"<calcPr\b([^>]*?)\s*/>", r'<calcPr\1 fullCalcOnLoad="1"/>', classeur, count=1
+    )
+
+    remplacees = {chemins[_MOD_BILAN]: feuille.encode(), "xl/workbook.xml": classeur.encode()}
     sortie = io.BytesIO()
     with zipfile.ZipFile(sortie, "w", zipfile.ZIP_DEFLATED) as cible:
         for entree in source.infolist():

@@ -247,6 +247,15 @@ def _grand_livre(
         contenu.append(_p(f"{compte} · {intitule(compte)}", _SOUS_TITRE))
         contenu.append(_table(lignes, fixes, [rang_total], range(3, 6)))
         contenu.append(Spacer(0, 4 * mm))
+    # 11 novembre 2026 : le total général, qui doit égaler celui du journal. Sans lui, le
+    # livre ne se rapprochait du journal qu'en additionnant chaque compte à la main.
+    total_d = sum((s.total_debit for s in periode.values()), Decimal(0))
+    total_c = sum((s.total_credit for s in periode.values()), Decimal(0))
+    general = [
+        ["", "", "", "Débit", "Crédit", ""],
+        ["", "", "Total général des mouvements", _m(total_d), _m(total_c), ""],
+    ]
+    contenu.append(_table(general, fixes, [1], range(3, 6)))
     return contenu
 
 

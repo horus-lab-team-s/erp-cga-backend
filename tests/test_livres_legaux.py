@@ -167,6 +167,16 @@ class TestLeLivreJournal:
 
 
 class TestLeGrandLivre:
+    def test_le_total_general_egale_celui_du_journal(self):
+        """11 novembre 2026 : le grand livre n'avait pas de total général ; il se rapproche
+        désormais du journal sans addition à la main."""
+        livre = _livre(Livre.GRAND_LIVRE)
+        journal = _livre(Livre.JOURNAL)
+        total = re.search(r"Total général des mouvements\n([^\n]+)\n([^\n]+)", livre)
+        assert total, livre[-400:]
+        assert total.group(1) == total.group(2) == "1 407 750"
+        assert journal.endswith("Total général\n1 407 750\n1 407 750")
+
     def test_le_solde_reporte_et_le_solde_progressif_qui_en_part(self):
         """⚠️ Août seul : le fournisseur doit déjà 178 875 au 1er août."""
         texte = _livre(Livre.GRAND_LIVRE, du=date(2026, 8, 1), au=date(2026, 8, 31))

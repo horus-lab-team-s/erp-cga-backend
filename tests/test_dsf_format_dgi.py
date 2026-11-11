@@ -354,16 +354,21 @@ class TestParLesRoutes:
         assert client.get(self.URL).json()["pret"] is False
         assert client.get(f"{self.URL}/fichier").status_code == 409
 
-    def test_un_dossier_a_l_igs_n_a_pas_le_modele_normal(self, plateforme):
-        """NGUEMA est à l'IGS : sa DSF relève du Système Minimal (décret 2019/262)."""
+    def test_un_dossier_a_l_igs_sort_au_modele_smt(self, plateforme):
+        """NGUEMA est à l'IGS : sa DSF relève du Système Minimal (décret 2019/262). Depuis le
+        11 novembre 2026, le fichier sort au modèle officiel SMT, et non plus refusé."""
         client = plateforme
         ouvrir_une_session(client, "c.ndongo@cga-brcg.cm")
         url = f"/cloture/dossiers/{NGUEMA}/dsf/2025/format-dgi"
 
         corps = client.get(url).json()
-        assert corps["pret"] is False
-        assert any("Système Minimal" in o for o in corps["obstacles"]), corps
+        assert corps["pret"] is True, corps
+        assert corps["nom_du_fichier"] == "DSF_SMT_VEROUILLE-09-03-2021.xlsx"
         assert client.get(f"/cloture/dossiers/{NGUEMA}/liasse/2025").json()["systeme"] == "MINIMAL"
+        fichier = client.get(f"{url}/fichier")
+        assert fichier.status_code == 200, fichier.text
+        disposition = fichier.headers["content-disposition"]
+        assert 'filename="DSF_SMT_VEROUILLE-09-03-2021.xlsx"' in disposition
 
     def test_un_autre_dossier_n_y_accede_pas(self, plateforme):
         client = plateforme

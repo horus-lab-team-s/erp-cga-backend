@@ -237,7 +237,11 @@ class FormatDgi(BaseModel):
 
 def _format_dgi(entreprise: str, exercice: str):
     from app.contextes.cloture.adaptateurs.entrant.routes_http import depot_ecritures
-    from app.contextes.cloture.application.format_dgi import etat_du_format_dgi
+    from app.contextes.cloture.application.format_dgi import (
+        etat_du_format_dgi,
+        etat_du_format_smt,
+    )
+    from app.contextes.cloture.domaine.a_nouveau import JOURNAL_DES_A_NOUVEAUX
     from app.contextes.comptabilite.api import balance
 
     try:
@@ -255,12 +259,29 @@ def _format_dgi(entreprise: str, exercice: str):
     def soldes(libelle: str) -> dict[str, Decimal]:
         return {s.compte: s.solde for s in balance(depot_ecritures(entreprise).toutes(libelle))}
 
+    # Le système suit le régime à la clôture (voir `determiner_le_systeme`).
+    if dossier.regime_au(periode.cloture) != "REEL":
+        # 11 novembre 2026 : l'IGS dépose au Système minimal de trésorerie.
+        def ouverture(libelle: str) -> dict[str, Decimal]:
+            a_nouveaux = [
+                e for e in depot_ecritures(entreprise).toutes(libelle)
+                if e.journal == JOURNAL_DES_A_NOUVEAUX
+            ]
+            return {s.compte: s.solde for s in balance(a_nouveaux)}
+
+        smt = etat_du_format_smt(
+            soldes(exercice),
+            ouverture=ouverture(exercice),
+            precedent=(
+                (soldes(precedent.libelle), ouverture(precedent.libelle)) if precedent else None
+            ),
+            exercice_clos=periode.clos,
+        )
+        return dossier, periode, smt
     etat = etat_du_format_dgi(
         soldes(exercice),
         soldes_precedents=soldes(precedent.libelle) if precedent else None,
         exercice_clos=periode.clos,
-        # Le système suit le régime à la clôture (voir `determiner_le_systeme`).
-        systeme_normal=dossier.regime_au(periode.cloture) == "REEL",
     )
     return dossier, periode, etat
 
@@ -339,9 +360,27 @@ def etat_du_format_dgi_de_l_exercice(
     acces: AccesRequis, entreprise: str, exercice: str
 ) -> FormatDgi:
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
-    from app.contextes.cloture.adaptateurs.sortant.dsf_format_dgi import NOM_DU_MODELE
+    from app.contextes.cloture.adaptateurs.sortant.dsf_format_dgi import (
+        NOM_DU_MODELE,
+        NOM_DU_MODELE_SMT,
+    )
+    from app.contextes.cloture.application.format_dgi import EtatDuFormatSmt
 
     _, _, etat = _format_dgi(entreprise, exercice)
+    if isinstance(etat, EtatDuFormatSmt):
+        return FormatDgi(
+            pret=etat.pret,
+            obstacles=list(etat.obstacles),
+            avertissements=[
+                "Modèle SMT : recettes et dépenses reconstituées depuis la comptabilité "
+                "d'engagement ; la règle de passage est à confirmer par l'expert-comptable.",
+                *_avertissements_de_la_fiche(entreprise),
+            ],
+            nom_du_fichier=NOM_DU_MODELE_SMT,
+            total_bilan=etat.etats.total_actif,
+            resultat=etat.etats.resultat_g,
+            avec_exercice_precedent=etat.precedents is not None,
+        )
     return FormatDgi(
         pret=etat.pret,
         obstacles=list(etat.obstacles),
@@ -368,12 +407,34 @@ def fichier_au_format_dgi(acces: AccesRequis, entreprise: str, exercice: str) ->
     from app.contextes.cloture.adaptateurs.sortant.dsf_fiches_r import valeurs_des_fiches_r
     from app.contextes.cloture.adaptateurs.sortant.dsf_format_dgi import (
         NOM_DU_MODELE,
+        NOM_DU_MODELE_SMT,
         remplir_la_dsf_normal,
+        remplir_la_dsf_smt,
     )
+    from app.contextes.cloture.application.format_dgi import EtatDuFormatSmt
 
     dossier, periode, etat = _format_dgi(entreprise, exercice)
     if not etat.pret:
         raise HTTPException(status_code=409, detail=" ".join(etat.obstacles))
+    if isinstance(etat, EtatDuFormatSmt):
+        mois = (
+            (periode.cloture.year - periode.ouverture.year) * 12
+            + periode.cloture.month
+            - periode.ouverture.month
+            + 1
+        )
+        return Response(
+            content=remplir_la_dsf_smt(
+                etat.etats,
+                precedents=etat.precedents,
+                denomination=dossier.denomination,
+                niu=entreprise,
+                cloture=periode.cloture,
+                duree_en_mois=mois,
+            ),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{NOM_DU_MODELE_SMT}"'},
+        )
     octets = remplir_la_dsf_normal(
         etat.etats,
         precedents=etat.precedents,
