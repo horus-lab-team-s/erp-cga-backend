@@ -63,26 +63,30 @@ _INDIGO_900 = "#2e1b4d"
 _INDIGO_700 = "#492f79"
 _MAGENTA_600 = "#8c2d86"
 _INK_900 = "#1a1523"
+_INK_700 = "#3a3448"
 _INK_500 = "#6b6480"
-_LINE_200 = "#e5e1ec"
+_LINE_200 = "#e9e4f0"
 _SURFACE = "#ffffff"
-_SURFACE_ALT = "#faf9fc"
-_WARNING_100 = "#fbf0e2"
-_WARNING = "#b4690e"
+_SURFACE_ALT = "#f4f1f8"
+_LAVANDE = "#f7f3fb"
+_WARNING_100 = "#fdf4e7"
+_WARNING = "#c27a1a"
+_POLICE = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
 #: Le pied de page, identique sur tous les messages. L'agrément y figure parce
 #: qu'il est la seule chose qui distingue un CGA d'un cabinet ordinaire, et
 #: qu'un destinataire qui doute de l'expéditeur le cherche.
-#: ⚠️ **AUCUN TIRET CADRATIM DANS CE QUE LE CLIENT LIT.** La règle valait pour le
-#: document de conception, où la chaîne d'intégration la vérifie ; le cabinet l'a
-#: étendue à tous les messages le 30 septembre. Trente-sept en sortaient, dont
-#: trente-quatre venaient de ce pied et de son séparateur.
-#:
-#: Le nom et l'agrément sont désormais séparés par une virgule, qui dit la même
-#: chose sans le trait.
+#: ⚠️ **AUCUN TIRET CADRATIN DANS CE QUE LE CLIENT LIT** (règle du cabinet, 30 septembre).
+#: 11 novembre 2026 : le pied porte aussi le site et l'adresse de contact, comme les
+#: documents imprimés (`cabinet/identite_des_documents.yaml`).
 _PIED = (
-    "CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048<br />"
-    "Douala Akwa · Yaoundé Elig-Essono · Bafoussam"
+    "<strong style=\"color:#4a4458;\">CGA Broad Range Consulting Group</strong><br />"
+    "Centre de gestion agréé, agrément MINFI/DGI n° 00000048<br />"
+    "Douala Akwa · Yaoundé Elig-Essono · Bafoussam<br />"
+    "<a href=\"https://www.cga-brcgroup.com\" style=\"color:#8c2d86;text-decoration:none;\">"
+    "www.cga-brcgroup.com</a> · "
+    "<a href=\"mailto:contact@cga-brcgroup.com\" style=\"color:#8c2d86;text-decoration:none;\">"
+    "contact@cga-brcgroup.com</a>"
 )
 
 
@@ -202,9 +206,12 @@ def _texte(
     # ⚠️ `-- ` est le séparateur de signature des courriels, posé par la RFC 3676 :
     # les clients de messagerie le reconnaissent et replient ce qui suit. Un tiret
     # cadratin ne leur dit rien, et le cabinet n'en veut nulle part.
+    lignes.append("Bien cordialement,")
+    lignes.append("L'équipe du cabinet\n")
     lignes.append("-- ")
     lignes.append("CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048")
     lignes.append("Douala Akwa · Yaoundé Elig-Essono · Bafoussam")
+    lignes.append("www.cga-brcgroup.com · contact@cga-brcgroup.com")
     return "\n".join(lignes)
 
 
@@ -219,27 +226,29 @@ CID_DU_LOGO = "logo-cga"
 
 
 def _tableau_html(tableau: list[tuple[str, str]]) -> str:
-    """Le détail, au style de la proforma : lignes fines, total en cartouche."""
+    """Le détail : lignes fines, total sur un fond lavande (11 novembre 2026)."""
     rangees = []
     for rang, (designation, valeur) in enumerate(tableau):
         dernier = rang == len(tableau) - 1
-        style = (
-            f"padding:11px 14px;font-size:15px;font-weight:700;color:{_INK_900};"
-            f"border:1.5px solid {_INK_900};"
-            if dernier
-            else f"padding:8px 14px;font-size:14px;color:{_INK_900};"
-            f"border-bottom:1px solid {_LINE_200};"
-        )
-        droite = "border-left:0;" if dernier else ""
-        gauche = "border-right:0;" if dernier else ""
+        if dernier:
+            style = (
+                f"padding:13px 16px;font-size:15px;font-weight:700;color:{_INDIGO_900};"
+                f"background:{_LAVANDE};"
+            )
+        else:
+            style = (
+                f"padding:10px 16px;font-size:14px;color:{_INK_700};"
+                f"border-bottom:1px solid {_LINE_200};"
+            )
         rangees.append(
-            f'<tr><td style="{style}{gauche}">{escape(designation, quote=True)}</td>'
-            f'<td align="right" style="{style}{droite}white-space:nowrap;">'
+            f'<tr><td style="{style}">{escape(designation, quote=True)}</td>'
+            f'<td align="right" style="{style}white-space:nowrap;">'
             f"{escape(valeur, quote=True)}</td></tr>"
         )
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="margin:6px 0 22px;border-collapse:collapse;">' + "".join(rangees) + "</table>"
+        f'style="margin:8px 0 24px;border-collapse:separate;border:1px solid {_LINE_200};'
+        'border-radius:10px;overflow:hidden;">' + "".join(rangees) + "</table>"
     )
 
 
@@ -248,7 +257,7 @@ def _html(
 ) -> str:
     """Le corps HTML. Tables et CSS en ligne — voir l'en-tête."""
     corps = "".join(
-        f'<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:{_INK_900};">'
+        f'<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:{_INK_700};">'
         f"{_remplir(p, valeurs)}</p>"
         for p in gabarit_.paragraphes
         if _remplir(p, valeurs).strip()
@@ -258,22 +267,29 @@ def _html(
 
     if gabarit_.action is not None:
         libelle, adresse = gabarit_.action
+        lien = _remplir(adresse, valeurs)
+        # Un bouton arrondi, puis l'adresse en clair : certaines messageries
+        # d'entreprise désactivent les boutons, et un lien recopié doit rester possible.
         corps += (
             '<table role="presentation" cellpadding="0" cellspacing="0" '
-            'style="margin:24px 0;"><tr><td '
-            f'style="background:{_MAGENTA_600};border-radius:6px;">'
-            f'<a href="{_remplir(adresse, valeurs)}" '
-            'style="display:inline-block;padding:13px 26px;font-size:15px;'
-            'font-weight:600;color:#ffffff;text-decoration:none;">'
+            'style="margin:26px 0 10px;"><tr><td '
+            f'bgcolor="{_MAGENTA_600}" style="background:{_MAGENTA_600};border-radius:10px;'
+            'box-shadow:0 2px 6px rgba(140,45,134,.25);">'
+            f'<a href="{lien}" '
+            'style="display:inline-block;padding:14px 30px;font-size:15px;'
+            'font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:.2px;">'
             f"{_remplir(libelle, valeurs)}</a></td></tr></table>"
+            f'<p style="margin:0 0 22px;font-size:12px;line-height:1.5;color:{_INK_500};">'
+            "Si le bouton ne s'ouvre pas, copiez cette adresse dans votre navigateur :<br />"
+            f'<a href="{lien}" style="color:{_MAGENTA_600};word-break:break-all;">{lien}</a></p>'
         )
 
     if gabarit_.avertissement is not None:
         corps += (
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            f'style="margin:20px 0;background:{_WARNING_100};border-left:3px solid '
-            f'{_WARNING};border-radius:4px;"><tr><td style="padding:14px 16px;'
-            f'font-size:14px;line-height:1.55;color:{_INK_900};">'
+            f'style="margin:20px 0 4px;background:{_WARNING_100};border:1px solid #f3dfbf;'
+            f'border-left:4px solid {_WARNING};border-radius:10px;"><tr><td '
+            f'style="padding:14px 18px;font-size:14px;line-height:1.6;color:{_INK_900};">'
             f"{_remplir(gabarit_.avertissement, valeurs)}</td></tr></table>"
         )
 
@@ -299,22 +315,30 @@ def _html(
     return f"""\
 {prevu}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" \
-style="background:{_SURFACE_ALT};padding:28px 12px;">
+bgcolor="{_SURFACE_ALT}" style="background:{_SURFACE_ALT};padding:32px 12px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" \
-style="max-width:560px;background:{_SURFACE};border:1px solid {_LINE_200};\
-border-radius:10px;overflow:hidden;font-family:-apple-system,'Segoe UI',\
-Roboto,Helvetica,Arial,sans-serif;">
+style="max-width:600px;background:{_SURFACE};border:1px solid {_LINE_200};\
+border-radius:16px;overflow:hidden;font-family:{_POLICE};\
+box-shadow:0 4px 18px rgba(46,27,77,.06);">
 <tr><td style="padding:0;">{_bandeau()}</td></tr>
-<tr><td style="padding:28px;">
-<h1 style="margin:0 0 18px;font-size:20px;line-height:1.35;color:{_INDIGO_700};">\
-{_remplir(gabarit_.titre, valeurs)}</h1>
+<tr><td style="padding:30px 34px 10px;">
+<p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:1.2px;\
+text-transform:uppercase;color:{_MAGENTA_600};">Votre centre de gestion agréé</p>
+<h1 style="margin:0 0 20px;font-size:22px;line-height:1.35;font-weight:700;\
+color:{_INDIGO_900};">{_remplir(gabarit_.titre, valeurs)}</h1>
 {corps}
 </td></tr>
-<tr><td style="padding:18px 28px;border-top:1px solid {_LINE_200};\
-font-size:12px;line-height:1.6;color:{_INK_500};">{_PIED}<br />\
-<span style="color:{_INK_500};">Ce message vous est adressé par le cabinet qui \
-tient votre dossier. Pour toute question, répondez-y simplement.</span></td></tr>
+<tr><td style="padding:6px 34px 28px;">
+<p style="margin:0;font-size:14px;line-height:1.6;color:{_INK_700};">Bien cordialement,<br />\
+<strong style="color:{_INDIGO_900};">L'équipe du cabinet</strong></p>
+</td></tr>
+<tr><td bgcolor="{_LAVANDE}" style="background:{_LAVANDE};padding:22px 34px;\
+border-top:1px solid {_LINE_200};text-align:center;font-size:12px;line-height:1.7;\
+color:{_INK_500};">{_PIED}<br />\
+<span style="display:inline-block;margin-top:8px;color:#8a8399;font-size:11px;">\
+Ce message vous est adressé par le cabinet qui tient votre dossier. Pour toute question, \
+répondez-y simplement.</span></td></tr>
 </table>
 </td></tr>
 </table>"""
@@ -363,28 +387,35 @@ def _tableau_du_contexte(
 
 
 def _bandeau() -> str:
-    """Le logo à gauche, le nom de la maison à sa droite : l'en-tête du document.
+    """Le logo sur fond blanc, la maison à côté, puis un filet aux couleurs de la marque
+    (11 novembre 2026 : plus clair et plus aéré que le bandeau indigo plein).
 
-    ⚠️ Sans le fichier du logo, le bandeau reprend toute la largeur comme avant :
-    un message sans la marque part quand même.
+    ⚠️ Sans le fichier du logo, le nom de la maison tient seul l'en-tête : un message sans
+    la marque part quand même.
     """
-    nom = (
-        f'<td style="background:{_INDIGO_900};padding:18px 22px;">'
-        '<span style="font-size:15px;font-weight:700;color:#ffffff;'
-        'letter-spacing:.3px;">CGA Broad Range Consulting Group</span><br />'
-        '<span style="font-size:10.5px;color:#d9d2ea;letter-spacing:.2px;">'
-        "Assistance comptable et fiscale · Assistance juridique · Formations</span></td>"
-    )
     logo = (
-        f'<td width="112" style="background:#ffffff;padding:10px 12px;">'
-        f'<img src="cid:{CID_DU_LOGO}" width="88" alt="CGA Broad Range" '
-        'style="display:block;border:0;width:88px;height:auto;" /></td>'
+        f'<td width="132" style="padding:22px 0 18px 30px;">'
+        f'<img src="cid:{CID_DU_LOGO}" width="112" alt="CGA Broad Range" '
+        'style="display:block;border:0;width:112px;height:auto;" /></td>'
         if logo_disponible()
         else ""
     )
+    nom = (
+        '<td style="padding:22px 30px 18px 18px;" align="right">'
+        f'<span style="font-size:14px;font-weight:700;color:{_INDIGO_900};'
+        'letter-spacing:.2px;">CGA Broad Range Consulting Group</span><br />'
+        f'<span style="font-size:11px;color:{_INK_500};">'
+        "Comptabilité · Fiscalité · Juridique · Formations</span></td>"
+    )
+    filet = (
+        f'<tr><td colspan="2" height="4" bgcolor="{_MAGENTA_600}" style="height:4px;'
+        f"line-height:4px;font-size:0;background:{_MAGENTA_600};"
+        f'background-image:linear-gradient(90deg,{_INDIGO_700},{_MAGENTA_600});">&nbsp;</td></tr>'
+    )
     return (
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-        f"<tr>{logo}{nom}</tr></table>"
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        f'bgcolor="{_SURFACE}" style="background:{_SURFACE};">'
+        f"<tr>{logo}{nom}</tr>{filet}</table>"
     )
 
 
