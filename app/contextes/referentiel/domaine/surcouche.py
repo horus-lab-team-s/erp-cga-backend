@@ -58,6 +58,7 @@ from app.contextes.referentiel.domaine.entites import (
     Unite,
     VersionParametre,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "CircuitDeValidation",
@@ -223,7 +224,7 @@ class DecisionSurLeReferentiel(BaseModel):
             raise DecisionRefusee(
                 f"la décision {self.identifiant} ne s'applique pas : il n'y a rien à retirer."
             )
-        if a_compter_du < le.date():
+        if a_compter_du < jour_a_douala(le):
             raise DecisionRefusee(
                 f"un retrait ne prend pas effet dans le passé ({a_compter_du}) : les calculs "
                 "déjà rendus changeraient sans que personne ne les relise."
@@ -406,7 +407,7 @@ def appliquer_la_surcouche(
                     update={
                         "statut": StatutValidation.VALIDE,
                         "valide_par": signataire,
-                        "valide_le": decision.tranche_le.date(),
+                        "valide_le": jour_a_douala(decision.tranche_le),
                     }
                 )
                 if v.applicable_du == decision.applicable_du
@@ -432,7 +433,7 @@ def appliquer_la_surcouche(
             fondement=decision.fondement,
             note=decision.note,
             valide_par=signataire,
-            valide_le=decision.tranche_le.date(),
+            valide_le=jour_a_douala(decision.tranche_le),
             borne=precedente.borne if precedente is not None else None,
         )
         par_code[decision.code] = _inserer(parametre, nouvelle, decision.fin_d_effet)

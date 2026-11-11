@@ -32,7 +32,7 @@ from app.contextes.conformite.domaine.entites import (
     TypeDocument,
 )
 
-__all__ = ["FACTURES_DEMO", "facture_demo", "REFERENCES_CANONIQUES"]
+__all__ = ["FACTURES_DEMO", "REFERENCES_CANONIQUES"]
 
 #: Les cinq factures du § 13.5. Leurs verdicts sont verrouillés par les tests.
 REFERENCES_CANONIQUES = (
@@ -218,8 +218,3 @@ FACTURES_DEMO: dict[str, FactureAControler] = {
 }
 
 
-def facture_demo(reference: str) -> FactureAControler:
-    if reference not in FACTURES_DEMO:
-        connues = ", ".join(sorted(FACTURES_DEMO))
-        raise KeyError(f"facture « {reference} » inconnue. Références disponibles : {connues}")
-    return FACTURES_DEMO[reference]

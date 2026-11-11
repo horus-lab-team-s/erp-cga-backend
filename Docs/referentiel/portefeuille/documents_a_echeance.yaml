@@ -1,0 +1,41 @@
+# Les documents à échéance d'un adhérent, et leur durée de validité (lot 4, 9 novembre 2026).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION DU CABINET, SOURCÉE
+#
+# Chaque sorte porte sa durée (`validite_mois`) SI ELLE EST ÉTABLIE, avec son fondement et sa
+# source. Une sorte sans durée reste au catalogue : sa date d'expiration se saisit à la main
+# quand on l'enregistre. Aucune durée n'est inventée — voir
+# Docs/sources-reglementaires/2026-11-09-expirations-et-cga.md.
+#
+# `statut: A_VALIDER` tant que le cabinet n'a pas confirmé ; il passe ensuite à `VALIDE`.
+# Ajouter une sorte, c'est ajouter un bloc ici.
+# ─────────────────────────────────────────────────────────────────────────────
+
+documents:
+  - code: ACF
+    libelle: Attestation de conformité fiscale (ACF)
+    validite_mois: 3
+    statut: A_VALIDER
+    fondement: >-
+      Remplace l'attestation de non-redevance depuis la loi de finances 2024 ; trois mois à
+      compter de la signature (LPF, art. L 94 bis, cité par des sources secondaires) ; la
+      mention figure sur une ACF délivrée en août 2025.
+    source: Docs/sources-reglementaires/2026-11-09-expirations-et-cga.md#1
+
+  - code: CASIER_JUDICIAIRE
+    libelle: Extrait de casier judiciaire (bulletin n° 3)
+    validite_mois: 3
+    statut: A_VALIDER
+    fondement: >-
+      « de moins de trois mois » : la liste des pièces de création du cabinet. Durée d'usage
+      exigée par le cabinet, et non durée légale du document.
+    source: app/contextes/creation_entreprise/domaine/checklist.py (CASIER_JUDICIAIRE)
+
+  - code: ATTESTATION_CNPS
+    libelle: Attestation de soumission CNPS
+    statut: A_VALIDER
+    fondement: >-
+      Exigée « en cours de validité » dans les marchés publics ; durée NON TROUVÉE : la date
+      d'expiration se saisit à partir de l'attestation.
+    source: Docs/sources-reglementaires/2026-11-09-expirations-et-cga.md#3

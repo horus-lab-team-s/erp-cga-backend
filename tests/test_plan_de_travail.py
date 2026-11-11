@@ -208,16 +208,16 @@ class TestLAgregateur:
     def test_une_erreur_de_programmation_n_est_pas_un_contexte_indisponible(self):
         """⚠️ Pas 104 : l'agrégateur avalait tout, y compris une méthode qui n'existe pas. La
         composante des demandes sans réponse a valu zéro sans que personne ne le voie."""
-        from app.contextes.pilotage.adaptateurs.entrant.routes_http import _sans_echouer
+        from app.contextes.pilotage.adaptateurs.entrant.sources import sans_echouer
 
         def indisponible():
             raise ConnectionError("base injoignable")
 
-        assert _sans_echouer(indisponible, ["repli"]) == ["repli"]
+        assert sans_echouer(indisponible, ["repli"]) == ["repli"]
         with pytest.raises(AttributeError):
-            _sans_echouer(lambda: object().du_dossier("N1"), [])  # type: ignore[attr-defined]
+            sans_echouer(lambda: object().du_dossier("N1"), [])  # type: ignore[attr-defined]
         with pytest.raises(TypeError):
-            _sans_echouer(lambda: len(1), [])  # type: ignore[arg-type]
+            sans_echouer(lambda: len(1), [])  # type: ignore[arg-type]
 
 
 class TestLaRoute:

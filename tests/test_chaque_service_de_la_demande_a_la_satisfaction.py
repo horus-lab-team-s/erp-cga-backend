@@ -55,6 +55,10 @@ ARRETS_ATTENDUS: dict[str, tuple[str, str]] = {
     "DOMICILIATION": ("EN_CONVERSATION", "aucun questionnaire, prix non arrêté"),
     "FORMATION": ("EN_CONVERSATION", "aucun questionnaire, prix non arrêté"),
     "PONCTUEL": ("EN_CONVERSATION", "aucun questionnaire, prix sur étude"),
+    # 19 octobre 2026 (point 24) : la DSF achetée en ligne. Demandée par le formulaire de
+    # contact, elle n'a ni questionnaire ni prix arrêté : elle s'arrête à la conversation,
+    # comme la domiciliation, jusqu'à ce que la direction fixe ses deux tranches.
+    "DSF": ("EN_CONVERSATION", "aucun questionnaire, prix non arrêté"),
 }
 
 

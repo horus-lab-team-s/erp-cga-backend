@@ -69,6 +69,7 @@ from app.contextes.transverse.adaptateurs.sortant.tables import (
     TableHabilitation,
     TableJeton,
     TableMandat,
+    TableRoleDuCabinet,
     TableSession,
 )
 from app.contextes.transverse.domaine.audit import EntreeAudit
@@ -76,7 +77,7 @@ from app.contextes.transverse.domaine.habilitations import Habilitation
 from app.contextes.transverse.domaine.identites import Compte
 from app.contextes.transverse.domaine.jetons import Jeton
 from app.contextes.transverse.domaine.mandats import Mandat, MotifMandat
-from app.contextes.transverse.domaine.roles import Role
+from app.contextes.transverse.domaine.roles import FicheDeRole, Permission, Role
 from app.contextes.transverse.domaine.sessions import Session
 from app.contextes.transverse.domaine.teledeclaration import (
     AccuseReception,
@@ -89,6 +90,7 @@ from app.partage.locataire import sous_mandat
 __all__ = [
     "DepotComptesSql",
     "DepotHabilitationsSql",
+    "DepotRolesDuCabinetSql",
     "DepotJetonsSql",
     "DepotSessionsSql",
     "JournalAuditSql",
@@ -109,6 +111,8 @@ def _vers_compte(ligne: TableCompte, coffre: Coffre) -> Compte:
         telephone=ligne.telephone,
         empreinte_mot_de_passe=ligne.empreinte_mot_de_passe,
         secret_totp=coffre.ouvrir(ligne.secret_totp),
+        secret_totp_en_attente=coffre.ouvrir(ligne.secret_totp_en_attente),
+        derniere_tranche_totp=ligne.derniere_tranche_totp,
         etat=ligne.etat,
         cree_le=ligne.cree_le,
         tentatives_echouees=ligne.tentatives_echouees,
@@ -253,6 +257,8 @@ class DepotComptesSql:
         ligne.telephone = compte.telephone
         ligne.empreinte_mot_de_passe = compte.empreinte_mot_de_passe
         ligne.secret_totp = self._coffre.sceller(compte.secret_totp)
+        ligne.secret_totp_en_attente = self._coffre.sceller(compte.secret_totp_en_attente)
+        ligne.derniere_tranche_totp = compte.derniere_tranche_totp
         ligne.etat = compte.etat.value
         ligne.cree_le = compte.cree_le
         ligne.tentatives_echouees = compte.tentatives_echouees
@@ -326,7 +332,7 @@ class DepotHabilitationsSql:
             self._session.add(ligne)
         ligne.locataire = self.locataire
         ligne.compte = habilitation.compte
-        ligne.role = habilitation.role.value
+        ligne.role = str(habilitation.role)
         ligne.portee = None if habilitation.portee is None else sorted(habilitation.portee)
         ligne.debut = habilitation.debut
         ligne.fin = habilitation.fin
@@ -796,3 +802,62 @@ class DepotMandatsSql:
         ligne.revoque_par = mandat.revoque_par
         ligne.precision = mandat.precision
         self._session.flush()
+
+
+class DepotRolesDuCabinetSql:
+    """Les rôles réglés par le cabinet (18 octobre 2026). Voir `TableRoleDuCabinet`.
+
+    ⚠️ Lus une fois par requête : la matrice se consulte à chaque contrôle de droit, et la
+    requête est l'unité de travail. Une écriture vide la mémoire, pour que la requête qui
+    règle un rôle lise aussitôt ce qu'elle vient de régler.
+    """
+
+    def __init__(self, session: SessionSql, locataire: str) -> None:
+        self._session = session
+        self.locataire = locataire
+        self._lues: list[FicheDeRole] | None = None
+
+    def tous(self) -> list[FicheDeRole]:
+        if self._lues is None:
+            lignes = self._session.scalars(
+                select(TableRoleDuCabinet)
+                .where(TableRoleDuCabinet.locataire == self.locataire)
+                .order_by(TableRoleDuCabinet.code)
+            ).all()
+            self._lues = [
+                FicheDeRole(
+                    code=ligne.code,
+                    libelle=ligne.libelle,
+                    # Un droit retiré de la plateforme depuis le réglage ne se lit plus.
+                    permissions=frozenset(
+                        Permission(p) for p in ligne.permissions if p in Permission.__members__
+                    ),
+                    systeme=ligne.systeme,
+                    externe=ligne.externe,
+                    reglee_par=ligne.reglee_par,
+                    reglee_le=ligne.reglee_le,
+                )
+                for ligne in lignes
+            ]
+        return list(self._lues)
+
+    def enregistrer(self, fiche: FicheDeRole) -> None:
+        ligne = self._session.get(TableRoleDuCabinet, (self.locataire, fiche.code))
+        if ligne is None:
+            ligne = TableRoleDuCabinet(locataire=self.locataire, code=fiche.code)
+            self._session.add(ligne)
+        ligne.libelle = fiche.libelle
+        ligne.permissions = sorted(p.value for p in fiche.permissions)
+        ligne.systeme = fiche.systeme
+        ligne.externe = fiche.externe
+        ligne.reglee_par = fiche.reglee_par
+        ligne.reglee_le = fiche.reglee_le
+        self._session.flush()
+        self._lues = None
+
+    def retirer(self, code: str) -> None:
+        ligne = self._session.get(TableRoleDuCabinet, (self.locataire, code))
+        if ligne is not None:
+            self._session.delete(ligne)
+            self._session.flush()
+        self._lues = None

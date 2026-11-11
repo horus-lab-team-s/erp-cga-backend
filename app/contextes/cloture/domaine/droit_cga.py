@@ -29,11 +29,20 @@ centre assiste les entreprises dont le chiffre d'affaires annuel n'excède pas
 avec une note qui disait « c'est le critère d'éligibilité du métier même du
 cabinet » — **et aucune ligne de code ne le lisait.** Une entreprise à 300 millions
 restée inscrite recevait l'abattement chaque année.
+
+⚠️ UNE TROISIÈME, LE 15 OCTOBRE 2026 : LE DÉPÔT DANS LES DÉLAIS
+
+CGI 2026, art. 119 (2) : « l'adhérent perd le droit aux avantages prévus à l'alinéa
+1er lorsque sa déclaration des résultats ou des revenus n'est pas souscrite dans les
+délais ». La date qui compte est celle de l'accusé du portail (la date opposable).
+Tant que l'échéance n'est pas passée, une DSF non encore déposée ne ferme rien : la
+liasse se prépare AVANT le dépôt.
 ─────────────────────────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, computed_field
@@ -60,6 +69,8 @@ class DroitAuxAvantagesCGA(BaseModel):
     seuil_adhesion: Decimal | None
     #: « n'excède pas » : la valeur même reste éligible. `None` avec le seuil.
     borne_adhesion: Borne | None = None
+    #: Art. 119 (2) : la DSF déposée après l'échéance, ou pas déposée l'échéance passée.
+    declaration_hors_delai: bool = False
     motif: str
 
     @computed_field
@@ -70,6 +81,7 @@ class DroitAuxAvantagesCGA(BaseModel):
             and self.seuil_adhesion is not None
             and self.borne_adhesion is not None
             and not seuil_atteint(self.chiffre_affaires, self.seuil_adhesion, self.borne_adhesion)
+            and not self.declaration_hors_delai
         )
 
 
@@ -80,6 +92,9 @@ def apprecier_le_droit(
     chiffre_affaires: Decimal,
     seuil_adhesion: Decimal | None,
     borne_adhesion: Borne | None,
+    echeance_declaration: date | None = None,
+    deposee_le: date | None = None,
+    au: date | None = None,
 ) -> DroitAuxAvantagesCGA:
     """Les deux conditions, et le motif de la première qui manque.
 
@@ -92,6 +107,10 @@ def apprecier_le_droit(
     version l'écrivait ici avec `<=` ; elle avait raison, et par hasard.
     """
     adherent = entreprise.adherente_sur_toute_la_periode(exercice.ouverture, exercice.cloture)
+    hors_delai = echeance_declaration is not None and (
+        (deposee_le is not None and deposee_le > echeance_declaration)
+        or (deposee_le is None and au is not None and au > echeance_declaration)
+    )
 
     if not adherent:
         motif = (
@@ -110,6 +129,15 @@ def apprecier_le_droit(
             f"d'adhésion de {seuil_adhesion:,.0f} FCFA (CGI art. 118). L'entreprise ne "
             "relève plus d'un centre de gestion agréé pour cet exercice."
         ).replace(",", " ")
+    elif hors_delai:
+        motif = (
+            f"déclaration des résultats déposée le {deposee_le:%d/%m/%Y}, après l'échéance du "
+            if deposee_le is not None
+            else "déclaration des résultats non déposée à l'échéance du "
+        ) + (
+            f"{echeance_declaration:%d/%m/%Y} : l'adhérent perd les avantages du centre pour "
+            "cet exercice (CGI art. 119 (2))."
+        )
     else:
         motif = "adhésion sur tout l'exercice, chiffre d'affaires sous le seuil d'adhésion."
 
@@ -118,5 +146,6 @@ def apprecier_le_droit(
         chiffre_affaires=chiffre_affaires,
         seuil_adhesion=seuil_adhesion,
         borne_adhesion=borne_adhesion,
+        declaration_hors_delai=hors_delai,
         motif=motif,
     )

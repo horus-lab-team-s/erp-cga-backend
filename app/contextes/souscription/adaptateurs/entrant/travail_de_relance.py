@@ -36,7 +36,6 @@ from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
 )
 from app.contextes.souscription.adaptateurs.sortant.magasins_memoire import (
     proformas_memoire,
-    vider_les_proformas_memoire,
 )
 from app.contextes.souscription.adaptateurs.sortant.plan_de_relance import (
     charger_le_plan_de_relance,
@@ -52,7 +51,6 @@ from app.partage.locataire import courant
 __all__ = [
     "NOM_TRAVAIL",
     "balayer",
-    "reinitialiser_le_balayage",
     "travail_de_relance",
 ]
 
@@ -157,7 +155,3 @@ def _suivis_memoire() -> DepotSuivisDeRelanceMemoire:
     return DepotSuivisDeRelanceMemoire()
 
 
-def reinitialiser_le_balayage() -> None:
-    """Repart de magasins mémoire vierges. Destiné aux tests."""
-    vider_les_proformas_memoire()
-    _suivis_memoire.cache_clear()

@@ -37,19 +37,19 @@ from pydantic import BaseModel
 
 from app.contextes.collecte.api import mois_de_la_piece, reglages_des_reponses, texte_de_la_reponse
 from app.contextes.comptabilite.api import EtatEcriture, periodes_verrouillees_du_dossier
-from app.contextes.pilotage.adaptateurs.entrant.routes_http import (
-    _depot_demandes,
-    _depot_pieces,
-    _ecritures,
-    _sans_echouer,
+from app.contextes.pilotage.adaptateurs.entrant.routes_relance import (
+    bornes_du_mois,
+    dossier_a_relancer,
+    relever_les_attentes,
 )
 from app.contextes.pilotage.adaptateurs.entrant.routes_relance import (
-    _bornes,
-    _dossier,
-    _relever_les_attentes,
+    reglages_des_pieces_manquantes as _reglages_des_pieces_manquantes,
 )
-from app.contextes.pilotage.adaptateurs.entrant.routes_relance import (
-    _reglages as _reglages_des_pieces_manquantes,
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_demandes,
+    depot_ecritures,
+    depot_pieces,
+    sans_echouer,
 )
 from app.contextes.pilotage.adaptateurs.sortant.espace_adherent_yaml import (
     charger_les_reglages_de_l_espace_adherent,
@@ -65,12 +65,12 @@ from app.contextes.pilotage.domaine.mois_de_l_adherent import (
 from app.contextes.pilotage.domaine.pieces_manquantes import nom_du_mois
 from app.contextes.transverse.api import AccesRequis, Permission, exiger_dossier
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · accueil de l'adhérent"])
 
 
-def _reglages() -> ReglagesDeLEspaceAdherent:
+def reglages_des_pieces_manquantes() -> ReglagesDeLEspaceAdherent:
     return charger_les_reglages_de_l_espace_adherent(configuration().dossier_referentiel)
 
 
@@ -95,7 +95,7 @@ class VueDuMois(BaseModel):
 
 
 def _mois_voisin(mois: str, sens: int) -> str:
-    du, au = _bornes(mois)
+    du, au = bornes_du_mois(mois)
     jour = au + timedelta(days=1) if sens > 0 else du - timedelta(days=1)
     return f"{jour:%Y-%m}"
 
@@ -115,17 +115,17 @@ def lire_mon_mois(
     ),
 ) -> VueDuMois:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    reglages = _reglages()
-    dossier = _dossier(niu)
-    jour = maintenant().date()
+    reglages = reglages_des_pieces_manquantes()
+    dossier = dossier_a_relancer(niu)
+    jour = aujourd_hui()
     observe = f"{(jour.replace(day=1) - timedelta(days=1)):%Y-%m}"
     mois = mois or observe
-    du, au = _bornes(mois)
+    du, au = bornes_du_mois(mois)
 
     reponses = reglages_des_reponses()
     # ⚠️ Toutes les demandes ouvertes, pas celles du seul mois : une rectificative de juin encore
     # ouverte en août manque toujours, et l'adhérent doit la voir sur son accueil.
-    ouvertes = _sans_echouer(lambda: _depot_demandes().ouvertes(niu), [])
+    ouvertes = sans_echouer(lambda: depot_demandes().ouvertes(niu), [])
     attendues = sorted(
         (
             AttendueDeLAdherent(
@@ -160,10 +160,10 @@ def lire_mon_mois(
     # dit ce que l'on compte, et qu'un état futur (« demandé, et répondu ») le rendrait décisif.
     deduites = [
         a
-        for a in _relever_les_attentes(dossier, du, au, _reglages_des_pieces_manquantes())
+        for a in relever_les_attentes(dossier, du, au, _reglages_des_pieces_manquantes())
         if a.demande is None
     ]
-    pieces = _sans_echouer(lambda: _depot_pieces().du_dossier(niu), [])
+    pieces = sans_echouer(lambda: depot_pieces().du_dossier(niu), [])
     du_mois = sum(1 for p in pieces if mois_de_la_piece(p) == mois)
 
     etat = etat_du_mois(
@@ -179,13 +179,13 @@ def lire_mon_mois(
     verrou = next(
         (
             p
-            for p in _sans_echouer(lambda: periodes_verrouillees_du_dossier(niu), [])
+            for p in sans_echouer(lambda: periodes_verrouillees_du_dossier(niu), [])
             if p.du <= du and au <= p.au
         ),
         None,
     )
     if verrou is not None:
-        ecritures = _sans_echouer(lambda: _ecritures(niu).toutes(str(du.year)), [])
+        ecritures = sans_echouer(lambda: depot_ecritures(niu).toutes(str(du.year)), [])
         achats = achats_du_mois(
             [
                 (ligne.compte, ligne.au_debit, ligne.montant)

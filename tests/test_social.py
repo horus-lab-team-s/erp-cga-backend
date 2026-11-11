@@ -277,15 +277,20 @@ class TestIrpp:
         dans la première tranche : un cadre paierait le taux d'un manœuvre.
 
         Vérifié par le calcul complet : 575 000 mensuel → 6 900 000 annuel,
-        −30 % de frais = 4 830 000, −500 000 d'abattement = 4 330 000, barème
-        = 682 500, +10 % de CAC = 750 750, mensualisé = 62 563.
+        −30 % de frais (2 070 000, sous le plafond de 4 800 000), −la pension CNPS
+        salariale annuelle (24 150 × 12 = 289 800, déductible : CGI 2026 art. 34),
+        −500 000 d'abattement = 4 040 200 ; barème = 200 000 + 150 000 + 260 050 =
+        610 050 ; +10 % de CAC = 671 055 ; mensualisé = 55 921.
+
+        ⚠️ Ce cas attendait 62 563 jusqu'au 15 octobre 2026 : il ne déduisait pas la
+        pension, que l'article 34 rend déductible.
         """
         contrat = _contrat(
             "450000", "50000", (AvantageNature(nature=NatureAvantage.LOGEMENT),)
         )
         bulletin = calculer_bulletin(contrat, DOSSIER, JUILLET, parametres, baremes)
         assert bulletin.brut_taxable == Decimal(575000)
-        assert _ligne(bulletin, "IRPP").montant == Decimal(62563)
+        assert _ligne(bulletin, "IRPP").montant == Decimal(55921)
 
     def test_un_revenu_sous_les_abattements_n_est_pas_imposable(self, parametres, baremes):
         """Un impôt négatif serait un crédit que le droit ne prévoit pas."""

@@ -55,13 +55,14 @@ from app.contextes.transverse.domaine.ports import (
 from app.contextes.transverse.domaine.second_facteur import (
     DUREE_RENFORCEMENT,
     CodeInvalide,
-    verifier_code,
+    tranche_du_code,
 )
 from app.contextes.transverse.domaine.sessions import (
     DUREE_SESSION,
     MotifRevocation,
     Session,
     SessionInvalide,
+    reference_de_session,
 )
 
 __all__ = [
@@ -162,6 +163,10 @@ def ouvrir_session(
     try:
         compte.exiger_ouverture(a_l_instant)
     except CompteInactif as empechement:
+        # ⚠️ 19 octobre 2026 (audit de sécurité) : un compte verrouillé répondait en
+        # 3 ms, un compte inconnu en 20 ms (le leurre Argon2). L'écart disait lequel
+        # existe. Le même calcul, quoi qu'il arrive.
+        empreintes.verifier(mot_de_passe, _empreinte_leurre(empreintes))
         journal.ajouter(
             horodatage=a_l_instant,
             acteur=compte.identifiant,
@@ -219,7 +224,7 @@ def ouvrir_session(
         acteur=compte.identifiant,
         action="session.ouverte",
         objet_type="session",
-        objet_id=session.identifiant,
+        objet_id=session.reference,
         apres={"expire_le": session.expire_le},
         adresse_ip=adresse_ip,
     )
@@ -243,7 +248,7 @@ def verifier_session(
     """
     session = sessions.lire(identifiant_session)
     if session is None:
-        raise SessionInvalide(f"session {identifiant_session} inconnue")
+        raise SessionInvalide(f"session {reference_de_session(identifiant_session)} inconnue")
     session.exiger_active(a_l_instant)
 
     compte = comptes.lire(session.compte)
@@ -251,7 +256,8 @@ def verifier_session(
         compte.exiger_ouverture(a_l_instant)
     except CompteInactif as empechement:
         raise SessionInvalide(
-            f"session {identifiant_session} valide mais compte indisponible : {empechement}"
+            f"session {reference_de_session(identifiant_session)} valide mais compte "
+            f"indisponible : {empechement}"
         ) from empechement
 
     return session, compte, habilitations.pour_compte(compte.identifiant)
@@ -281,7 +287,7 @@ def fermer_session(
         acteur=par or session.compte,
         action="session.fermee",
         objet_type="session",
-        objet_id=session.identifiant,
+        objet_id=session.reference,
         apres={"motif": motif},
     )
 
@@ -371,18 +377,97 @@ def enroler_second_facteur(
             "de l'appareil actuel : renforcer d'abord la session. Appareil perdu : "
             "demander au cabinet la réinitialisation du second facteur."
         )
-    enrole = compte.avec_second_facteur(secret)
-    comptes.enregistrer(enrole)
+    # ⚠️ 19 octobre 2026 : la clé ATTEND son premier code. Voir `activer_second_facteur`.
+    # Le facteur actuel, s'il existe, reste valable jusque-là : qui ferme la page avant
+    # d'avoir enregistré la nouvelle clé n'a rien perdu.
+    en_attente = compte.avec_secret_en_attente(secret)
+    comptes.enregistrer(en_attente)
+    journal.ajouter(
+        horodatage=a_l_instant,
+        acteur=compte.identifiant,
+        action="compte.second_facteur_en_attente",
+        objet_type="compte",
+        objet_id=compte.identifiant,
+        apres={"remplacement": compte.second_facteur_actif},
+    )
+    return en_attente
+
+
+def activer_second_facteur(
+    session: Session,
+    compte: Compte,
+    code: str,
+    *,
+    sessions: DepotSessions,
+    comptes: DepotComptes,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+    duree: timedelta = DUREE_RENFORCEMENT,
+) -> tuple[Compte, Session]:
+    """Le premier code juste fait de la clé en attente le second facteur (19 octobre 2026).
+
+    ─────────────────────────────────────────────────────────────────────────────
+    POURQUOI UNE ACTIVATION
+
+    Le compte s'enrôlait à l'affichage de la clé. Constaté en rédigeant le guide : une
+    page perdue avant la saisie de la clé dans l'application, et le compte portait un
+    second facteur que personne ne connaissait. Seul un administrateur pouvait le
+    débloquer. Le code prouve que la clé est bien dans le téléphone ; sans lui, rien
+    ne change pour le compte.
+
+    Le code juste renforce aussi la session : il vient d'en apporter la preuve, et le
+    redemander dans la minute serait un geste pour rien.
+
+    ⚠️ Les codes refusés comptent avec ceux du renforcement : cinq en quinze minutes
+    suspendent les essais, quelle que soit la porte par laquelle on essaie.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    if compte.secret_totp_en_attente is None:
+        raise SecondFacteurAbsent(
+            "Aucune clé n'attend d'être activée. Demandez l'association depuis l'écran."
+        )
+    _refuser_si_trop_de_codes(compte, journal, a_l_instant)
+    tranche = tranche_du_code(compte.secret_totp_en_attente, code, a_l_instant)
+    if tranche is None:
+        journal.ajouter(
+            horodatage=a_l_instant,
+            acteur=compte.identifiant,
+            action="session.renforcement_refuse",
+            objet_type="session",
+            objet_id=session.reference,
+        )
+        raise CodeInvalide(
+            "Code refusé. Vérifiez que la clé a bien été saisie dans l'application, et que "
+            "l'heure du téléphone est à l'heure."
+        )
+    remplacement = compte.second_facteur_actif
+    # ⚠️ 20 octobre 2026 : la tranche du premier code est retenue, comme au renforcement.
+    # Constaté au tournage : la clé activée, le même code renforçait encore une seconde
+    # session dans les quatre-vingt-dix secondes.
+    actif = compte.activer_le_secret_en_attente().model_copy(
+        update={"derniere_tranche_totp": tranche}
+    )
+    comptes.enregistrer(actif)
     journal.ajouter(
         horodatage=a_l_instant,
         acteur=compte.identifiant,
         action="compte.second_facteur_enrole",
         objet_type="compte",
         objet_id=compte.identifiant,
-        avant={"second_facteur_actif": compte.second_facteur_actif},
-        apres={"second_facteur_actif": True, "remplacement": compte.second_facteur_actif},
+        avant={"second_facteur_actif": remplacement},
+        apres={"second_facteur_actif": True, "remplacement": remplacement},
     )
-    return enrole
+    renforcee = session.renforcer(a_l_instant, duree)
+    sessions.enregistrer(renforcee)
+    journal.ajouter(
+        horodatage=a_l_instant,
+        acteur=compte.identifiant,
+        action="session.renforcee",
+        objet_type="session",
+        objet_id=session.reference,
+        apres={"renforcee_jusqu_a": renforcee.renforcee_jusqu_a},
+    )
+    return actif, renforcee
 
 
 def confirmer_enrolement(
@@ -438,12 +523,43 @@ def confirmer_enrolement(
     )
 
 
+#: Les codes de second facteur refusés tolérés avant la suspension, et leur fenêtre.
+CODES_REFUSES_TOLERES = 5
+FENETRE_DES_CODES_REFUSES = timedelta(minutes=15)
+
+
+def _refuser_si_trop_de_codes(compte: Compte, journal: JournalAudit, a_l_instant: datetime) -> None:
+    """Cinq codes refusés en quinze minutes suspendent les essais du compte."""
+    refus_recents = [
+        e
+        for e in journal.lister(
+            acteur=compte.identifiant,
+            objet_type="session",
+            depuis=a_l_instant - FENETRE_DES_CODES_REFUSES,
+        )
+        if e.action == "session.renforcement_refuse"
+    ]
+    if len(refus_recents) >= CODES_REFUSES_TOLERES:
+        journal.ajouter(
+            horodatage=a_l_instant,
+            acteur=compte.identifiant,
+            action="session.renforcement_suspendu",
+            objet_type="compte",
+            objet_id=compte.identifiant,
+        )
+        raise CodeInvalide(
+            "Trop de codes refusés : les essais sont suspendus quinze minutes. Si ce "
+            "n'est pas vous, prévenez l'administrateur du cabinet."
+        )
+
+
 def renforcer_session(
     session: Session,
     compte: Compte,
     code: str,
     *,
     sessions: DepotSessions,
+    comptes: DepotComptes,
     journal: JournalAudit,
     a_l_instant: datetime,
     duree: timedelta = DUREE_RENFORCEMENT,
@@ -460,19 +576,44 @@ def renforcer_session(
             f"le compte {compte.identifiant} n'a pas de second facteur. L'enrôler "
             "depuis son profil avant de tenter une action sensible."
         )
-    if not verifier_code(compte.secret_totp, code, a_l_instant):
+    # 16 octobre 2026 (revue de sécurité) : la limite par adresse ne suffit pas, une
+    # adresse se change. Cinq codes refusés en quinze minutes suspendent les essais du
+    # compte, d'où qu'ils viennent : six chiffres ne résistent pas à un essai continu.
+    _refuser_si_trop_de_codes(compte, journal, a_l_instant)
+    tranche = tranche_du_code(compte.secret_totp, code, a_l_instant)
+    if (
+        tranche is not None
+        and compte.derniere_tranche_totp is not None
+        and tranche <= compte.derniere_tranche_totp
+    ):
+        # ⚠️ Un code déjà servi. Journalisé comme les autres refus : il compte dans
+        # les cinq qui suspendent, car c'est exactement ce que tente un rejeu.
         journal.ajouter(
             horodatage=a_l_instant,
             acteur=compte.identifiant,
             action="session.renforcement_refuse",
             objet_type="session",
-            objet_id=session.identifiant,
+            objet_id=session.reference,
+            apres={"motif": "code déjà employé"},
+        )
+        raise CodeInvalide(
+            "Ce code vient déjà de servir. Attendez le suivant dans l'application "
+            "(il change toutes les trente secondes)."
+        )
+    if tranche is None:
+        journal.ajouter(
+            horodatage=a_l_instant,
+            acteur=compte.identifiant,
+            action="session.renforcement_refuse",
+            objet_type="session",
+            objet_id=session.reference,
         )
         raise CodeInvalide(
             "Code refusé. Vérifier que l'heure du téléphone est à l'heure : un "
             "décalage de plus d'une minute suffit à invalider tous les codes."
         )
 
+    comptes.enregistrer(compte.model_copy(update={"derniere_tranche_totp": tranche}))
     renforcee = session.renforcer(a_l_instant, duree)
     sessions.enregistrer(renforcee)
     journal.ajouter(
@@ -480,7 +621,7 @@ def renforcer_session(
         acteur=compte.identifiant,
         action="session.renforcee",
         objet_type="session",
-        objet_id=session.identifiant,
+        objet_id=session.reference,
         apres={"renforcee_jusqu_a": renforcee.renforcee_jusqu_a},
     )
     return renforcee

@@ -333,7 +333,9 @@ class TestLesRoutes:
         assert depot.status_code in (200, 201), depot.text
         apres = adherent.get(ECHEANCES).json()
         deposee = _carte(apres, "CNPS", "2026-07-01")
-        assert deposee["etat"] == "DEPOSEE" and deposee["preuve"] is None
+        # ⚠️ 20 octobre 2026 : déposée, la quittance que personne n'a jugée garde sa carte,
+        # avec ce que porte l'accusé : c'est contre lui qu'elle se juge (point 7).
+        assert deposee["etat"] == "PREUVE_ENVOYEE" and deposee["preuve"]["piece"] == "PJ-2026-0019"
         assert Decimal(deposee["montant_constate"]) == Decimal(184500)
         tardive = adherent.post(PREUVES, json={**CNPS_JUILLET, "piece": "PJ-2026-0019"})
         assert tardive.status_code == 409 and "rien à prouver" in tardive.json()["detail"]

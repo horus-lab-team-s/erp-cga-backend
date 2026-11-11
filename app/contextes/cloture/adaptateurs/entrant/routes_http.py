@@ -57,6 +57,7 @@ from app.contextes.cloture.application.exercice_clos import (
     RapportDeCloture,
     clore_un_exercice,
 )
+from app.contextes.cloture.application.impot_estime import ImpotEstime, estimer_l_impot
 from app.contextes.cloture.domaine.droit_cga import (
     DroitAuxAvantagesCGA,
     apprecier_le_droit,
@@ -70,9 +71,8 @@ from app.contextes.comptabilite.api import (
     ecritures_en_memoire,
 )
 from app.contextes.portefeuille.api import (
-    DepotEntreprisesSql,
     EntrepriseIntrouvable,
-    entreprises_en_memoire,
+    depot_entreprises,
 )
 from app.contextes.referentiel.api import (
     AucuneVersionApplicable,
@@ -88,24 +88,21 @@ from app.contextes.transverse.api import (
     exiger_dossier,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import a_douala, aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/cloture", tags=["Clôture et DSF"])
 
 
-def _depot_ecritures(entreprise: str):
+def depot_ecritures(entreprise: str):
     session = session_de_travail()
     if session is None:
         return ecritures_en_memoire(entreprise)
     return DepotEcrituresSql(session, courant(), entreprise)
 
 
-def _depot_dossiers():
-    session = session_de_travail()
-    if session is None:
-        return entreprises_en_memoire()
-    return DepotEntreprisesSql(session, courant())
+def depot_dossiers():
+    return depot_entreprises()
 
 
 def parametres() -> ServiceParametres:
@@ -127,6 +124,11 @@ class Liasse(BaseModel):
     denomination: str
     exercice: str
     cloture: date
+    #: 15 octobre 2026 : la nature d'activité qui a fixé le seuil du système (`None` :
+    #: non renseignée, seuil des services).
+    nature_activite: str | None = None
+    #: Le secteur qui impose le réel quel que soit le chiffre (CGI art. 93 quater (2) b).
+    reel_d_office: str | None = None
     systeme: SystemeDsf
     #: Vrai si le classement repose sur un seuil non encore validé.
     systeme_non_valide: bool
@@ -158,6 +160,8 @@ class Liasse(BaseModel):
     #: Le droit est ouvert, et l'abattement ne figure pourtant pas : pourquoi.
     #: `None` si l'abattement figure, ou si le droit est fermé (voir `droit_cga`).
     abattement_cga_ecarte: str | None = None
+    #: 15 octobre 2026 : l'IS estimé, minimum de perception compris (CGI art. 17, 22, 23).
+    impot: ImpotEstime | None = None
 
 
 @routeur.get(
@@ -185,9 +189,18 @@ def lire_liasse(
     rien : il n'est plus lu.
     """
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
+    return assembler_la_liasse(entreprise, exercice)
 
+
+def assembler_la_liasse(entreprise: str, exercice: str) -> Liasse:
+    """La liasse d'un exercice, telle que l'écran la lit et que la DSF la fige.
+
+    Extraite de la route le 14 octobre 2026 : la DSF préparée doit porter exactement
+    la liasse que le réviseur a lue, par le même calcul, et non une copie de celui-ci.
+    Le contrôle d'accès reste à l'appelant.
+    """
     try:
-        dossier = _depot_dossiers().lire(entreprise)
+        dossier = depot_dossiers().lire(entreprise)
     except EntrepriseIntrouvable as absence:
         raise HTTPException(status_code=404, detail=str(absence)) from absence
 
@@ -200,15 +213,14 @@ def lire_liasse(
             f"Connus : {connus}.",
         )
 
-    ecritures = _depot_ecritures(entreprise).toutes(exercice)
+    ecritures = depot_ecritures(entreprise).toutes(exercice)
     soldes = balance(ecritures)
 
     # ⚠️ La projection partagée, et non une somme refaite ici : cette route portait
     # sa propre version du chiffre d'affaires, écrite avant qu'il en existe une.
     ca = chiffre_affaires(soldes)
-    systeme, systeme_non_valide = determiner_le_systeme(
-        ca, parametres(), periode.cloture
-    )
+    # 15 octobre 2026 : le régime à la clôture décide du système (décret 2019/262).
+    systeme, systeme_non_valide = determiner_le_systeme(dossier.regime_au(periode.cloture))
     seuil = _seuil_d_adhesion(periode.cloture)
     droit = apprecier_le_droit(
         dossier,
@@ -216,6 +228,7 @@ def lire_liasse(
         chiffre_affaires=ca,
         seuil_adhesion=seuil.valeur_decimale if seuil else None,
         borne_adhesion=seuil.borne if seuil else None,
+        **_depot_de_la_dsf(dossier, periode),
     )
     etats = assembler_les_etats(soldes, systeme, systeme_non_valide=systeme_non_valide)
 
@@ -226,6 +239,7 @@ def lire_liasse(
         parametres(),
         periode.cloture,
         droit_a_l_abattement_cga=droit.ouvert,
+        au_regime_igs=dossier.regime_au(periode.cloture) == "IGS",
     )
 
     return Liasse(
@@ -233,6 +247,8 @@ def lire_liasse(
         denomination=dossier.denomination,
         exercice=exercice,
         cloture=periode.cloture,
+        nature_activite=dossier.nature_activite,
+        reel_d_office=dossier.reel_d_office,
         systeme=etats.systeme,
         systeme_non_valide=etats.systeme_non_valide,
         lignes=list(etats.lignes),
@@ -254,7 +270,45 @@ def lire_liasse(
         pieces_a_verifier=list(moisson.pieces_a_verifier),
         droit_cga=droit,
         abattement_cga_ecarte=passage.abattement_cga_ecarte,
+        impot=estimer_l_impot(
+            forme_juridique=str(dossier.forme_juridique),
+            regime=dossier.regime_au(periode.cloture),
+            resultat_fiscal=passage.resultat_fiscal,
+            chiffre_affaires=ca,
+            parametres=parametres(),
+            cloture=periode.cloture,
+        ),
     )
+
+
+def _depot_de_la_dsf(dossier, periode) -> dict:
+    """L'échéance de la DSF de l'exercice et la date de son accusé, s'il y en a un
+    (CGI art. 119 (2), voir `droit_cga.py`). Un centre ou un type inconnu : rien n'est
+    rendu, et le droit s'apprécie sans cette condition plutôt que de se fermer à tort."""
+    from app.contextes.obligations.api import DepotTypesObligationMemoire, calculer_echeance
+    from app.contextes.portefeuille.api import StatutIntrouvable
+    from app.contextes.transverse.api import atelier, reference_de_depot
+
+    dsf = next(
+        (t for t in DepotTypesObligationMemoire().charger(periode.cloture) if t.code == "DSF"),
+        None,
+    )
+    try:
+        centre = dossier.rattachement_au(periode.cloture)
+    except StatutIntrouvable:
+        return {}
+    if dsf is None:
+        return {}
+    accuse = atelier().portail.retrouver(
+        reference_de_depot(dossier.niu, "DSF", periode.ouverture, periode.cloture)
+    )
+    return {
+        "echeance_declaration": calculer_echeance(
+            dsf, fin_de_periode=periode.cloture, centre=centre, cloture_exercice=periode.cloture
+        ),
+        "deposee_le": a_douala(accuse.depose_le).date() if accuse else None,
+        "au": aujourd_hui(),
+    }
 
 
 def _seuil_d_adhesion(cloture: date) -> ParametreResolu | None:
@@ -292,6 +346,22 @@ def lire_plan(
     la mécanique de ventilation.
     """
     exiger(acces, Permission.LIRE_COMPTABILITE)
+    if systeme is SystemeDsf.NORMAL:
+        # 15 octobre 2026 : la table officielle du modèle DGI, celle que lit la liasse.
+        # Les comptes de correction (28, 29, 39, 49, 59) suivent l'actif qu'ils corrigent.
+        from app.contextes.cloture.domaine.etats_dgi import ACTIF, COMPTE_DE_RESULTAT, PASSIF
+
+        def ligne(code: str, libelle: str, sens: str, prefixes: tuple[str, ...]) -> LignePlan:
+            return LignePlan(code=code, libelle=libelle, sens=sens, prefixes=list(prefixes))
+
+        return [
+            *(ligne(c, lib, "ACTIF", p) for c, lib, p in ACTIF),
+            *(ligne(c, lib, "PASSIF", p) for c, lib, p in PASSIF),
+            *(
+                ligne(c, lib, "CHARGE" if n == "C" else "PRODUIT", p)
+                for c, lib, p, n in COMPTE_DE_RESULTAT
+            ),
+        ]
     return [
         LignePlan(
             code=p.code, libelle=p.libelle, sens=p.sens.value, prefixes=list(p.prefixes)
@@ -386,8 +456,8 @@ def clore(
             entreprise,
             exercice,
             motif=demande.motif,
-            entreprises=_depot_dossiers(),
-            depot=_depot_ecritures(entreprise),
+            entreprises=depot_dossiers(),
+            depot=depot_ecritures(entreprise),
             journaux=list(JOURNAUX_CABINET),
             plan=list(COMPTES_SYSCOHADA),
             par=acces.compte,

@@ -28,78 +28,62 @@ Elle ne rend pas non plus la référence du dossier : c'est une donnée interne,
 la faire circuler dans une réponse publique ferait de la référence un identifiant
 devinable.
 ─────────────────────────────────────────────────────────────────────────────────
+
+⚠️ 16 octobre 2026 : la proforma (émission, transmission, acceptation, document) est
+sortie dans `routes_proforma.py`, sous les mêmes chemins ; ce fichier dépassait 4 000 lignes.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    ValidationError,
     computed_field,
 )
-from sqlalchemy.exc import IntegrityError
 
+from app.contextes.souscription.adaptateurs.entrant.sources import (
+    boite_du_parcours,
+    depot_dossiers,
+    depot_proformas,
+    depot_qualifications,
+    qualifications_memoire,
+    referentiel_d_acquisition,
+)
 from app.contextes.souscription.adaptateurs.sortant.annuaire_des_candidats import (
     monter_les_candidatures,
-)
-from app.contextes.souscription.adaptateurs.sortant.catalogue_modeles import (
-    CatalogueDeModeles,
-)
-from app.contextes.souscription.adaptateurs.sortant.compositions_proforma import (
-    RepertoireDesCompositions,
 )
 from app.contextes.souscription.adaptateurs.sortant.delais_de_veille import (
     charger_les_delais_de_veille,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
-    DepotQualificationsMemoire,
     DossierIntrouvable,
     ProformaIntrouvable,
     RappelIntrouvable,
 )
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
-    DepotDossiersSql,
-    DepotProformasSql,
-    DepotQualificationsSql,
     DepotRappelsSql,
-)
-from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
-    rendre_le_document,
-)
-from app.contextes.souscription.adaptateurs.sortant.grille_tarifaire import (
-    charger_les_baremes,
-    charger_les_regles_de_tarification,
 )
 from app.contextes.souscription.adaptateurs.sortant.magasins_memoire import (
     dossiers_memoire,
-    proformas_memoire,
     vider_les_dossiers_memoire,
 )
 from app.contextes.souscription.adaptateurs.sortant.motifs_de_classement import (
     MotifDeClassement,
     charger_les_motifs_de_classement,
 )
-from app.contextes.souscription.adaptateurs.sortant.plan_de_contact import (
-    charger_le_plan_de_contact,
-)
 from app.contextes.souscription.adaptateurs.sortant.questionnaires import (
     QuestionnaireIntrouvable,
-    RepertoireDeQuestionnaires,
-)
-from app.contextes.souscription.adaptateurs.sortant.regles_affectation import (
-    charger_la_grille_d_affectation,
 )
 from app.contextes.souscription.api import (
     BaremeIntrouvable,
@@ -114,6 +98,8 @@ from app.contextes.souscription.api import (
     EtatDossier,
     NaturePaiement,
     Paiement,
+    PieceJointe,
+    PieceRefusee,
     Proposition,
     Question,
     ReponseInvalide,
@@ -127,27 +113,24 @@ from app.contextes.souscription.api import (
     deposer_une_demande,
     nouvelle_cle_idempotence,
     ouvrir_une_qualification,
+    preremplir,
     reaffecter_le_dossier,
 )
 from app.contextes.souscription.application.encaissement_du_parcours import (
     EncaissementRefuse,
-    encaisser_l_acceptation,
+    ouvre_un_locataire,
 )
-from app.contextes.souscription.domaine.composition_proforma import (
-    CompositionIntrouvable,
+from app.contextes.souscription.domaine.code_de_dossier import (
+    CodeDeDossier,
+    normaliser_le_code,
+    nouveau_code,
 )
 from app.contextes.souscription.domaine.proforma import (
-    LienDAcceptation,
-    LienInvalide,
+    EtatProforma,
     Proforma,
-    TarifArrete,
-    accepter,
-    emettre,
-    empreinte,
-    lien_pour,
-    numero_suivant,
 )
 from app.contextes.souscription.domaine.rappels import RappelDejaFait
+from app.contextes.souscription.domaine.rendez_vous import ModeRendezVous
 from app.contextes.tenants.api import (
     NOM_SAGA,
     NomsReservesIndisponibles,
@@ -163,20 +146,16 @@ from app.contextes.transverse.api import (
     Permission,
     boite_d_envoi,
     exiger,
-    service_de_notification,
     session_de_travail,
 )
 from app.infrastructure.config import configuration
 from app.infrastructure.depots_orchestration import DepotExecutionsSql
 from app.orchestration.saga import EtatSaga
+from app.partage.en_tetes import disposition_en_piece_jointe
 from app.partage.erreurs import message_lisible
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
-from app.partage.magasin_de_fichiers import (
-    CleInvalide,
-    FichierAbsent,
-    MagasinFichiersLocal,
-)
+from app.partage.magasin_de_fichiers import MagasinFichiersLocal, detecter_le_type
 from app.partage.recherche import (
     ReponseDeRecherche,
     RequeteTropCourte,
@@ -190,6 +169,7 @@ from app.partage.recherche import (
     # demande sans suite), et l'homonyme importée l'avait masquée. Même nom partout.
     classer as classer_les_resultats,
 )
+from app.partage.sceau import SceauInvalide, dechiffrer_la_reference, jeton_opaque
 from app.partage.telephone import NumeroInvalide, normaliser_telephone
 
 routeur = APIRouter(prefix="/acquisition", tags=["Acquisition"])
@@ -200,45 +180,11 @@ _journal_acceptation = logging.getLogger(__name__)
 
 
 
-@lru_cache
-def _referentiel_d_acquisition() -> dict[str, Any]:
-    """Les quatre paquets de configuration, lus une fois par processus.
-
-    Mémoïsés parce qu'ils sont sur disque et ne changent qu'au déploiement ou par
-    un geste d'exploitation. Les relire à chaque requête ferait quatre lectures de
-    fichiers sur le chemin critique d'un formulaire public.
-
-    ⚠️ La contrepartie est qu'un fichier modifié à chaud n'est pas repris. C'est
-    assumé : le référentiel est versionné avec le code, et une reprise à chaud
-    demanderait un rechargement explicite, qui n'existe pas encore.
-    """
-    # ⚠️ LE DOSSIER DU RÉFÉRENTIEL VIENT DE LA CONFIGURATION, JAMAIS DU DÉPÔT.
-    #
-    # Il était écrit en dur, `RACINE_DEPOT / "Docs" / "referentiel"`. Les tests
-    # tournent depuis le dépôt, où ce chemin existe : ils passaient. L'image, elle,
-    # range le référentiel dans `/application/donnees/referentiel` et le dit par
-    # `CGA_DOSSIER_REFERENTIEL`. Le chemin en dur n'y menait à rien, et TOUTE la
-    # surface d'acquisition répondait 500 — la demande de contact publique
-    # comprise, c'est-à-dire la seule porte par laquelle un prospect demande à être
-    # rappelé. Constaté sur la pile déployée.
-    REFERENTIEL = configuration().dossier_referentiel
-    return {
-        "affectation": charger_la_grille_d_affectation(REFERENTIEL / "affectation"),
-        "questionnaires": RepertoireDeQuestionnaires.depuis(
-            REFERENTIEL / "qualification"
-        ),
-        "plan": charger_le_plan_de_contact(REFERENTIEL / "messagerie"),
-        "modeles": CatalogueDeModeles.depuis(REFERENTIEL / "messagerie" / "modeles"),
-        "baremes": charger_les_baremes(REFERENTIEL / "tarification"),
-        "regles_tarifaires": charger_les_regles_de_tarification(
-            REFERENTIEL / "tarification"
-        ),
-    }
 
 
 def recharger_le_referentiel() -> None:
     """Repart d'une lecture neuve. Destiné aux tests et à l'exploitation."""
-    _referentiel_d_acquisition.cache_clear()
+    referentiel_d_acquisition.cache_clear()
 
 
 #: ⚠️ **L'unique magasin, importé et non redéclaré.** En mémoire, ceci *est* la
@@ -255,20 +201,9 @@ def reinitialiser_dossiers() -> None:
     réponses données par le test précédent, sur une référence recyclée.
     """
     vider_les_dossiers_memoire()
-    _qualifications_memoire.cache_clear()
+    qualifications_memoire.cache_clear()
 
 
-def _dossiers():
-    """Le dépôt en vigueur — de la requête en SQL, du processus en mémoire.
-
-    Reconstruit à chaque appel en SQL, parce qu'il porte la session de la requête.
-    Le mémoïser conserverait une session déjà fermée, panne qui n'apparaîtrait
-    qu'à la seconde requête.
-    """
-    session = session_de_travail()
-    if session is None:
-        return _dossiers_memoire()
-    return DepotDossiersSql(session, courant())
 
 
 def _reference(prefixe: str) -> str:
@@ -294,6 +229,23 @@ class DepotDeDemande(BaseModel):
     consentement_whatsapp: bool = False
     version_du_texte: str = "consentement-whatsapp-v1"
     origine: str | None = None
+    #: Les réponses aux questions que le site a posées, par code. Facultatives,
+    #: toutes. Voir `Question.visiteur`.
+    declarations: dict[str, str] = Field(default_factory=dict)
+    #: 9 novembre 2026 : « je préfère un rendez-vous ». Exige une adresse électronique : le
+    #: code de dossier et la confirmation partent par courriel.
+    rendez_vous: RendezVousDemande | None = None
+    #: 9 novembre 2026 : « j'ai déjà payé les frais » — le code reçu par courriel. La demande
+    #: rejoint alors ce dossier, avec tous les frais déjà versés.
+    code_de_dossier: str | None = Field(default=None, max_length=20)
+
+
+class RendezVousDemande(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: ModeRendezVous
+    #: L'heure de début, à Douala, choisie parmi `GET /acquisition/rendez-vous/creneaux`.
+    debut: datetime
 
 
 def _exiger_un_service_du_catalogue(code: str) -> None:
@@ -340,6 +292,51 @@ def _exiger_un_service_du_catalogue(code: str) -> None:
         )
 
 
+def _preremplir_la_qualification(
+    reference: str, demande: DemandeDeContact, instant: datetime
+) -> None:
+    """Ouvre la qualification du dossier avec ce que le visiteur a déclaré.
+
+    ─────────────────────────────────────────────────────────────────────────
+    ⚠️ **RIEN ICI NE PEUT FAIRE ÉCHOUER LE DÉPÔT.**
+
+    La demande est déjà rangée quand cette fonction est appelée. Un service sans
+    questionnaire, une réponse qui ne se convertit pas, une question retirée du
+    référentiel : le visiteur a fait son geste, et le cabinet a sa demande. Ce
+    qui n'a pas pu être versé est **consigné**, parce qu'un préremplissage qui
+    se tairait sur ses échecs ferait croire au responsable que le client n'avait
+    rien dit.
+
+    ⚠️ **LE DOSSIER NE CHANGE PAS D'ÉTAT.** Une qualification remplie par le
+    formulaire n'est pas un échange : le compte à rebours de la réaffectation
+    court toujours, et c'est le premier contact du responsable qui l'arrête.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    if not demande.declarations:
+        return
+    try:
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(
+            demande.service_souhaite
+        )
+    except QuestionnaireIntrouvable:
+        return
+    qualifications = depot_qualifications()
+    avant = qualifications.trouver(reference) or ouvrir_une_qualification(
+        reference, questionnaire
+    )
+    apres, ecartees = preremplir(avant, questionnaire, demande.declarations, instant)
+    if apres is not avant:
+        qualifications.enregistrer(apres)
+    if ecartees:
+        _journal_acceptation.warning(
+            "dossier %s : %d déclaration(s) du visiteur non versée(s) à la "
+            "qualification (%s). Elles restent lisibles sur la demande.",
+            reference,
+            len(ecartees),
+            ", ".join(ecartees),
+        )
+
+
 class AccuseDeDemande(BaseModel):
     """Ce que le visiteur reçoit. Volontairement pauvre — voir l'en-tête."""
 
@@ -347,6 +344,43 @@ class AccuseDeDemande(BaseModel):
     #: Le canal sur lequel on le rappellera réellement, après repli.
     canal_de_rappel: Canal
     message: str
+    #: 19 octobre 2026 (point 22) : de quoi joindre des pièces à la demande, depuis le
+    #: formulaire, juste après l'envoi. ⚠️ OPAQUE : il porte la référence du dossier
+    #: chiffrée, et la référence elle-même ne circule toujours pas.
+    jeton_de_pieces: str | None = None
+    #: 9 novembre 2026 : les frais de traitement du service, s'il en a, et de quoi les
+    #: régler depuis la page d'après l'envoi. Ils seront déduits du total de la proforma.
+    frais_de_traitement: Decimal | None = None
+    jeton_de_frais: str | None = None
+    #: 9 novembre 2026 : la demande a rejoint un dossier existant par son code de dossier.
+    rattachee: bool = False
+    #: Les frais déjà versés sur ce dossier (au rendez-vous, au guichet…) : rien à repayer.
+    frais_deja_verses: Decimal = Decimal(0)
+    #: Le rendez-vous pris, s'il y en a un.
+    rendez_vous: RendezVousPris | None = None
+
+
+class RendezVousPris(BaseModel):
+    mode: ModeRendezVous
+    debut: datetime
+    fin: datetime
+
+
+#: L'usage du sceau qui ouvre l'ajout de pièces à une demande. Voir `partage/sceau`.
+_USAGE_PIECES = "pieces-de-demande"
+#: L'usage du sceau qui ouvre le règlement des frais de traitement d'une demande.
+_USAGE_FRAIS = "frais-de-traitement"
+#: Ce qu'une pièce jointe à une demande peut peser, et ce qu'elle peut être.
+_TAILLE_MAXIMALE_PIECE = 10 * 1024 * 1024
+_TYPES_DE_PIECE = frozenset({"application/pdf", "image/jpeg", "image/png"})
+
+
+def _secret_des_pieces() -> str:
+    return configuration().cle_chiffrement or "secret-de-developpement"
+
+
+def _magasin_des_pieces() -> MagasinFichiersLocal:
+    return MagasinFichiersLocal(Path(configuration().dossier_fichiers), courant())
 
 
 @routeur.post(
@@ -363,12 +397,17 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
     ce qui se produira. Lui promettre un canal qu'on n'exploite pas serait la
     manière la plus simple de le décevoir au premier contact.
     """
-    referentiel = _referentiel_d_acquisition()
+    referentiel = referentiel_d_acquisition()
     instant = maintenant()
+    demande = _construire_la_demande(corps, instant)
+    return _ranger_la_demande(corps, demande, instant, referentiel)[0]
+
+
+def _construire_la_demande(corps, instant, *, origine: str | None = None) -> DemandeDeContact:
     try:
         # ⚠️ Avant tout le reste : un code inconnu ne doit pas créer de dossier.
         _exiger_un_service_du_catalogue(corps.service_souhaite)
-        demande = DemandeDeContact(
+        return DemandeDeContact(
             identifiant=_reference("dc"),
             deposee_le=instant,
             nom=corps.nom,
@@ -382,14 +421,107 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
                 recueilli_le=instant,
                 version_du_texte=corps.version_du_texte,
             ),
-            origine=corps.origine,
+            origine=origine or corps.origine,
+            declarations=corps.declarations,
         )
     except (NumeroInvalide, ValueError) as echec:
         raise HTTPException(status_code=422, detail=message_lisible(echec)) from echec
 
-    deposer_une_demande(
-        demande, _dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
+
+class DemandeSaisieAuCabinet(BaseModel):
+    reference: str
+    accuse: AccuseDeDemande
+
+
+@routeur.post(
+    "/demandes/au-cabinet",
+    status_code=201,
+    summary="Saisir la demande d'un client venu au cabinet (le responsable, à sa place)",
+    responses={403: {"description": "Habilitation insuffisante"}},
+)
+def saisir_une_demande_au_cabinet(
+    acces: AccesRequis, corps: DepotDeDemande
+) -> DemandeSaisieAuCabinet:
+    """9 novembre 2026 : « le responsable de la création doit pouvoir saisir les informations
+    des personnes de façon manuelle ». Le même rangement que le formulaire public — doublon,
+    code de dossier, rendez-vous, frais —, l'origine en plus : `cabinet`, et qui l'a saisie
+    au journal. Il complète ensuite la qualification depuis la fiche du dossier.
+    """
+    exiger(acces, Permission.QUALIFIER_PROSPECT)
+    instant = maintenant()
+    demande = _construire_la_demande(corps, instant, origine="cabinet")
+    accuse, reference = _ranger_la_demande(corps, demande, instant, referentiel_d_acquisition())
+    from app.contextes.transverse.api import atelier
+
+    atelier().journal.ajouter(
+        horodatage=instant,
+        acteur=acces.compte,
+        action="demande.saisie_au_cabinet",
+        objet_type="dossier_commercial",
+        objet_id=reference,
+        apres={"service": demande.service_souhaite},
     )
+    return DemandeSaisieAuCabinet(reference=reference, accuse=accuse)
+
+
+def _ranger_la_demande(corps, demande, instant, referentiel) -> tuple[AccuseDeDemande, str]:
+    """Range la demande, prend le rendez-vous ; rend l'accusé et la référence du dossier."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_rendez_vous import (
+        prendre_un_rendez_vous,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+        situation_des_versements_de,
+    )
+
+    if corps.rendez_vous is not None and not (demande.courriel or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Une adresse électronique est nécessaire pour un rendez-vous : la "
+                "confirmation et votre code de dossier vous y sont envoyés."
+            ),
+        )
+    boutique = comptoir()
+    dossiers = depot_dossiers()
+    rattachee = False
+    if corps.code_de_dossier:
+        # « J'ai déjà payé les frais » : la demande rejoint le dossier du code.
+        trouve = boutique.codes_de_dossier.lire(normaliser_le_code(corps.code_de_dossier))
+        try:
+            existant = dossiers.lire(trouve.dossier) if trouve else None
+            if existant is None:
+                raise DossierIntrouvable("code inconnu")
+            dossier = existant.rattacher(demande)
+        except (DossierIntrouvable, TransitionDossierRefusee) as refus:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Ce code de dossier ne correspond à aucune demande en cours : vérifiez-le "
+                    "dans le courriel du cabinet, ou laissez le champ vide."
+                ),
+            ) from refus
+        dossiers.enregistrer(dossier)
+        rattachee = True
+    else:
+        dossier = deposer_une_demande(
+            demande, dossiers, reference=_reference("dos"), boite=boite_d_envoi()
+        ).dossier
+    _preremplir_la_qualification(dossier.reference, demande, instant)
+
+    rdv = None
+    if corps.rendez_vous is not None:
+        rdv = prendre_un_rendez_vous(
+            dossier.reference, corps.rendez_vous.mode, corps.rendez_vous.debut
+        )
+    if boutique.codes_de_dossier.du_dossier(dossier.reference) is None:
+        boutique.codes_de_dossier.enregistrer(
+            CodeDeDossier(code=nouveau_code(), dossier=dossier.reference, cree_le=instant)
+        )
+    if rattachee:
+        # Pas de nouvel événement de dépôt : on écrit tout de suite la confirmation.
+        _confirmer_le_rattachement(dossier, rdv)
 
     repli = canal_a_employer(
         demande.canal_prefere,
@@ -398,10 +530,323 @@ def deposer_une_demande_de_contact(corps: DepotDeDemande) -> AccuseDeDemande:
         a_un_courriel=demande.courriel is not None,
         messagerie_prete=bool(referentiel["modeles"].envoyables()),
     )
-    return AccuseDeDemande(
+    frais = regle_des_versements().frais_de(dossier.service)
+    deja = situation_des_versements_de(dossier).frais_verses
+    accuse = AccuseDeDemande(
         canal_de_rappel=repli.canal,
-        message="Votre demande est enregistrée. Un responsable vous recontacte.",
+        message=(
+            "Votre demande est jointe à votre dossier. Un responsable vous recontacte."
+            if rattachee
+            else "Votre demande est enregistrée. Un responsable vous recontacte."
+        ),
+        jeton_de_pieces=jeton_opaque(
+            dossier.reference, secret=_secret_des_pieces(), usage=_USAGE_PIECES
+        ),
+        frais_de_traitement=frais,
+        # ⚠️ Des frais déjà versés ne se redemandent pas : pas de jeton pour les payer.
+        jeton_de_frais=(
+            jeton_opaque(dossier.reference, secret=_secret_des_pieces(), usage=_USAGE_FRAIS)
+            if frais is not None and deja == 0
+            else None
+        ),
+        rattachee=rattachee,
+        frais_deja_verses=deja,
+        rendez_vous=(
+            RendezVousPris(mode=rdv.mode, debut=rdv.debut, fin=rdv.fin) if rdv else None
+        ),
     )
+    return accuse, dossier.reference
+
+
+def _confirmer_le_rattachement(dossier, rdv) -> None:
+    """Le courriel d'une demande rattachée par son code. Un échec d'envoi ne la perd pas."""
+    courriel = (dossier.derniere_demande.courriel or dossier.demande.courriel or "").strip()
+    if not courriel:
+        return
+    from app.contextes.transverse.api import service_de_notification
+
+    demande = dossier.demande
+    try:
+        service_de_notification().envoyer(
+            "demande.rattachee",
+            destinataire=courriel,
+            contexte={
+                "prenom": demande.nom,
+                "rendez_vous": phrase_du_rendez_vous(rdv),
+            },
+        )
+    except Exception:  # noqa: BLE001 — la demande est rangée ; le courriel n'est qu'un écho
+        _journal_acceptation.warning("dossier %s : confirmation non envoyée.", dossier.reference)
+
+
+def phrase_du_rendez_vous(rdv) -> str:
+    """« Votre rendez-vous : mardi 10 novembre 2026 à 10 h 00, au cabinet. » Ou vide."""
+    if rdv is None:
+        return ""
+    jours = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+    mois = (
+        "janvier", "février", "mars", "avril", "mai", "juin",
+        "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    )
+    d = rdv.debut
+    ou = (
+        "au cabinet"
+        if rdv.mode is ModeRendezVous.PRESENTIEL
+        else "en ligne (le lien vous sera envoyé)"
+    )
+    return (
+        f"Votre rendez-vous : {jours[d.weekday()]} {d.day} {mois[d.month - 1]} {d.year} "
+        f"à {d.hour} h {d.minute:02d}, {ou}. Un rendez-vous manqué peut être pénalisé."
+    )
+
+
+# ── Les frais de traitement, depuis la page d'après l'envoi (9 novembre 2026) ─────
+
+
+class JetonDeFrais(BaseModel):
+    jeton: str = Field(min_length=16, max_length=256)
+
+
+class FraisDeLaDemande(BaseModel):
+    """Ce que la page du visiteur affiche. Rien d'interne : ni référence, ni nom."""
+
+    montant: Decimal | None
+    verses: bool
+
+
+class FraisAPayer(JetonDeFrais):
+    #: Le numéro à débiter. Vide : celui que le visiteur a donné à sa demande.
+    telephone: str = Field(default="", max_length=30)
+
+
+class PaiementDesFraisDemande(BaseModel):
+    #: L'opérateur a accepté d'envoyer la demande. ⚠️ Ce n'est PAS un paiement.
+    accepte: bool
+    message: str
+    telephone: str
+    simule: bool
+    montant: Decimal
+    #: 9 novembre 2026 : validé d'office (recette ou période d'essai) — aucun débit réel.
+    valide_d_office: bool = False
+
+
+def _dossier_du_jeton_de_frais(jeton: str):
+    try:
+        reference = dechiffrer_la_reference(jeton, secret=_secret_des_pieces(), usage=_USAGE_FRAIS)
+        return depot_dossiers().lire(reference)
+    except (SceauInvalide, DossierIntrouvable) as refus:
+        raise HTTPException(
+            status_code=404,
+            detail="Ce lien ne s'ouvre pas : rechargez le formulaire, ou écrivez au cabinet.",
+        ) from refus
+
+
+@routeur.post(
+    "/demandes/frais-de-traitement/etat",
+    summary="Les frais de traitement d'une demande : montant, et s'ils sont versés (publique)",
+    responses={404: {"description": "Jeton faux ou demande inconnue : le même refus"}},
+)
+def lire_les_frais_de_la_demande(corps: JetonDeFrais) -> FraisDeLaDemande:
+    """⚠️ Le jeton dans le corps, pas dans l'adresse : une adresse finit dans les journaux."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+        situation_des_versements_de,
+    )
+
+    dossier = _dossier_du_jeton_de_frais(corps.jeton)
+    return FraisDeLaDemande(
+        montant=regle_des_versements().frais_de(dossier.service),
+        verses=situation_des_versements_de(dossier).frais_verses > 0,
+    )
+
+
+@routeur.post(
+    "/demandes/frais-de-traitement/paiement-en-ligne",
+    status_code=202,
+    summary="Régler les frais de traitement d'une demande par mobile money (publique)",
+    responses={
+        404: {"description": "Jeton faux ou demande inconnue : le même refus"},
+        409: {"description": "Pas de frais pour ce service, ou déjà versés"},
+        422: {"description": "Numéro inexploitable"},
+    },
+)
+def payer_les_frais_en_ligne(corps: FraisAPayer) -> PaiementDesFraisDemande:
+    """Publique, et fermée par le jeton de l'accusé : sans lui, personne ne fait sonner le
+    téléphone de personne. Le versement est constaté par l'opérateur, jamais par la page."""
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+        situation_des_versements_de,
+    )
+
+    dossier = _dossier_du_jeton_de_frais(corps.jeton)
+    montant = regle_des_versements().frais_de(dossier.service)
+    if montant is None:
+        raise HTTPException(status_code=409, detail="Ce service n'a pas de frais de traitement.")
+    if situation_des_versements_de(dossier).frais_verses > 0:
+        raise HTTPException(status_code=409, detail="Les frais de traitement sont déjà versés.")
+    try:
+        telephone = normaliser_telephone(corps.telephone or dossier.demande.telephone)
+    except NumeroInvalide as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
+
+    boutique = comptoir()
+    paiement = Paiement(
+        identifiant=f"pay-{uuid.uuid4().hex[:16]}",
+        nature=NaturePaiement.FRAIS_DE_TRAITEMENT,
+        reference_reglee=dossier.reference,
+        cle_idempotence=nouvelle_cle_idempotence(),
+        montant=montant,
+        telephone=telephone,
+        initie_le=maintenant(),
+    )
+    # ⚠️ On écrit avant d'appeler : voir `solliciter_le_telephone`.
+    boutique.paiements.enregistrer(paiement)
+    initiation = boutique.fournisseur.initier(
+        montant=paiement.montant,
+        telephone=paiement.telephone,
+        cle_idempotence=paiement.cle_idempotence,
+        libelle=f"Frais de traitement · {dossier.service}",
+    )
+    if initiation.reference_externe:
+        boutique.paiements.enregistrer(paiement.avec_reference(initiation.reference_externe))
+    valide = valider_d_office_en_recette(paiement.identifiant)
+    return PaiementDesFraisDemande(
+        accepte=initiation.accepte,
+        message=initiation.message,
+        telephone=f"…{telephone[-4:]}",
+        simule=bool(boutique.fournisseur.simule),
+        montant=montant,
+        valide_d_office=valide,
+    )
+
+
+def valider_d_office_en_recette(identifiant_paiement: str) -> bool:
+    """En mode recette, le paiement initié se valide seul. Rend vrai s'il l'a fait.
+
+    ─────────────────────────────────────────────────────────────────────────
+    9 NOVEMBRE 2026 : « pour les tests, active les validations de paiement automatiques »
+
+    ⚠️ LA MÊME RÈGLE QUE L'ABONNEMENT EN LIGNE (`routes_http.engager_une_souscription`) : ce
+    raccourci n'existe QUE sous `CGA_MODE_DEMONSTRATION` (recette, refusé en production) ou
+    `CGA_PAIEMENTS_D_ESSAI` (la période d'essai du serveur de la cliente, qui ignore alors les
+    clés Tara), et seulement quand le fournisseur est simulé. Il ne se déduit jamais d'une
+    clé absente.
+
+    ⚠️ RIEN N'EST COURT-CIRCUITÉ : on emprunte le chemin d'une vraie notification de
+    l'opérateur (`traiter_notification`), donc le rapprochement, la vérification du
+    montant, la suite de la nature (frais, tranche) et le trop-perçu. Seul l'appel de
+    l'opérateur est simulé.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    config = configuration()
+    if not config.paiements_valides_d_office:
+        return False
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.application.encaissement import traiter_notification
+
+    boutique = comptoir()
+    if not boutique.fournisseur.simule:
+        return False
+    paiement = boutique.paiements.lire(identifiant_paiement)
+    if paiement.clos:
+        return False
+    traiter_notification(
+        {
+            "productId": paiement.cle_idempotence,
+            # « ESSAI- » en période d'essai : on doit pouvoir les retrouver pour les purger.
+            "paymentId": (
+                f"ESSAI-{paiement.identifiant}"
+                if config.paiements_d_essai
+                else f"DEMONSTRATION-{paiement.identifiant}"
+            ),
+            "status": "SUCCESS",
+            "amount": str(paiement.montant),
+            "phoneNumber": paiement.telephone,
+            "message": (
+                "validé d'office — période d'essai"
+                if config.paiements_d_essai
+                else "validé d'office — mode démonstration"
+            ),
+        },
+        fournisseur=boutique.fournisseur,
+        paiements=boutique.paiements,
+        suites=boutique.suites,
+        journal=boutique.journal,
+        a_l_instant=maintenant(),
+        confirmer=False,  # mode démonstration : aucun prestataire à interroger
+    )
+    return True
+
+
+class PieceAccueillie(BaseModel):
+    nom: str
+    taille: int
+    pieces: int
+
+
+@routeur.post(
+    "/demandes/pieces",
+    status_code=201,
+    summary="Joindre une pièce à sa demande (publique, par le jeton de l'accusé)",
+    responses={
+        404: {"description": "Demande inconnue, ou jeton faux : le même refus"},
+        409: {"description": "La demande n'accepte plus de pièce"},
+        413: {"description": "Pièce trop lourde"},
+        415: {"description": "Ni PDF, ni image"},
+    },
+)
+async def joindre_une_piece(
+    jeton: str = Form(..., max_length=256),
+    fichier: UploadFile = File(...),
+) -> PieceAccueillie:
+    """Publique, comme le dépôt de la demande qu'elle complète (point 22).
+
+    ⚠️ La porte ne s'ouvre qu'avec le jeton rendu dans l'accusé, propre à cette demande
+    et à cet usage : il ne vaut ni pour une autre demande, ni pour le suivi d'une
+    création. Taille bornée à la lecture, type lu dans le contenu et non dans le nom.
+    """
+    # ⚠️ Seule la LECTURE du corps attend sur la boucle ; déchiffrer, hacher, écrire sur
+    # disque et en base part dans un fil, sans quoi un envoi de 10 Mo bloquerait le
+    # serveur entier (voir `tests/test_boucle_non_bloquee.py`).
+    contenu = await fichier.read(_TAILLE_MAXIMALE_PIECE + 1)
+    return await run_in_threadpool(_joindre_une_piece, jeton, contenu, fichier.filename)
+
+
+def _joindre_une_piece(jeton: str, contenu: bytes, nom_du_fichier: str | None) -> PieceAccueillie:
+    try:
+        reference = dechiffrer_la_reference(
+            jeton, secret=_secret_des_pieces(), usage=_USAGE_PIECES
+        )
+        dossier = depot_dossiers().lire(reference)
+    except (SceauInvalide, DossierIntrouvable) as refus:
+        raise HTTPException(
+            status_code=404,
+            detail="Ce lien ne s'ouvre pas : rechargez le formulaire, ou écrivez au cabinet.",
+        ) from refus
+    if len(contenu) > _TAILLE_MAXIMALE_PIECE:
+        raise HTTPException(status_code=413, detail="Une pièce pèse au plus 10 Mo.")
+    type_mime = detecter_le_type(contenu)
+    if type_mime not in _TYPES_DE_PIECE:
+        raise HTTPException(status_code=415, detail="Joignez un PDF ou une image (JPEG, PNG).")
+    empreinte = hashlib.sha256(contenu).hexdigest()
+    nom = "".join(c for c in (nom_du_fichier or "piece") if c.isprintable())[:200].strip()
+    try:
+        complete = dossier.joindre(
+            PieceJointe(
+                empreinte=empreinte,
+                nom=nom or "piece",
+                type_mime=type_mime,
+                taille=len(contenu),
+                recue_le=maintenant(),
+            )
+        )
+    except PieceRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    _magasin_des_pieces().deposer(empreinte, contenu, type_mime=type_mime)
+    if complete is not dossier:
+        depot_dossiers().enregistrer(complete)
+    return PieceAccueillie(nom=nom, taille=len(contenu), pieces=len(complete.pieces_jointes))
 
 
 @routeur.post(
@@ -495,7 +940,7 @@ def demander_le_rappel_d_un_devis(reference: str) -> AccuseDeDemande:
         origine=f"devis {reference}",
     )
     deposer_une_demande(
-        demande, _dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
+        demande, depot_dossiers(), reference=_reference("dos"), boite=boite_d_envoi()
     )
     return AccuseDeDemande(
         canal_de_rappel=demande.canal_prefere,
@@ -595,7 +1040,7 @@ def lister_les_dossiers(
     """
     exiger(acces, Permission.LIRE_PROSPECT)
     noms = _noms_des_collaborateurs()
-    depot = _dossiers()
+    depot = depot_dossiers()
     if etat in ETATS_TERMINAUX:
         dossiers = sorted(
             (d for d in depot.lister() if d.etat is etat),
@@ -686,7 +1131,7 @@ def lister_les_dossiers_en_souffrance(acces: AccesRequis) -> list[DossierEnSouff
     exiger(acces, Permission.LIRE_PROSPECT)
     delais = _referentiel_de_veille()
     instant = maintenant()
-    depot = _dossiers()
+    depot = depot_dossiers()
 
     lignes: list[DossierEnSouffrance] = []
     for etat, delai in delais.items():
@@ -767,7 +1212,7 @@ class FicheDuDossier(DossierCommercial):
 def lire_le_dossier(acces: AccesRequis, reference: str) -> FicheDuDossier:
     exiger(acces, Permission.LIRE_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
     # ⚠️ Les proformas du dossier (pas 68) : sans elles, la fiche d'un dossier accepté
@@ -782,7 +1227,7 @@ def lire_le_dossier(acces: AccesRequis, reference: str) -> FicheDuDossier:
             "emise_le": proforma.emise_le.isoformat(),
             "transmise_le": proforma.transmise_le.isoformat() if proforma.transmise_le else None,
         }
-        for proforma in sorted(_proformas().par_dossier(reference), key=lambda p: p.version)
+        for proforma in sorted(depot_proformas().par_dossier(reference), key=lambda p: p.version)
     ]
     noms = _noms_des_collaborateurs()
     return FicheDuDossier.model_validate(
@@ -791,6 +1236,27 @@ def lire_le_dossier(acces: AccesRequis, reference: str) -> FicheDuDossier:
             "proformas": proformas,
             "responsable_nom": noms.get(dossier.responsable or ""),
         }
+    )
+
+
+@routeur.get(
+    "/dossiers/{reference}/pieces/{empreinte}",
+    summary="Une pièce jointe par le visiteur à sa demande",
+    responses={404: {"description": "Dossier ou pièce inconnus"}},
+)
+def lire_une_piece_jointe(acces: AccesRequis, reference: str, empreinte: str) -> Response:
+    exiger(acces, Permission.LIRE_PROSPECT)
+    try:
+        dossier = depot_dossiers().lire(reference)
+    except DossierIntrouvable as echec:
+        raise HTTPException(status_code=404, detail=str(echec)) from echec
+    piece = next((p for p in dossier.pieces_jointes if p.empreinte == empreinte), None)
+    if piece is None:
+        raise HTTPException(status_code=404, detail="Pièce inconnue pour ce dossier.")
+    return Response(
+        content=_magasin_des_pieces().lire(empreinte),
+        media_type=piece.type_mime,
+        headers={"Content-Disposition": disposition_en_piece_jointe(piece.nom)},
     )
 
 
@@ -881,14 +1347,14 @@ def affecter(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.AFFECTER_DOSSIER)
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
     if corps.candidats is None:
-        candidatures = _candidatures_du_cabinet(
+        candidatures = candidatures_du_cabinet(
             dossier.service, depot
         )
     else:
@@ -927,7 +1393,7 @@ def affecter(
     conduire = reaffecter_le_dossier if passer_la_main else affecter_le_dossier
     try:
         resultat = conduire(
-            dossier, candidatures, _referentiel_d_acquisition()["affectation"], maintenant()
+            dossier, candidatures, referentiel_d_acquisition()["affectation"], maintenant()
         )
     except TransitionDossierRefusee as echec:
         raise HTTPException(status_code=409, detail=str(echec)) from echec
@@ -967,13 +1433,80 @@ def lire_le_questionnaire(acces: AccesRequis, service: str) -> QuestionnairePubl
     """
     exiger(acces, Permission.LIRE_PROSPECT)
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(service)
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(service)
     except QuestionnaireIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
     return QuestionnairePublie(
         service=questionnaire.service,
         version=questionnaire.version,
         questions=list(questionnaire.ordonnees),
+    )
+
+
+class ValeurProposee(BaseModel):
+    valeur: str
+    libelle: str
+
+
+class QuestionAuVisiteur(BaseModel):
+    """Une question telle que le site la pose : rien de ce qui sert au juriste."""
+
+    code: str
+    libelle: str
+    type: str
+    valeurs: list[ValeurProposee] = Field(default_factory=list)
+    unite: str | None = None
+    aide: str = ""
+    #: Vide, ou `LOCALISATION` : voir `Question.saisie`.
+    saisie: str = ""
+
+
+class QuestionnaireDuVisiteur(BaseModel):
+    service: str
+    questions: list[QuestionAuVisiteur]
+
+
+@routeur.get(
+    "/questionnaires/{service}/visiteur",
+    summary="Les questions que le site pose au visiteur pour ce service",
+)
+def lire_les_questions_du_visiteur(service: str) -> QuestionnaireDuVisiteur:
+    """Publique. Ce que le site demande avant même qu'un responsable rappelle.
+
+    ─────────────────────────────────────────────────────────────────────────
+    ⚠️ **PUBLIQUE, DONC PAUVRE.** Elle ne rend ni l'aide destinée au responsable,
+    ni le rang, ni le caractère obligatoire, ni les questions internes. L'aide
+    du juriste dit comment le cabinet raisonne et chiffre ; elle n'a rien à
+    faire dans une réponse que tout le monde peut lire.
+
+    ⚠️ **UN SERVICE SANS QUESTIONNAIRE REND UNE LISTE VIDE, PAS 404.** Le site
+    appelle cette route pour chaque fiche de service ; une erreur ferait
+    afficher un défaut au visiteur là où il n'y a simplement rien à demander.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    try:
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(service)
+    except QuestionnaireIntrouvable:
+        return QuestionnaireDuVisiteur(service=service, questions=[])
+    return QuestionnaireDuVisiteur(
+        service=questionnaire.service,
+        questions=[
+            QuestionAuVisiteur(
+                code=q.code,
+                libelle=q.libelle_visiteur or q.libelle,
+                type=q.type.value,
+                valeurs=[
+                    ValeurProposee(
+                        valeur=v, libelle=q.libelles_valeurs.get(v, v)
+                    )
+                    for v in (q.valeurs or ())
+                ],
+                unite=q.unite,
+                aide=q.aide_visiteur,
+                saisie=q.saisie,
+            )
+            for q in questionnaire.pour_le_visiteur
+        ],
     )
 
 
@@ -1066,18 +1599,18 @@ def qualifier(
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(
             dossier.service
         )
     except QuestionnaireIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    qualifications = _qualifications()
+    qualifications = depot_qualifications()
     # ⚠️ La reprise, et non une ouverture systématique : c'est tout le correctif.
     # Une qualification absente veut dire « pas encore commencée », qui est l'état
     # de tout dossier neuf.
@@ -1141,7 +1674,7 @@ def lister_les_canaux() -> EtatDesCanaux:
     des canaux que le centre exploite réellement. Lui en proposer un autre
     produirait une préférence impossible à honorer et une déception au premier
     rappel."""
-    referentiel = _referentiel_d_acquisition()
+    referentiel = referentiel_d_acquisition()
     plan = referentiel["plan"]
     return EtatDesCanaux(
         actifs=[c.value for c in plan.actifs()],
@@ -1240,22 +1773,22 @@ def chiffrer_la_prestation(
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    proposition, _ = _proposition_du_dossier(dossier, corps.score_charge, corps.debours)
+    proposition, _ = proposition_du_dossier(dossier, corps.score_charge, corps.debours)
     # ⚠️ Le dossier avance **après** la preuve que la qualification est complète, et
     # jamais sur un dossier qui n'en est pas là : la proposition ci-dessus aurait levé.
     #
     # ⚠️ `EN_CONVERSATION` compte aussi, et **seulement parce que la proposition
     # ci-dessus a réussi**. Pour un service dont le gérant a arrêté le prix, il n'y
     # a pas d'étape « qualifiée » : rien n'a été qualifié. Un service sur étude
-    # dans cet état n'arrive jamais ici — `_proposition_du_dossier` aurait déjà
+    # dans cet état n'arrive jamais ici — `proposition_du_dossier` aurait déjà
     # rendu 409 en nommant les réponses manquantes.
     if dossier.etat in (EtatDossier.QUALIFIEE, EtatDossier.EN_CONVERSATION):
         try:
-            _dossiers().enregistrer(dossier.chiffrer(maintenant()))
+            depot_dossiers().enregistrer(dossier.chiffrer(maintenant()))
         except TransitionDossierRefusee as echec:
             raise HTTPException(status_code=409, detail=str(echec)) from echec
     return PropositionChiffree.model_validate(proposition.model_dump())
@@ -1343,7 +1876,7 @@ def _prix_ferme_du_service(service: str, jour: date) -> Proposition | None:
     )
 
 
-def _proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEntrant]):
+def proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEntrant]):
     """La proposition tarifaire, calculée sur ce que **le dossier** sait. (pas 65)
 
     ─────────────────────────────────────────────────────────────────────────────
@@ -1359,8 +1892,8 @@ def _proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEnt
     enregistrée est incomplète : un prix sur des faits absents ne se défend pas.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    referentiel = _referentiel_d_acquisition()
-    jour = maintenant().date()
+    referentiel = referentiel_d_acquisition()
+    jour = aujourd_hui()
 
     # ─────────────────────────────────────────────────────────────────────────
     # ⚠️ UN PRIX ARRÊTÉ PAR LE GÉRANT NE SE QUALIFIE PAS : IL SE FACTURE.
@@ -1428,7 +1961,7 @@ def _proposition_du_dossier(dossier, score_charge: int, debours: list[DeboursEnt
         )
     except QuestionnaireIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
-    qualification = _qualifications().trouver(dossier.reference)
+    qualification = depot_qualifications().trouver(dossier.reference)
     if qualification is None or not qualification.complete(questionnaire):
         manquantes = (
             list(qualification.manquantes(questionnaire))
@@ -1607,7 +2140,7 @@ def retenir_un_autre_service(
     except ValueError as refus:
         raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -1672,7 +2205,7 @@ def declarer_le_premier_contact(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.QUALIFIER_PROSPECT)
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -1748,7 +2281,7 @@ def _consigner_le_premier_contact(reference: str, instant: datetime) -> None:
     silence.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable:
@@ -1766,12 +2299,12 @@ def _rappels():
     Le responsable ne verrait jamais rien, sans qu'aucune erreur ne se produise.
     """
     from app.contextes.souscription.adaptateurs.entrant.abonne_de_relance import (
-        _rappels_memoire,
+        rappels_memoire,
     )
 
     session = session_de_travail()
     if session is None:
-        return _rappels_memoire()
+        return rappels_memoire()
     return DepotRappelsSql(session, courant())
 
 
@@ -1799,18 +2332,18 @@ def lire_la_qualification(acces: AccesRequis, reference: str) -> EtatDeQualifica
     """
     exiger(acces, Permission.LIRE_PROSPECT)
     try:
-        dossier = _dossiers().lire(reference)
+        dossier = depot_dossiers().lire(reference)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    qualification = _qualifications().trouver(reference)
+    qualification = depot_qualifications().trouver(reference)
     # ⚠️ TRAITÉ EN 404, COMME LES TROIS AUTRES APPELS. C'était le dernier qui
     # laissait l'exception s'échapper, et il tombait en **500** : la fiche du
     # dossier ne s'ouvrait plus du tout pour un service sans questionnaire —
     # `FORMATION`, `DOMICILIATION`, ou un dossier déposé sous un ancien code.
     # Le collaborateur voyait une page d'erreur au lieu du dossier de son client.
     try:
-        questionnaire = _referentiel_d_acquisition()["questionnaires"].prendre(
+        questionnaire = referentiel_d_acquisition()["questionnaires"].prendre(
             dossier.service
         )
     except QuestionnaireIntrouvable as echec:
@@ -1842,20 +2375,7 @@ def lire_la_qualification(acces: AccesRequis, reference: str) -> EtatDeQualifica
     )
 
 
-def _qualifications():
-    """Le dépôt des qualifications, durable si la base est là."""
-    session = session_de_travail()
-    if session is None:
-        return _qualifications_memoire()
-    return DepotQualificationsSql(session, courant())
-
-
-@lru_cache
-def _qualifications_memoire() -> DepotQualificationsMemoire:
-    return DepotQualificationsMemoire()
-
-
-def _candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:
+def candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:
     """Les collaborateurs en mesure de prendre ce dossier, et ce qu'ils portent déjà.
 
     ⚠️ **La charge est lue au moment de l'affectation**, jamais mémorisée. Deux
@@ -1871,1064 +2391,8 @@ def _candidatures_du_cabinet(service: str, dossiers) -> list[Candidature]:
         habilitations=boutique.habilitations,
         charge=dossiers.charge_par_responsable(),
         service=service,
-        a_la_date=maintenant().date(),
+        a_la_date=aujourd_hui(),
     )
-
-
-# ── La proforma : émission, transmission, acceptation ────────────────────────
-
-
-class TarifAArreter(BaseModel):
-    """Ce que le responsable arrête, à partir de la proposition du chiffrage.
-
-    ⚠️ **Le montant est arrêté par un humain, jamais recopié du chiffrage.** Le
-    moteur propose un intervalle ; c'est un collaborateur habilité qui décide, et
-    le motif devient obligatoire hors de l'intervalle. Recopier la référence par
-    défaut ferait disparaître la décision derrière un automatisme, et le jour d'un
-    litige personne ne saurait qui a fixé le prix.
-    """
-
-    montant: Decimal = Field(gt=0)
-    #: ⚠️ Les mêmes entrées que le chiffrage : l'intervalle est **recalculé** à
-    #: l'émission, jamais reçu (pas 65). Plancher, référence, plafond et version du
-    #: barème ne se déclarent plus.
-    score_charge: int = Field(default=0, ge=0)
-    debours: list[DeboursEntrant] = Field(default_factory=list)
-    #: Obligatoire hors de l'intervalle. Le domaine le refuse sinon.
-    motif: str | None = None
-    #: ⚠️ Envoyer la proposition au client par courriel, **au moment de l'émission**.
-    #:
-    #: C'est le seul instant où le lien d'acceptation existe en clair (voir la route).
-    #: Le serveur l'écrit directement dans le courriel du client : le lien ne passe
-    #: ni par l'écran du responsable, ni par un copier-coller. Faux par défaut, pour
-    #: que les appels existants gardent leur comportement exact.
-    envoyer_par_courriel: bool = False
-    #: ⚠️ **LA COMPOSITION DU DOCUMENT**, choisie par le responsable au moment où il
-    #: arrête le prix. C'est le « sélectionner les services » du parcours : le même
-    #: montant n'a pas le même détail selon que le suivi sur douze mois est inclus.
-    #:
-    #: Absente, le document PDF n'est pas produit et l'empreinte reste calculée sur
-    #: le résumé textuel, comme pour toutes les proformas émises avant le pas 148.
-    #: Les codes disponibles sont ceux de `Docs/referentiel/tarification/`.
-    composition: str | None = None
-
-    # ⚠️ **`valide_par` n'est plus reçu** (pas 63), et tout champ inconnu est refusé.
-    # Le corps disait qui engageait le cabinet sur ce prix ; le contrôle interne lit
-    # `chiffre_par != valide_par` pour dire si la séparation des tâches est respectée,
-    # et écrire « direction » ici simulait un contrôle que personne n'avait fait.
-    model_config = ConfigDict(extra="forbid")
-
-
-class ProformaEmise(BaseModel):
-    numero: str
-    version: int
-    etat: str
-    montant: Decimal
-    empreinte_document: str
-    #: ⚠️ LE SCEAU SEUL, malgré son nom. Conservé tel quel : deux routes le
-    #: rendent et la vitrine le lit. Voir `lien_client`, qui porte l'adresse.
-    lien_acceptation: str | None = None
-    #: L'adresse complète que la cliente ouvre, prête à coller.
-    #:
-    #: ⚠️ AJOUTÉE LE 28 SEPTEMBRE POUR LA VOIE WHATSAPP. La console devait sinon
-    #: recomposer l'adresse à partir du sceau, de la version et de l'expiration :
-    #: deux recettes pour une même adresse, qui auraient divergé au premier
-    #: paramètre renommé — et la cliente aurait reçu un lien vers une page
-    #: d'erreur. Elle est composée là où le courriel la compose.
-    lien_client: str | None = None
-    #: Le téléphone du prospect, au format international, pour ouvrir WhatsApp.
-    #: ⚠️ Rendu seulement à l'émission, à celui qui détient déjà la fiche.
-    telephone: str | None = None
-    expire_le: datetime | None = None
-    #: L'intervalle recalculé à l'émission (pas 65), pour que la console dise où le
-    #: montant arrêté se situe.
-    plancher: Decimal | None = None
-    reference: Decimal | None = None
-    plafond: Decimal | None = None
-    #: Les faits sur lesquels le prix repose, score de charge déclaré compris (pas 65).
-    faits: dict[str, str] = Field(default_factory=dict)
-    #: Qui a chiffré, et qui a engagé le cabinet (pas 63). Rendus pour que la console
-    #: dise si la séparation des tâches est respectée, au lieu de le laisser croire.
-    chiffre_par: str
-    valide_par: str
-    separation_respectee: bool
-    #: Ce qu'est devenu l'envoi par courriel demandé à l'émission, s'il l'a été :
-    #:   ENVOYE        le courriel est parti, et la proforma est marquée transmise
-    #:   SANS_ADRESSE  la demande de contact ne porte aucun courriel
-    #:   REFUSE        le service de courriel a refusé l'envoi (à retenter autrement)
-    #: ⚠️ Un échec d'envoi n'annule PAS l'émission : la proforma est numérotée et
-    #: figée, le responsable la transmet alors par un autre canal.
-    courriel: str | None = None
-    #: L'adresse, masquée, à laquelle le courriel est parti : de quoi confirmer au
-    #: responsable sans réafficher l'adresse entière.
-    courriel_masque: str | None = None
-    transmise_le: datetime | None = None
-
-
-class Acceptee(BaseModel):
-    numero: str
-    version: int
-    montant: Decimal
-    acceptee_le: datetime
-    identite_declaree: str
-
-
-class ProformaConsultee(BaseModel):
-    """Ce que le client lit avant d'accepter. **Rien de ce qui est interne au cabinet.**
-
-    Ni l'intervalle du barème, ni qui a chiffré, ni les faits de la qualification : le
-    client accepte un prix et ce qui le compose, pas la marge de négociation du cabinet.
-    """
-
-    numero: str
-    version: int
-    service: str
-    etat: str
-    montant: Decimal
-    lignes: list[dict[str, str]]
-    debours: list[dict[str, str]]
-    expire_le: datetime
-    acceptee: bool
-
-
-class DemandeDAcceptation(BaseModel):
-    """Ce que le client envoie en acceptant. **Publique, donc minimale.**"""
-
-    sceau: str = Field(min_length=16)
-    expire_le: datetime
-    version: int = Field(ge=1)
-    #: ⚠️ Déclarée, jamais vérifiée : on n'a pas de pièce d'identité, et prétendre
-    #: le contraire serait une fausse garantie. Elle sert au litige.
-    identite_declaree: str = Field(min_length=2, max_length=120)
-
-
-# ── Le document de la proforma ───────────────────────────────────────────────
-#
-# ⚠️ **L'EMPREINTE PORTE LE PDF, ET NON PLUS UN RÉSUMÉ.** Jusqu'au pas 148, le
-# document n'existait pas : `empreinte_document` hachait la chaîne
-# « numéro|dossier|montant|instant ». Elle prouvait que ces quatre valeurs
-# n'avaient pas bougé, ce qui n'est pas rien, mais elle ne prouvait rien du
-# papier que la cliente lit et sur lequel elle s'engage.
-#
-# Le PDF produit ici est **déterministe** : deux rendus des mêmes données donnent
-# le même octet, et donc la même empreinte. C'est ce qui rend `document_intact`
-# vérifiable, et c'est pourquoi le rendu passe `invariant=1` à reportlab.
-#
-# ⚠️ **LES PROFORMAS DÉJÀ ÉMISES NE BOUGENT PAS.** Leur empreinte reste celle du
-# résumé, et c'est la seule réponse honnête : recalculer donnerait une empreinte
-# qui ne correspond à aucun document jamais envoyé. Sans composition choisie, le
-# comportement d'avant est donc conservé tel quel.
-
-
-def magasin_des_proformas() -> MagasinFichiersLocal:
-    """Le magasin où dort le PDF d'une proforma.
-
-    Le même magasin adressé par contenu que la collecte, promu au partage pour
-    que la Souscription y accède sans qu'une arête « souscription lit collecte »
-    soit ajoutée au graphe pour un besoin de stockage.
-
-    ⚠️ **La clé du fichier EST son empreinte**, donc `empreinte_document`. Ce
-    n'est pas une coïncidence qu'on exploite, c'est la propriété du magasin :
-    retrouver le document d'une proforma ne demande aucune table de
-    correspondance, et un document rangé sous une autre clé que son contenu est
-    impossible à produire.
-
-    ⚠️ **Le locataire est celui de la requête**, et non la constante par défaut
-    que la collecte emploie encore. `app/partage/locataire.py` dit pourquoi : un
-    défaut sert les données d'un cabinet à un autre sans que rien n'échoue. Le
-    chemin étant neuf, il n'a aucune raison de naître avec la dette.
-    """
-    return MagasinFichiersLocal(Path(configuration().dossier_fichiers), courant())
-
-
-@lru_cache
-def _compositions() -> RepertoireDesCompositions:
-    """Le référentiel des compositions, lu une fois par processus.
-
-    ⚠️ **LE CHEMIN VIENT DE LA CONFIGURATION, JAMAIS DU DÉPÔT.** Écrit d'abord
-    en dur sur `RACINE_DEPOT / "Docs" / "referentiel"`, il marchait en local et
-    rendait une liste **vide** en conteneur, sans erreur : l'image range les
-    référentiels sous `/application/donnees/referentiel`. Le responsable n'aurait
-    eu aucun document à proposer, et rien ne lui aurait dit pourquoi.
-
-    Vu en interrogeant la pile réelle, pas la suite de tests : celle-ci tourne
-    depuis le dépôt, où les deux chemins coïncident.
-    """
-    return RepertoireDesCompositions.depuis(
-        configuration().dossier_referentiel / "tarification"
-    )
-
-
-def _document_a_emettre(
-    code_composition: str | None,
-    *,
-    dossier,
-    numero: str,
-    reference: str,
-    tarif: TarifArrete,
-    version_bareme: str,
-    instant: datetime,
-) -> tuple[bytes, str, str]:
-    """Le contenu à hacher, et ce qui identifie le modèle qui l'a produit.
-
-    Rend le triplet `(contenu, modèle, version du modèle)`. Avec une composition,
-    le contenu est le PDF lui-même, rangé au passage ; sans, le résumé d'avant.
-
-    ⚠️ **Le rangement se fait ici, avant l'émission**, et non après
-    l'enregistrement : une proforma enregistrée dont le document manque serait
-    une proforma qu'on ne peut plus montrer, et l'incohérence ne se découvrirait
-    qu'au moment où la cliente clique. Le magasin étant adressé par contenu,
-    ranger un document dont l'émission échoue ensuite ne coûte que trois kilo
-    octets orphelins, ce qui est infiniment préférable.
-    """
-    if not code_composition:
-        return (
-            f"{numero}|{reference}|{tarif.montant}|{instant.isoformat()}".encode(),
-            dossier.service,
-            version_bareme,
-        )
-
-    try:
-        composition = _compositions().prendre(code_composition, instant.date())
-    except CompositionIntrouvable as absente:
-        raise HTTPException(status_code=422, detail=str(absente)) from absente
-
-    pdf = rendre_le_document(
-        composition,
-        numero=numero,
-        version=1,
-        emise_le=instant,
-        client=dossier.demande.nom,
-        # ⚠️ Le total arrêté par le responsable, et non celui de la composition.
-        # Il a le droit de s'en écarter, motif à l'appui ; le document doit alors
-        # porter les deux, sans quoi la cliente signerait un total que le détail
-        # sous ses yeux ne justifie pas.
-        total_arrete=tarif.montant,
-    )
-    magasin_des_proformas().deposer(
-        empreinte(pdf), pdf, type_mime="application/pdf"
-    )
-    return pdf, composition.code, composition.statut
-
-
-class RubriqueOfferte(BaseModel):
-    """Une rubrique telle que l'écran la montre au responsable."""
-
-    numero: str
-    intitule: str
-    lignes: list[dict[str, str]]
-    sous_total: Decimal
-
-
-class CompositionOfferte(BaseModel):
-    """Une composition proposable à l'émission."""
-
-    code: str
-    service: str
-    forme_juridique: str
-    titre: str
-    libelle: str
-    total: Decimal
-    #: ⚠️ `TRANSCRIT` tant que la direction n'a pas confirmé les montants.
-    #: L'écran doit le montrer : un responsable qui envoie une proforma issue
-    #: d'une transcription non validée doit le savoir avant, pas après.
-    statut: str
-    rubriques: list[RubriqueOfferte]
-
-
-@routeur.get(
-    "/compositions-proforma",
-    summary="Les compositions de document proposables à l'émission",
-    responses={403: {"description": "Habilitation insuffisante"}},
-)
-def lister_les_compositions(
-    acces: AccesRequis, service: str | None = Query(default=None)
-) -> list[CompositionOfferte]:
-    """Le catalogue des documents, filtré sur le service quand on le précise.
-
-    ⚠️ Cette route existe pour la même raison que celle des motifs de
-    classement : une liste recopiée dans l'écran diverge au premier document
-    ajouté, et le formulaire proposerait alors des codes que le serveur refuse.
-
-    ⚠️ **LE DÉTAIL EST RENDU, PAS SEULEMENT LE CODE.** Le responsable choisit un
-    document dont il doit voir les rubriques avant de l'envoyer à une cliente.
-    Un menu déroulant de codes nus l'obligerait à ouvrir le référentiel à côté.
-    """
-    exiger(acces, Permission.LIRE_PROSPECT)
-    aujourdhui = maintenant().date()
-    return [
-        CompositionOfferte(
-            code=composition.code,
-            service=composition.service,
-            forme_juridique=composition.forme_juridique,
-            titre=composition.titre,
-            libelle=composition.libelle,
-            total=composition.total,
-            statut=composition.statut,
-            rubriques=[
-                RubriqueOfferte(
-                    numero=rubrique.numero,
-                    intitule=rubrique.intitule,
-                    lignes=[
-                        {"libelle": ligne.libelle, "montant": str(ligne.montant)}
-                        for ligne in rubrique.lignes
-                    ],
-                    sous_total=rubrique.sous_total,
-                )
-                for rubrique in composition.rubriques
-            ],
-        )
-        for composition in _compositions().toutes()
-        # ⚠️ Seulement celles en vigueur aujourd'hui : proposer une composition
-        # périmée ferait émettre un document aux montants de l'an dernier.
-        if composition.couvre(aujourdhui)
-        and (service is None or composition.service == service)
-    ]
-
-
-@routeur.post(
-    "/dossiers/{reference}/proforma",
-    summary="Émettre la proforma d'un dossier chiffré",
-    status_code=201,
-    responses={
-        403: {"description": "Habilitation insuffisante"},
-        404: {"description": "Dossier inconnu"},
-        409: {"description": "Le dossier n'est pas au stade du chiffrage"},
-        422: {"description": "Tarif hors intervalle sans motif"},
-    },
-)
-def emettre_la_proforma(
-    acces: AccesRequis, reference: str, corps: TarifAArreter
-) -> ProformaEmise:
-    """Fige le document, le numérote dans la série, et rend son lien d'acceptation.
-
-    ─────────────────────────────────────────────────────────────────────────────
-    ⚠️ **CE GESTE ÉTAIT LE SEUL DU PARCOURS SANS ROUTE.**
-
-    Le domaine existe depuis le pas 10, éprouvé ; la surface HTTP manquait. La
-    recette de bout en bout devait passer par le cas d'usage, ce qui veut dire
-    qu'aucune console n'aurait pu émettre une proforma.
-
-    LE NUMÉRO EST TIRÉ DE LA SÉRIE, ET LE CONFLIT EST POSSIBLE
-
-    `dernier_numero` peut mentir : entre la lecture et l'écriture, une autre requête
-    a pu émettre. C'est la contrainte d'unicité qui arbitre, et le refus rend `409`
-    plutôt que `500` : le responsable renvoie sa demande, et la seconde tentative
-    prend le numéro suivant.
-
-    Verrouiller la série entière sérialiserait toutes les émissions du cabinet pour
-    une garantie identique.
-
-    ⚠️ **LE LIEN N'EST RENDU QU'ICI.** Il porte un sceau à usage unique ; le
-    remettre à chaque lecture de la proforma multiplierait les chemins par lesquels
-    un engagement contractuel peut fuiter.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    exiger(acces, Permission.QUALIFIER_PROSPECT)
-    depot = _dossiers()
-    try:
-        dossier = depot.lire(reference)
-    except DossierIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-
-    instant = maintenant()
-    config = configuration()
-    proposition, faits_conserves = _proposition_du_dossier(
-        dossier, corps.score_charge, corps.debours
-    )
-    try:
-        tarif = TarifArrete(
-            montant=corps.montant,
-            plancher=proposition.plancher,
-            reference=proposition.reference,
-            plafond=proposition.plafond,
-            version_bareme=proposition.version_bareme,
-            # ⚠️ Le compte qui chiffre est celui de la session, jamais un champ du
-            # corps. Le laisser déclarer permettrait d'attribuer un tarif à un
-            # collègue, et le jour d'un litige la trace désignerait la mauvaise
-            # personne.
-            chiffre_par=acces.compte,
-            # ⚠️ Le même compte, et c'est la vérité : aucun geste distinct de
-            # validation n'existe encore. `separation_respectee` vaut donc `False`, et
-            # le contrôle interne le verra, au lieu de lire une validation déclarée.
-            # Le jour où une validation par un second collaborateur existera, elle
-            # sera sa propre route, sous sa propre session.
-            valide_par=acces.compte,
-            arrete_le=instant,
-            motif=corps.motif,
-        )
-    except ValueError as refus:
-        raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
-
-    proformas = _proformas()
-    numero = numero_suivant(
-        proformas.dernier_numero(config.serie_proforma, instant.year),
-        serie=config.serie_proforma,
-        annee=instant.year,
-    )
-    contenu, modele, version_modele = _document_a_emettre(
-        corps.composition,
-        dossier=dossier,
-        numero=numero,
-        reference=reference,
-        tarif=tarif,
-        version_bareme=proposition.version_bareme,
-        instant=instant,
-    )
-
-    try:
-        proforma = emettre(
-            numero=numero,
-            dossier=reference,
-            service=dossier.service,
-            tarif=tarif,
-            contenu=contenu,
-            modele=modele,
-            version_modele=version_modele,
-            a_l_instant=instant,
-            # ⚠️ Ces trois champs existaient au domaine et n'étaient jamais remplis :
-            # la proforma émise ne gardait ni les lignes du calcul, ni les débours, ni
-            # les faits sur lesquels le prix reposait (pas 65).
-            lignes=proposition.lignes,
-            debours=proposition.debours,
-            faits=faits_conserves,
-        )
-        avance = dossier.emettre_la_proforma(instant)
-    except TransitionDossierRefusee as echec:
-        raise HTTPException(status_code=409, detail=str(echec)) from echec
-    except ValueError as refus:
-        raise HTTPException(status_code=422, detail=message_lisible(refus)) from refus
-
-    lien = _lien_de(proforma)
-    try:
-        proformas.enregistrer(proforma)
-        depot.enregistrer(avance)
-    except IntegrityError as conflit:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"le numéro {numero} vient d'être pris par une autre émission. "
-                "Renvoyer la demande : la suivante prendra le numéro d'après."
-            ),
-        ) from conflit
-
-    courriel, courriel_masque = None, None
-    if corps.envoyer_par_courriel:
-        courriel, courriel_masque = _envoyer_la_proforma_par_courriel(
-            proforma, dossier.demande, lien
-        )
-        if courriel == "ENVOYE":
-            # ⚠️ Le courriel est parti : c'est une transmission, et c'est elle qui
-            # arme la relance. Sans cette ligne, le client aurait sa proposition et
-            # personne ne le relancerait jamais.
-            proforma = proforma.transmise(instant)
-            proformas.enregistrer(proforma)
-
-    return ProformaEmise(
-        numero=proforma.numero,
-        version=proforma.version,
-        etat=proforma.etat.value,
-        montant=proforma.tarif.montant,
-        empreinte_document=proforma.empreinte_document,
-        courriel=courriel,
-        courriel_masque=courriel_masque,
-        transmise_le=proforma.transmise_le,
-        lien_acceptation=lien.sceau,
-        lien_client=adresse_de_la_proforma(
-            lien.numero, lien.version, lien.expire_le, lien.sceau
-        ),
-        telephone=dossier.demande.telephone,
-        expire_le=lien.expire_le,
-        plancher=proforma.tarif.plancher,
-        reference=proforma.tarif.reference,
-        plafond=proforma.tarif.plafond,
-        faits=proforma.faits,
-        chiffre_par=proforma.tarif.chiffre_par,
-        valide_par=proforma.tarif.valide_par,
-        separation_respectee=proforma.tarif.separation_respectee,
-    )
-
-
-def adresse_de_la_proforma(numero: str, version: int, expire_le: datetime, sceau: str) -> str:
-    """L'adresse complète que le client ouvre, sur la vitrine.
-
-    ⚠️ Les mêmes paramètres courts que la page de la vitrine lit (`v`, `e`, `s`) :
-    changer l'un sans l'autre donnerait au client un lien qui ouvre une page d'erreur.
-    La date est encodée, parce que le `+` d'un fuseau horaire deviendrait une espace.
-    """
-    base = configuration().adresse_publique_vitrine.rstrip("/")
-    requete = urlencode({"v": version, "e": expire_le.isoformat(), "s": sceau})
-    return f"{base}/fr/proforma/{quote(numero)}?{requete}"
-
-
-def _envoyer_la_proforma_par_courriel(
-    proforma: Proforma, demande: DemandeDeContact, lien: LienDAcceptation
-) -> tuple[str, str | None]:
-    """Écrit au client, et dit ce qui s'est passé. **Ne lève jamais.**
-
-    Le service de notification rend un booléen et ne lève pas (voir son en-tête) :
-    l'émission, elle, est déjà écrite en base. Faire échouer la requête ici ferait
-    croire au responsable que la proforma n'existe pas, alors qu'elle a pris son
-    numéro dans la série.
-    """
-    if not demande.courriel:
-        return "SANS_ADRESSE", None
-    parti = service_de_notification().envoyer(
-        "proforma.envoi",
-        destinataire=demande.courriel,
-        contexte={
-            "nom": demande.nom,
-            "proforma": proforma.numero,
-            # « 1 250 000 » : l'espace fine insécable des montants français.
-            "montant": f"{proforma.tarif.montant:,.0f}".replace(",", "\u202f"),
-            "lien": adresse_de_la_proforma(
-                lien.numero, lien.version, lien.expire_le, lien.sceau
-            ),
-            "expire_le": lien.expire_le.strftime("%d/%m/%Y"),
-        },
-    )
-    nom, _, domaine = demande.courriel.partition("@")
-    masque = f"{nom[:1]}***@{domaine}"
-    return ("ENVOYE" if parti else "REFUSE"), masque
-
-
-class LienDeLaProforma(BaseModel):
-    """De quoi renvoyer une proposition au client, sans rien changer au dossier."""
-
-    numero: str
-    #: ⚠️ Un entier, comme sur `ProformaEmise` : une proforma corrigée change de
-    #: version, et l'adresse porte laquelle. Deux types pour un même champ
-    #: feraient diverger les deux écrans qui le lisent.
-    version: int
-    etat: str
-    montant: Decimal
-    #: L'adresse complète que le client ouvrira. Composée par le serveur, comme
-    #: le courriel la compose. Voir `adresse_de_la_proforma`.
-    lien_client: str
-    expire_le: datetime
-    #: Pour composer le message WhatsApp du cabinet. Jamais masqué ici : cette
-    #: route exige `QUALIFIER_PROSPECT`, donc son appelant traite déjà ce dossier.
-    telephone: str
-    nom: str
-    #: `False` quand le client n'a pas autorisé la messagerie à sa demande.
-    whatsapp_autorise: bool
-
-
-@routeur.get(
-    "/proformas/{numero}/lien",
-    summary="Retrouver le lien d'une proforma, pour le renvoyer au client",
-    responses={
-        403: {"description": "Habilitation insuffisante"},
-        404: {"description": "Proforma inconnue"},
-    },
-)
-def lien_de_la_proforma(acces: AccesRequis, numero: str) -> LienDeLaProforma:
-    """Le lien du client, relu. **Aucun effet de bord, et c'est tout l'objet.**
-
-    ─────────────────────────────────────────────────────────────────────────────
-    POURQUOI CETTE ROUTE EXISTE
-
-    Le lien d'acceptation n'était rendu qu'à **l'émission**. La console le gardait
-    dans l'état d'un composant, et le perdait au premier rechargement de page :
-    le bouton « Envoyer sur WhatsApp » disparaissait alors pour toujours.
-
-    Constaté le 29 septembre, sur sept dossiers réels en `PROFORMA_EMISE` : aucun
-    n'affichait le bouton. Le responsable qui revenait le lendemain sur un dossier
-    n'avait plus aucun moyen de renvoyer la proposition autrement que par
-    courriel.
-
-    ⚠️ **POURQUOI PAS SUR LA FICHE DU DOSSIER.** Elle n'exige que `LIRE_PROSPECT`,
-    et son en-tête le dit : « jamais le lien d'acceptation ». Ce lien est un
-    porteur — qui l'a, peut accepter. L'élargir à tous les lecteurs de prospects
-    serait une extension silencieuse de ce que le sceau protège.
-
-    ⚠️ **POURQUOI PAS `POST /transmission`.** Elle rend déjà le lien, et la console
-    aurait pu s'en servir. Mais elle **date l'envoi**, et c'est cette date qui arme
-    la relance : la rappeler pour relire un lien remettrait le compteur à zéro à
-    chaque consultation, et le client ne serait jamais relancé. Pire, elle
-    obligerait à déclarer « j'ai envoyé le lien » **avant** de l'avoir.
-
-    Une lecture est une lecture. Elle ne note rien.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    exiger(acces, Permission.QUALIFIER_PROSPECT)
-    try:
-        proforma = _proformas().lire(numero)
-    except ProformaIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-
-    demande = _dossiers().lire(proforma.dossier).demande
-    lien = _lien_de(proforma)
-    return LienDeLaProforma(
-        numero=proforma.numero,
-        version=proforma.version,
-        etat=proforma.etat.value,
-        montant=proforma.tarif.montant,
-        lien_client=adresse_de_la_proforma(
-            lien.numero, lien.version, lien.expire_le, lien.sceau
-        ),
-        expire_le=lien.expire_le,
-        telephone=demande.telephone,
-        nom=demande.nom,
-        whatsapp_autorise=demande.consentement.vaut_maintenant,
-    )
-
-
-@routeur.post(
-    "/proformas/{numero}/transmission",
-    summary="Marquer la proforma transmise au client",
-    responses={
-        403: {"description": "Habilitation insuffisante"},
-        404: {"description": "Proforma inconnue"},
-        409: {"description": "État incompatible"},
-    },
-)
-def transmettre(acces: AccesRequis, numero: str) -> ProformaEmise:
-    """Note que le document est parti. **C'est cette date qui arme la relance.**
-
-    ⚠️ Sans elle, le balayage ne voit rien : `a_relancer` cherche les transmises
-    dont la date est renseignée. Une proforma émise et jamais marquée transmise
-    n'est relancée par personne, et le dossier dort.
-    """
-    exiger(acces, Permission.QUALIFIER_PROSPECT)
-    proformas = _proformas()
-    try:
-        proforma = proformas.lire(numero)
-    except ProformaIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-    try:
-        transmise = proforma.transmise(maintenant())
-    except ValueError as refus:
-        raise HTTPException(status_code=409, detail=message_lisible(refus)) from refus
-
-    proformas.enregistrer(transmise)
-    # ⚠️ LE LIEN EST RENDU ICI AUSSI, et c'est une correction du 27 septembre.
-    #
-    # Il n'était rendu qu'à l'émission. Un client qui perd son courriel n'avait
-    # plus de chemin vers sa proforma, et le cabinet n'avait d'autre recours que
-    # d'émettre une v2 d'un document que personne n'avait contesté — ce qui
-    # change le numéro, invalide l'ancien lien, et brouille le suivi.
-    #
-    # Le rendre ici est sans risque : cette route demande déjà
-    # `QUALIFIER_PROSPECT`, et le lien ne dit rien que son porteur ne doive voir.
-    lien = _lien_de(transmise)
-    return ProformaEmise(
-        numero=transmise.numero,
-        version=transmise.version,
-        etat=transmise.etat.value,
-        montant=transmise.tarif.montant,
-        empreinte_document=transmise.empreinte_document,
-        lien_acceptation=lien.sceau,
-        lien_client=adresse_de_la_proforma(
-            lien.numero, lien.version, lien.expire_le, lien.sceau
-        ),
-        expire_le=lien.expire_le,
-        transmise_le=transmise.transmise_le,
-        chiffre_par=transmise.tarif.chiffre_par,
-        valide_par=transmise.tarif.valide_par,
-        separation_respectee=transmise.tarif.separation_respectee,
-    )
-
-
-def _lien_de(proforma: Proforma) -> LienDAcceptation:
-    """Le lien d'acceptation d'une proforma, **recalculé** et non relu.
-
-    ─────────────────────────────────────────────────────────────────────────────
-    ⚠️ LE LIEN N'EST PAS PERSISTÉ, ET C'EST UN CHOIX QUI SE TIENT.
-
-    Il ne contient rien que la proforma ne porte déjà : son numéro, sa version,
-    et une date d'expiration qui vaut `emise_le + N jours`. Le sceau en est la
-    signature. Le ranger en base ajouterait une donnée dérivée à tenir
-    cohérente, pour rien.
-
-    ⚠️ MAIS IL ÉTAIT RENDU UNE SEULE FOIS, ET C'ÉTAIT LE DÉFAUT.
-
-    Constaté le 27 septembre en jouant le parcours d'une création souscrite :
-    l'émission rendait le sceau, la transmission ne le rendait pas, et rien ne
-    permettait de le retrouver. Un collaborateur dont le client a perdu son
-    courriel ne pouvait pas lui renvoyer son lien — il fallait émettre une
-    nouvelle version d'un document que personne n'avait contesté.
-
-    Le calcul vit donc ici, en un seul endroit, et les deux routes s'en servent.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    return lien_pour(
-        proforma,
-        expire_le=proforma.emise_le
-        + timedelta(days=configuration().validite_lien_acceptation_jours),
-        secret=_secret_des_liens(),
-    )
-
-
-def _lien_presente(numero: str, version: int, expire_le: datetime, sceau: str) -> LienDAcceptation:
-    """Le lien tel que le client le présente, ou un refus **identique à un sceau faux**.
-
-    ⚠️ Un sceau malformé levait une erreur de validation non rattrapée, donc une erreur
-    500 : une réponse distincte de celle d'un sceau faux, et une page d'erreur pour un
-    visiteur. Il reçoit désormais le même refus qu'un sceau bien formé mais faux.
-    """
-    try:
-        return LienDAcceptation(numero=numero, version=version, expire_le=expire_le, sceau=sceau)
-    except ValidationError as refus:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"lien de {numero} : sceau invalide. Le lien a été modifié, ou il vient "
-                "d'un autre environnement."
-            ),
-        ) from refus
-
-
-@routeur.get(
-    "/proformas/{numero}/consultation",
-    summary="Le client lit sa proforma par son lien signé",
-    responses={
-        404: {"description": "Proforma inconnue"},
-        422: {"description": "Lien invalide, expiré, ou d'une autre version"},
-    },
-)
-def consulter_la_proforma(
-    numero: str,
-    version: int = Query(ge=1),
-    expire_le: datetime = Query(),
-    sceau: str = Query(min_length=16),
-) -> ProformaConsultee:
-    """⚠️ **Publique, comme l'acceptation, et pour la même raison.** (pas 67)
-
-    ─────────────────────────────────────────────────────────────────────────────
-    POURQUOI CETTE ROUTE EXISTE
-
-    L'acceptation était publique et scellée, mais **aucune route ne montrait au client
-    ce qu'il acceptait**. Un engagement signé sur un prix qu'on n'a pas vu ne se défend
-    pas, ni devant le client, ni devant un juge.
-
-    ⚠️ LE SCEAU D'ABORD, ICI AUSSI
-
-    Le même contrôle que l'acceptation, dans le même ordre : sans lien valable, un
-    numéro existant et un numéro inventé reçoivent la même réponse. Lire ne consomme
-    rien : le client peut rouvrir sa proforma autant de fois qu'il veut avant de
-    l'accepter.
-
-    ⚠️ UNE PROFORMA REMPLACÉE SE LIT, ET LE DIT
-
-    Une nouvelle version prend un **nouveau numéro** et marque l'ancien document
-    `REMPLACEE`. Le lien de l'ancienne lit donc l'ancienne, dont l'état le dit : l'écran
-    du client ne propose pas de l'accepter, et le domaine le refuserait. Un contrôle de
-    version écrit ici au premier jet ne pouvait jamais se déclencher, et une mutation
-    l'a montré en survivant ; il a été retiré plutôt que gardé pour la forme.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    lien = _lien_presente(numero, version, expire_le, sceau)
-    try:
-        lien.exiger_valide(maintenant(), secret=_secret_des_liens())
-    except LienInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
-    try:
-        proforma = _proformas().lire(numero)
-    except ProformaIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-    return ProformaConsultee(
-        numero=proforma.numero,
-        version=proforma.version,
-        service=proforma.service,
-        etat=proforma.etat.value,
-        montant=proforma.tarif.montant,
-        lignes=[
-            {"libelle": ligne.libelle, "montant": str(ligne.montant)} for ligne in proforma.lignes
-        ],
-        debours=[
-            {"libelle": d.libelle, "montant": str(d.montant)} for d in proforma.debours
-        ],
-        expire_le=expire_le,
-        acceptee=proforma.etat.value == "ACCEPTEE",
-    )
-
-
-def _le_document(proforma: Proforma) -> Response:
-    """Sert le PDF d'une proforma, après avoir vérifié qu'il est intact.
-
-    ─────────────────────────────────────────────────────────────────────────────
-    ⚠️ **L'INTÉGRITÉ EST VÉRIFIÉE À CHAQUE LECTURE**, comme le domaine l'exige
-    (`Proforma.document_intact`). Ce n'est pas une précaution de principe : le
-    document est ce sur quoi la cliente s'engage, et servir un fichier altéré
-    sans le dire vaudrait mieux ne rien servir du tout.
-
-    Une altération rend `409` et non `500` : le serveur fonctionne, c'est le
-    document qui ne correspond plus. Un `500` enverrait chercher une panne
-    d'infrastructure là où il y a un fichier à remplacer.
-
-    ⚠️ **UNE PROFORMA D'AVANT LE PAS 148 N'A PAS DE DOCUMENT.** Son empreinte
-    porte un résumé textuel, jamais rangé au magasin. Elle rend donc `404`, et
-    c'est la vérité : il n'y a pas de PDF à montrer. Le détail chiffré reste
-    lisible par `GET /proformas/{numero}/consultation`.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    magasin = magasin_des_proformas()
-    try:
-        contenu = magasin.lire(proforma.empreinte_document)
-    except (CleInvalide, FichierAbsent) as absent:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"aucun document pour {proforma.numero}. Les proformas émises avant "
-                "la mise en service du document PDF n'en ont pas ; leur détail se lit "
-                "par la consultation."
-            ),
-        ) from absent
-
-    if not proforma.document_intact(contenu):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"le document de {proforma.numero} ne correspond plus à son empreinte. "
-                "Il a été altéré depuis l'émission et ne peut pas être servi."
-            ),
-        )
-
-    return Response(
-        content=contenu,
-        media_type="application/pdf",
-        headers={
-            # `inline` et non `attachment` : la cliente doit **lire** sa proposition
-            # avant d'accepter, et un téléchargement forcé mettrait un fichier entre
-            # elle et sa décision. Le risque d'exécution qui justifie `attachment`
-            # sur un justificatif déposé n'existe pas ici : ce PDF, c'est nous qui
-            # l'avons produit.
-            "Content-Disposition": (
-                f'inline; filename="proforma-{proforma.numero}.pdf"'
-            ),
-            "X-Content-Type-Options": "nosniff",
-            # Un engagement contractuel nominatif n'a rien à faire dans un cache
-            # partagé.
-            "Cache-Control": "private, no-store",
-        },
-    )
-
-
-@routeur.get(
-    "/proformas/{numero}/document",
-    summary="Le client lit le PDF de sa proforma par son lien signé",
-    response_class=Response,
-    responses={
-        200: {"content": {"application/pdf": {}}, "description": "Le document"},
-        404: {"description": "Proforma inconnue, ou sans document"},
-        409: {"description": "Le document ne correspond plus à son empreinte"},
-        422: {"description": "Lien invalide, expiré, ou d'une autre version"},
-    },
-)
-def lire_le_document_de_la_proforma(
-    numero: str,
-    version: int = Query(ge=1),
-    expire_le: datetime = Query(),
-    sceau: str = Query(min_length=16),
-) -> Response:
-    """⚠️ **Publique et scellée**, exactement comme la consultation.
-
-    Le même contrôle, dans le même ordre, et pour la même raison : sans lien
-    valable, un numéro existant et un numéro inventé reçoivent la même réponse.
-    Lire ne consomme rien ; la cliente rouvre sa proforma autant qu'elle veut.
-    """
-    lien = _lien_presente(numero, version, expire_le, sceau)
-    try:
-        lien.exiger_valide(maintenant(), secret=_secret_des_liens())
-    except LienInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
-    try:
-        return _le_document(_proformas().lire(numero))
-    except ProformaIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-
-
-@routeur.get(
-    "/proformas/{numero}/document-interne",
-    summary="Le cabinet relit le PDF d'une proforma qu'il a émise",
-    response_class=Response,
-    responses={
-        200: {"content": {"application/pdf": {}}, "description": "Le document"},
-        403: {"description": "Habilitation insuffisante"},
-        404: {"description": "Proforma inconnue, ou sans document"},
-        409: {"description": "Le document ne correspond plus à son empreinte"},
-    },
-)
-def relire_le_document_de_la_proforma(acces: AccesRequis, numero: str) -> Response:
-    """Le même document, sous session, sans sceau.
-
-    ⚠️ **Une route distincte, et non la précédente sans sceau.** Le lien du
-    client expire, et c'est voulu ; le cabinet, lui, doit pouvoir ressortir la
-    proforma de l'an dernier le jour d'un litige. Assouplir l'expiration de la
-    route publique pour couvrir ce besoin aurait allongé la vie du lien qui
-    circule par courriel, ce qui est exactement l'inverse de ce qu'on veut.
-    """
-    exiger(acces, Permission.QUALIFIER_PROSPECT)
-    try:
-        return _le_document(_proformas().lire(numero))
-    except ProformaIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-
-
-@routeur.post(
-    "/proformas/{numero}/acceptation",
-    summary="Le client accepte sa proforma par son lien signé",
-    responses={
-        404: {"description": "Proforma inconnue"},
-        409: {"description": "Cette proforma ne peut plus être acceptée"},
-        422: {"description": "Lien invalide, expiré, ou d'une autre version"},
-    },
-)
-def accepter_la_proforma(
-    numero: str, corps: DemandeDAcceptation, requete: Request
-) -> Acceptee:
-    """⚠️ **Publique, et elle doit l'être.**
-
-    ─────────────────────────────────────────────────────────────────────────────
-    Un client n'a pas de compte sur la plateforme, et lui en imposer un pour
-    accepter un devis ferait perdre la moitié des acceptations. Le lien signé
-    **est** l'authentification : scellé sur le numéro, la version et l'échéance,
-    à usage unique.
-
-    ⚠️ Le sceau est vérifié **avant** la proforma. Une vérification qui lirait
-    d'abord le document permettrait de sonder l'existence d'un numéro sans posséder
-    de lien, ce qui est précisément ce qu'on refuse ailleurs par des `404`.
-
-    L'ORIGINE EST CONSERVÉE, ET ELLE NE SERT PAS AU CONTRÔLE D'ACCÈS
-
-    Elle est notée pour le litige : « d'où est venue l'acceptation ». S'en servir
-    pour autoriser reviendrait à faire d'une adresse réseau une identité, ce qu'elle
-    n'est pas.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    lien = _lien_presente(numero, corps.version, corps.expire_le, corps.sceau)
-    # ⚠️ **Le sceau d'abord, réellement** (pas 67). Ce docstring l'affirmait, et le code
-    # lisait la proforma avant : un numéro inexistant répondait 404, un numéro existant
-    # au sceau faux répondait 422. Les numéros étant séquentiels, n'importe qui
-    # énumérait les proformas du cabinet sans posséder un seul lien. Le sceau porte sur
-    # le numéro, la version et l'échéance : il se vérifie sans rien lire.
-    try:
-        lien.exiger_valide(maintenant(), secret=_secret_des_liens())
-    except LienInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
-
-    proformas = _proformas()
-    try:
-        proforma = proformas.lire(numero)
-    except ProformaIntrouvable as echec:
-        raise HTTPException(status_code=404, detail=str(echec)) from echec
-
-    try:
-        # ⚠️ Trois valeurs, et le lien en fait partie : il est rendu **employé**,
-        # à usage unique. Le conserver permettrait de le rejouer, et une acceptation
-        # rejouée est une seconde signature sur le même engagement.
-        acceptee, _lien_employe, acceptation = accepter(
-            proforma,
-            lien,
-            identite_declaree=corps.identite_declaree,
-            a_l_instant=maintenant(),
-            secret=_secret_des_liens(),
-            origine=requete.client.host if requete.client else "",
-        )
-    except LienInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
-    except ValueError as refus:
-        raise HTTPException(status_code=409, detail=message_lisible(refus)) from refus
-
-    proformas.enregistrer(acceptee)
-    # ⚠️ **Le dossier suit.** L'acceptation d'un client est le geste qui prouve
-    # l'engagement : le laisser à `PROFORMA_ÉMISE` rendrait l'encaissement
-    # impossible, et le dossier resterait éternellement en attente d'une réponse
-    # qui est déjà arrivée.
-    #
-    # Une transition impossible est ignorée plutôt que levée : le client a bien
-    # accepté, et lui rendre une erreur pour une raison d'état interne ferait
-    # perdre une signature contractuelle.
-    dossiers = _dossiers()
-    try:
-        dossier = dossiers.lire(acceptee.dossier)
-        if dossier.etat is EtatDossier.PROFORMA_EMISE:
-            dossiers.enregistrer(dossier.accepter(maintenant()))
-    except (DossierIntrouvable, TransitionDossierRefusee):
-        pass
-
-    _accuser_l_acceptation(acceptee, acceptation)
-    return Acceptee(
-        numero=acceptation.proforma,
-        version=acceptation.version,
-        montant=acceptation.montant,
-        acceptee_le=acceptation.acceptee_le,
-        identite_declaree=acceptation.identite_declaree,
-    )
-
-
-def _accuser_l_acceptation(proforma, acceptation) -> None:
-    """La trace écrite de ce que la cliente vient d'engager.
-
-    ─────────────────────────────────────────────────────────────────────────────
-    ⚠️ ELLE ENGAGEAIT SON ENTREPRISE ET NE RECEVAIT RIEN.
-
-    La page le dit en toutes lettres — « mon accord engage l'entreprise que je
-    représente » — et le domaine le confirme : une proforma acceptée vaut
-    contrat. Vérifié sur la pile le 29 septembre, en acceptant réellement : la
-    boîte de la cliente est **inchangée** après le clic. Ni le montant accepté,
-    ni la date, ni le nom déclaré. Le cabinet, lui, a tout.
-
-    ⚠️ **IL NE LÈVE JAMAIS.** Le client a accepté ; l'accord est enregistré, le
-    dossier a suivi, et rendre une erreur parce qu'un serveur de messagerie
-    n'a pas répondu ferait **perdre une signature contractuelle** — c'est le
-    raisonnement déjà tenu quinze lignes plus haut pour la transition du dossier.
-
-    ⚠️ **SANS ADRESSE, RIEN**, et sans bruit : l'adresse est facultative au
-    formulaire public, et le rappel se fait alors au téléphone.
-    ─────────────────────────────────────────────────────────────────────────────
-    """
-    try:
-        demande = _dossiers().lire(proforma.dossier).demande
-        courriel = (demande.courriel or "").strip()
-        if not courriel:
-            return
-        service_de_notification().envoyer(
-            "proforma.acceptation",
-            destinataire=courriel,
-            contexte={
-                "prenom": demande.nom,
-                "numero": acceptation.proforma,
-                "montant": f"{acceptation.montant:,.0f}".replace(",", "\u202f"),
-                "acceptee_le": acceptation.acceptee_le.strftime("%d/%m/%Y à %Hh%M"),
-                "identite": acceptation.identite_declaree,
-            },
-        )
-    except Exception:  # noqa: BLE001 — voir l'en-tête : jamais au prix de l'accord
-        _journal_acceptation.exception(
-            "Accusé d'acceptation NON envoyé pour %s. L'accord EST enregistré ; "
-            "seule la trace écrite manque au client.",
-            acceptation.proforma,
-        )
-
-
-def _proformas():
-    """Le dépôt des proformas, durable si la base est là."""
-    session = session_de_travail()
-    if session is None:
-        return _proformas_memoire()
-    return DepotProformasSql(session, courant())
-
-
-#: ⚠️ **L'unique magasin, importé et non redéclaré.** Voir `magasins_memoire` :
-#: la route écrivait ici, le balayage de relance lisait ailleurs, et il ne
-#: trouvait jamais rien à relancer.
-_proformas_memoire = proformas_memoire
-
-
-def _secret_des_liens() -> str:
-    """Le secret qui scelle les liens d'acceptation.
-
-    ⚠️ **La clé de chiffrement du cabinet, et non un secret dédié.** Un second
-    secret serait un second réglage à poser, à conserver et à faire tourner, pour
-    une garantie identique : les deux protègent des engagements du même cabinet.
-
-    En production, `Configuration` refuse de démarrer sans clé. Hors production, le
-    repli est explicite et **le sceau n'y protège rien** : c'est assumé, et le
-    registre des services signale déjà l'absence de clé.
-    """
-    return configuration().cle_chiffrement or "secret-de-developpement"
 
 
 def _avancer_le_dossier(dossier, qualification, questionnaire, instant) -> None:
@@ -2961,7 +2425,7 @@ def _avancer_le_dossier(dossier, qualification, questionnaire, instant) -> None:
     travail du responsable au moment où il corrige une réponse.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    depot = _dossiers()
+    depot = depot_dossiers()
     courant_ = dossier
     if courant_.etat is EtatDossier.AFFECTEE:
         courant_ = courant_.premier_contact(instant)
@@ -3020,6 +2484,11 @@ class OuvertureDeLEspace(BaseModel):
     slug: str | None
     #: Le motif du dernier échec, quand la saga en a eu un.
     dernier_echec: str | None
+    #: ⚠️ **Cette vente n'ouvre pas d'espace, et ne l'ouvrira jamais.** Sans ce
+    #: champ, `demarree: false` se lisait « pas encore », et la fiche d'une
+    #: création d'entreprise affichait un sablier pour toujours : le produit
+    #: promettait une ouverture que sa propre règle exclut.
+    sans_objet: bool = False
 
 
 @routeur.get(
@@ -3046,6 +2515,16 @@ def lire_l_ouverture(acces: AccesRequis, reference: str) -> OuvertureDeLEspace:
     """
     exiger(acces, Permission.LIRE_PROSPECT)
 
+    # ⚠️ Lu sur le service DEMANDÉ, qui est connu dès le dépôt : la console pose
+    # la question avant l'encaissement, pour savoir s'il y a une adresse à
+    # demander.
+    try:
+        sans_objet = not ouvre_un_locataire(
+            depot_dossiers().lire(reference).demande.service_souhaite
+        )
+    except DossierIntrouvable:
+        sans_objet = False
+
     session = session_de_travail()
     if session is None:
         # Hors base — les essais en mémoire — il n'y a pas d'exécution à lire.
@@ -3057,6 +2536,7 @@ def lire_l_ouverture(acces: AccesRequis, reference: str) -> OuvertureDeLEspace:
             etapes_substituees=[],
             slug=None,
             dernier_echec=None,
+            sans_objet=sans_objet,
         )
 
     execution = DepotExecutionsSql(session, courant()).trouver(NOM_SAGA, reference)
@@ -3069,6 +2549,7 @@ def lire_l_ouverture(acces: AccesRequis, reference: str) -> OuvertureDeLEspace:
             etapes_substituees=[],
             slug=None,
             dernier_echec=None,
+            sans_objet=sans_objet,
         )
 
     contexte = execution.contexte
@@ -3087,7 +2568,50 @@ def lire_l_ouverture(acces: AccesRequis, reference: str) -> OuvertureDeLEspace:
         etapes_substituees=substituees_,
         slug=str(contexte.get("slug") or "") or None,
         dernier_echec=execution.dernier_echec,
+        sans_objet=False,
     )
+
+
+def _adresse_voulue(proforma: Proforma, slug: str | None) -> str | None:
+    """L'adresse de l'espace à ouvrir, ou `None` si cette vente n'en ouvre pas.
+
+    ─────────────────────────────────────────────────────────────────────────
+    ⚠️ **ON NE DEMANDE UNE ADRESSE QUE S'IL Y A UN ESPACE À ADRESSER.**
+
+    Les deux routes de règlement l'exigeaient pour toute vente. Depuis le
+    27 septembre, seule l'offre de plateforme ouvre un locataire : pour une
+    création d'entreprise, le collaborateur choisissait donc une adresse qui ne
+    menait nulle part, et la fiche l'affichait ensuite comme « l'espace » du
+    client.
+
+    Vente sans espace : l'adresse reçue est **ignorée**, pas refusée. Un client
+    plus ancien de l'API, qui l'envoie encore, ne doit pas voir échouer un
+    encaissement pour un champ devenu sans objet.
+
+    Vente avec espace : la règle d'origine tient entière, et l'adresse est
+    validée ici, devant celui qui peut la corriger — voir `encaisser`.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    if not ouvre_un_locataire(proforma.service):
+        return None
+    if slug is None or len(slug.strip()) < 3:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"le service {proforma.service} ouvre un espace de plateforme : "
+                "son adresse est requise, sur trois caractères au moins."
+            ),
+        )
+    try:
+        valider_le_slug(slug)
+    except SlugInvalide as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
+    except NomsReservesIndisponibles as indisponible:
+        # ⚠️ 503 et non 422 : le client n'a rien fait de mal, et son slug n'est
+        # peut-être pas réservé. C'est la plateforme qui ne sait pas répondre, et un
+        # slug attribué ne se reprend pas. Voir `valider_le_slug`.
+        raise HTTPException(status_code=503, detail=str(indisponible)) from indisponible
+    return slug
 
 
 # ── L'encaissement, dernier maillon du parcours ──────────────────────────────
@@ -3106,16 +2630,22 @@ class DemandeDeReglement(BaseModel):
     demandé.
     """
 
-    slug: str = Field(min_length=3, max_length=40)
+    #: ⚠️ Exigée **seulement** quand le service vendu ouvre un espace de
+    #: plateforme. Pour une prestation, il n'y a rien à adresser : une adresse
+    #: reçue est ignorée, et son absence n'est pas une faute. Voir `_adresse_voulue`.
+    slug: str | None = Field(default=None, max_length=40)
     #: Le numéro à débiter. Vide, on emploie celui de la demande d'origine, qui
     #: est celui que le client a lui-même donné.
     telephone: str = ""
+    #: 9 novembre 2026 : une tranche. Absent : tout le reste à payer.
+    montant: Decimal | None = Field(default=None, gt=0)
 
 
 class ReglementDemande(BaseModel):
     dossier: str
     proforma: str
-    slug: str
+    #: `None` quand la vente n'ouvre pas d'espace.
+    slug: str | None
     #: Le numéro réellement sollicité, sous sa forme canonique.
     telephone: str
     montant: Decimal
@@ -3124,6 +2654,119 @@ class ReglementDemande(BaseModel):
     #: preuve de paiement : le client n'a pas encore saisi son code.
     accepte: bool
     message: str
+    #: 9 novembre 2026 : validé d'office (recette ou période d'essai) — aucun débit réel.
+    valide_d_office: bool = False
+
+
+def solliciter_le_telephone(
+    proforma: Proforma,
+    dossier: DossierCommercial,
+    depot,
+    slug: str | None,
+    telephone_demande: str,
+    montant: Decimal | None = None,
+) -> ReglementDemande:
+    """Crée le paiement et demande le débit sur le téléphone du client.
+
+    ⚠️ **UN SEUL CORPS POUR DEUX PORTES** (14 octobre 2026). Le règlement se
+    demande depuis la console, par celui qui encaisse, et désormais depuis la
+    page de la proposition, par le client lui-même. Deux copies de ce qui suit
+    auraient divergé : l'une aurait reçu la correction « écrire avant d'appeler »
+    et l'autre non, et c'est le client qui paie seul qui aurait été débité sans
+    trace.
+    """
+    # ⚠️ L'état est vérifié **ici**, avant de solliciter le téléphone du client.
+    # Demander un débit sur un dossier qui n'a pas accepté ferait sonner le
+    # téléphone de quelqu'un qui ne s'est engagé à rien.
+    if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"dossier {dossier.reference} à l'état {dossier.etat} : le règlement "
+                "se demande après l'acceptation de la proforma, et pas avant."
+            ),
+        )
+    # 9 novembre 2026 : une tranche, ou tout le reste. Un dossier engagé (PAYÉE) se
+    # règle encore tant qu'il n'est pas soldé.
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        situation_des_versements_de,
+    )
+
+    situation = situation_des_versements_de(dossier)
+    if situation.solde or not situation.reste:
+        raise HTTPException(
+            status_code=409, detail="Cette proposition est déjà réglée : il n'y a rien à payer."
+        )
+    a_payer = montant if montant is not None else situation.reste
+    if a_payer > situation.reste:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{a_payer} FCFA dépasse le reste à payer ({situation.reste} FCFA)."
+            ),
+        )
+
+    # ⚠️ Validée ici et non en tête de route : savoir si une adresse est due
+    # suppose d'avoir lu la proforma, donc le service vendu.
+    adresse = _adresse_voulue(proforma, slug)
+    try:
+        retenu = dossier.retenir_le_slug(adresse) if adresse else dossier
+    except TransitionDossierRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+
+    try:
+        telephone = normaliser_telephone(
+            telephone_demande or dossier.demande.telephone
+        )
+    except NumeroInvalide as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
+
+    # ⚠️ Importé à l'appel : `routes_http` importe déjà ce module pour la suite
+    # du parcours, et l'importer en tête refermerait le cycle.
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+
+    boutique = comptoir()
+    paiement = Paiement(
+        identifiant=f"pay-{uuid.uuid4().hex[:16]}",
+        nature=NaturePaiement.PROFORMA,
+        reference_reglee=proforma.numero,
+        cle_idempotence=nouvelle_cle_idempotence(),
+        montant=a_payer,
+        telephone=telephone,
+        initie_le=maintenant(),
+    )
+
+    # ⚠️ **On écrit avant d'appeler**, comme l'engagement d'une souscription. Si
+    # l'appel part et que le processus tombe avant d'avoir enregistré, le client
+    # est débité pour un paiement dont nous n'avons aucune trace : la notification
+    # ne se rapprocherait de rien et finirait en `paiement.non_affecte`.
+    depot.enregistrer(retenu)
+    boutique.paiements.enregistrer(paiement)
+
+    initiation = boutique.fournisseur.initier(
+        montant=paiement.montant,
+        telephone=paiement.telephone,
+        cle_idempotence=paiement.cle_idempotence,
+        libelle=f"{proforma.service} · {proforma.numero}",
+    )
+    if initiation.reference_externe:
+        boutique.paiements.enregistrer(
+            paiement.avec_reference(initiation.reference_externe)
+        )
+    # 9 novembre 2026 : en recette ou en période d'essai, la tranche se valide seule.
+    valide = valider_d_office_en_recette(paiement.identifiant)
+
+    return ReglementDemande(
+        dossier=dossier.reference,
+        proforma=proforma.numero,
+        slug=adresse,
+        telephone=paiement.telephone,
+        montant=paiement.montant,
+        paiement=paiement.identifiant,
+        accepte=initiation.accepte,
+        message=initiation.message,
+        valide_d_office=valide,
+    )
 
 
 @routeur.post(
@@ -3185,97 +2828,202 @@ def demander_le_reglement(
     identifiant d'événement, donc à une seule saga.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.GERER_COMPTES)
+    # ⚠️ `ENCAISSER`, et non plus `GERER_COMPTES` (14 octobre 2026) : c'est la
+    # responsable de caisse qui constate un règlement. L'administrateur garde ce
+    # droit ; voir `Permission.ENCAISSER`.
+    exiger(acces, Permission.ENCAISSER)
 
-    try:
-        valider_le_slug(corps.slug)
-    except SlugInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
-    except NomsReservesIndisponibles as indisponible:
-        # ⚠️ 503 et non 422 : le client n'a rien fait de mal, et son slug n'est
-        # peut-être pas réservé. C'est la plateforme qui ne sait pas répondre, et un
-        # slug attribué ne se reprend pas. Voir `valider_le_slug`.
-        raise HTTPException(status_code=503, detail=str(indisponible)) from indisponible
-
-    proformas = _proformas()
+    proformas = depot_proformas()
     try:
         proforma = proformas.lire(numero)
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(proforma.dossier)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    # ⚠️ L'état est vérifié **ici**, avant de solliciter le téléphone du client.
-    # Demander un débit sur un dossier qui n'a pas accepté ferait sonner le
-    # téléphone de quelqu'un qui ne s'est engagé à rien.
-    if dossier.etat is not EtatDossier.ACCEPTEE:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"dossier {dossier.reference} à l'état {dossier.etat} : le règlement "
-                "se demande après l'acceptation de la proforma, et pas avant."
-            ),
-        )
+    return solliciter_le_telephone(
+        proforma, dossier, depot, corps.slug, corps.telephone, corps.montant
+    )
 
-    try:
-        retenu = dossier.retenir_le_slug(corps.slug)
-    except TransitionDossierRefusee as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
 
-    try:
-        telephone = normaliser_telephone(
-            corps.telephone or dossier.demande.telephone
-        )
-    except NumeroInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
+class ReglementDeCaisse(BaseModel):
+    """Une ligne de la caisse : un règlement à constater, ou déjà constaté.
 
-    # ⚠️ Importé à l'appel : `routes_http` importe déjà ce module pour la suite
-    # du parcours, et l'importer en tête refermerait le cycle.
+    ⚠️ **PAUVRE À DESSEIN.** La caissière a besoin de savoir qui doit combien et
+    pour quelle proposition. Elle n'a besoin ni de la qualification, ni du
+    chiffrage, ni des échanges : son rôle ne lit pas les prospects, et cette
+    ligne ne les lui donne pas par la bande.
+    """
+
+    dossier: str
+    client: str
+    telephone: str
+    service: str
+    proforma: str
+    montant: Decimal
+    #: `A_ENCAISSER` tant que le client a accepté sans régler, `ENCAISSE` ensuite.
+    etat: str
+    payee_le: datetime | None = None
+    #: Vrai seulement pour l'offre qui ouvre un espace : une adresse est alors due.
+    ouvre_un_espace: bool = False
+    #: 9 novembre 2026 : les tranches. `montant` est le reste à payer tant que la
+    #: proforma n'est pas soldée, son total ensuite.
+    total: Decimal | None = None
+    paye: Decimal = Decimal(0)
+    reste: Decimal | None = None
+    #: Le seuil de démarrage est atteint : le cabinet travaille.
+    engage: bool = False
+    #: 9 novembre 2026 : `PROFORMA` ; `FRAIS_DE_TRAITEMENT`, des frais attendus avant toute
+    #: proforma ; `PENALITE_RENDEZ_VOUS`, une pénalité due ; `TROP_PERCU`, de l'argent reçu
+    #: de l'opérateur à restituer au client. `proforma` est vide pour les trois derniers.
+    #: Lot 4 : `PENALITE_DE_RETARD`, des pénalités de retard infligées et non levées.
+    objet: str = "PROFORMA"
+
+
+@routeur.get(
+    "/caisse",
+    summary="Les règlements à constater, et ceux qui l'ont été",
+    responses={403: {"description": "Habilitation insuffisante"}},
+)
+def lire_la_caisse(acces: AccesRequis) -> list[ReglementDeCaisse]:
+    """Ce que la responsable de caisse voit en ouvrant sa journée.
+
+    ─────────────────────────────────────────────────────────────────────────
+    ⚠️ **L'ÉTAT CHANGE TOUT SEUL, ET C'EST LE RAPPROCHEMENT.** Une ligne passe de
+    `A_ENCAISSER` à `ENCAISSE` dès que le règlement est constaté, quel qu'en soit
+    le chemin : la caissière au guichet, ou l'opérateur de mobile money qui
+    notifie. Elle ne coche rien pour un paiement en ligne ; elle le voit réglé.
+
+    Les deux chemins aboutissent au même geste de domaine, avec le même
+    identifiant d'événement : un règlement notifié puis constaté à la main ne
+    s'encaisse pas deux fois.
+
+    ⚠️ D'abord ce qui est dû, du plus ancien au plus récent : c'est la file. Les
+    règlements constatés suivent, du plus récent au plus ancien : c'est le
+    journal de la journée.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+    exiger(acces, Permission.ENCAISSER)
+    # 18 octobre 2026 : la matrice peut retirer cette famille de la vue de la caisse.
+    exiger(acces, Permission.VOIR_VERSEMENTS_COMMERCE)
+    proformas = depot_proformas()
     from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
-
-    boutique = comptoir()
-    paiement = Paiement(
-        identifiant=f"pay-{uuid.uuid4().hex[:16]}",
-        nature=NaturePaiement.PROFORMA,
-        reference_reglee=proforma.numero,
-        cle_idempotence=nouvelle_cle_idempotence(),
-        montant=proforma.tarif.montant,
-        telephone=telephone,
-        initie_le=maintenant(),
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+    )
+    from app.contextes.souscription.application.versements import (
+        proforma_a_regler,
+        situation_du_dossier,
     )
 
-    # ⚠️ **On écrit avant d'appeler**, comme l'engagement d'une souscription. Si
-    # l'appel part et que le processus tombe avant d'avoir enregistré, le client
-    # est débité pour un paiement dont nous n'avons aucune trace : la notification
-    # ne se rapprocherait de rien et finirait en `paiement.non_affecte`.
-    depot.enregistrer(retenu)
-    boutique.paiements.enregistrer(paiement)
-
-    initiation = boutique.fournisseur.initier(
-        montant=paiement.montant,
-        telephone=paiement.telephone,
-        cle_idempotence=paiement.cle_idempotence,
-        libelle=f"{proforma.service} — {proforma.numero}",
+    versements = comptoir().versements_du_parcours
+    regle = regle_des_versements()
+    dus: list[tuple[datetime, ReglementDeCaisse]] = []
+    regles: list[tuple[datetime, ReglementDeCaisse]] = []
+    from app.contextes.souscription.adaptateurs.entrant.routes_penalites import (
+        penalite_de_retard_due,
     )
-    if initiation.reference_externe:
-        boutique.paiements.enregistrer(
-            paiement.avec_reference(initiation.reference_externe)
+    from app.contextes.souscription.adaptateurs.entrant.routes_rendez_vous import penalite_due
+
+    for dossier in depot_dossiers().lister():
+        # 9 novembre 2026 : ce que la caisse doit recevoir ou rendre, hors proforma.
+        situation_hors = situation_du_dossier(
+            dossier,
+            proforma_a_regler(proformas.par_dossier(dossier.reference)),
+            versements.pour(dossier.reference),
+            regle,
         )
-
-    return ReglementDemande(
-        dossier=dossier.reference,
-        proforma=proforma.numero,
-        slug=corps.slug,
-        telephone=paiement.telephone,
-        montant=paiement.montant,
-        paiement=paiement.identifiant,
-        accepte=initiation.accepte,
-        message=initiation.message,
-    )
+        for objet, montant in (
+            ("PENALITE_RENDEZ_VOUS", penalite_due(dossier.reference, situation_hors)),
+            # Lot 4 : les pénalités de retard infligées et non levées.
+            ("PENALITE_DE_RETARD", penalite_de_retard_due(dossier, situation_hors)),
+            ("TROP_PERCU", situation_hors.trop_percu),
+        ):
+            if montant > 0:
+                dus.append(
+                    (
+                        dossier.depuis_le,
+                        ReglementDeCaisse(
+                            dossier=dossier.reference,
+                            client=dossier.demande.nom,
+                            telephone=dossier.demande.telephone,
+                            service=dossier.service,
+                            proforma="",
+                            montant=montant,
+                            etat="A_ENCAISSER" if objet != "TROP_PERCU" else "A_RESTITUER",
+                            objet=objet,
+                        ),
+                    )
+                )
+        if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
+            # 9 novembre 2026 : les frais de traitement attendus d'une demande encore en
+            # cours (ni acceptée, ni classée) : la caisse les reçoit au guichet.
+            frais = regle.frais_de(dossier.service)
+            if (
+                frais is not None
+                and dossier.etat is not EtatDossier.SANS_SUITE
+                and not versements.pour(dossier.reference)
+            ):
+                dus.append(
+                    (
+                        dossier.depuis_le,
+                        ReglementDeCaisse(
+                            dossier=dossier.reference,
+                            client=dossier.demande.nom,
+                            telephone=dossier.demande.telephone,
+                            service=dossier.service,
+                            proforma="",
+                            montant=frais,
+                            etat="A_ENCAISSER",
+                            objet="FRAIS_DE_TRAITEMENT",
+                        ),
+                    )
+                )
+            continue
+        # ⚠️ C'est l'ÉTAT DU DOSSIER qui dit qu'un règlement est dû, pas celui
+        # de la proforma. Un dossier accepté par téléphone, ou repris d'un
+        # ancien parcours, porte une proforma encore « transmise » : ne retenir
+        # que les « acceptées » le faisait disparaître de la caisse, alors que
+        # le client attend au guichet. On prend la proposition vivante la plus
+        # récente, l'acceptée d'abord.
+        vivantes = [
+            p for p in proformas.par_dossier(dossier.reference)
+            if p.etat not in (EtatProforma.REMPLACEE, EtatProforma.ANNULEE)
+        ]
+        if not vivantes:
+            continue
+        proforma = max(
+            vivantes, key=lambda p: (p.etat is EtatProforma.ACCEPTEE, p.version)
+        )
+        situation = situation_du_dossier(
+            dossier, proforma, versements.pour(dossier.reference), regle
+        )
+        ligne = ReglementDeCaisse(
+            dossier=dossier.reference,
+            client=dossier.demande.nom,
+            telephone=dossier.demande.telephone,
+            service=proforma.service,
+            proforma=proforma.numero,
+            montant=proforma.tarif.montant if situation.solde else situation.reste,
+            etat="ENCAISSE" if situation.solde else "A_ENCAISSER",
+            payee_le=dossier.payee_le,
+            ouvre_un_espace=ouvre_un_locataire(proforma.service),
+            total=situation.total,
+            paye=situation.paye,
+            reste=situation.reste,
+            engage=dossier.etat is EtatDossier.PAYEE,
+        )
+        if situation.solde:
+            regles.append((dossier.payee_le or dossier.depuis_le, ligne))
+        else:
+            dus.append((dossier.depuis_le, ligne))
+    dus.sort(key=lambda couple: couple[0])
+    regles.sort(key=lambda couple: couple[0], reverse=True)
+    return [ligne for _, ligne in dus] + [ligne for _, ligne in regles]
 
 
 class DemandeDEncaissement(BaseModel):
@@ -3287,10 +3035,17 @@ class DemandeDEncaissement(BaseModel):
     d'illisible, et le changer plus tard casserait les liens déjà distribués.
     """
 
-    slug: str = Field(min_length=3, max_length=40)
+    #: ⚠️ Exigée **seulement** quand le service vendu ouvre un espace de
+    #: plateforme. Pour une prestation, il n'y a rien à adresser : une adresse
+    #: reçue est ignorée, et son absence n'est pas une faute. Voir `_adresse_voulue`.
+    slug: str | None = Field(default=None, max_length=40)
     #: La référence du prestataire de paiement. ⚠️ Conservée pour le rapprochement
     #: comptable, jamais employée comme preuve : c'est le rapprochement qui fait foi.
     reference_externe: str = Field(default="", max_length=120)
+    #: 9 novembre 2026 : une tranche versée au guichet. Absent : tout le reste à payer.
+    #: ⚠️ Une tranche exige le numéro du reçu (`reference_externe`) : sans lui, un double
+    #: clic compterait deux fois le même versement.
+    montant: Decimal | None = Field(default=None, gt=0)
 
 
 class EncaissementConfirme(BaseModel):
@@ -3355,72 +3110,121 @@ def encaisser(
     celui qui peut la corriger.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.GERER_COMPTES)
-    proformas = _proformas()
+    # ⚠️ `ENCAISSER`, et non plus `GERER_COMPTES` (14 octobre 2026) : c'est la
+    # responsable de caisse qui constate un règlement. L'administrateur garde ce
+    # droit ; voir `Permission.ENCAISSER`.
+    exiger(acces, Permission.ENCAISSER)
+    proformas = depot_proformas()
     try:
         proforma = proformas.lire(numero)
     except ProformaIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    try:
-        valider_le_slug(corps.slug)
-    except SlugInvalide as refus:
-        raise HTTPException(status_code=422, detail=str(refus)) from refus
-    except NomsReservesIndisponibles as indisponible:
-        # ⚠️ 503 et non 422 : le client n'a rien fait de mal, et son slug n'est
-        # peut-être pas réservé. C'est la plateforme qui ne sait pas répondre, et un
-        # slug attribué ne se reprend pas. Voir `valider_le_slug`.
-        raise HTTPException(status_code=503, detail=str(indisponible)) from indisponible
+    adresse = _adresse_voulue(proforma, corps.slug)
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(proforma.dossier)
     except DossierIntrouvable as echec:
         raise HTTPException(status_code=404, detail=str(echec)) from echec
 
-    try:
-        resultat = encaisser_l_acceptation(
-            dossier,
-            proforma,
-            boite=_boite_du_parcours(),
-            slug=corps.slug,
-            tenant=f"tnt-{corps.slug}",
-            a_l_instant=maintenant(),
-            # ⚠️ L'identifiant dérive du **dossier**, non d'un tirage : le relais
-            # garantit « au moins une fois », et deux confirmations du même
-            # encaissement doivent porter le même événement.
-            identifiant_evenement=f"enc-{dossier.reference}",
-            reference_externe=corps.reference_externe,
+    # 9 novembre 2026 : le guichet reçoit une tranche, ou tout le reste ; le dossier est
+    # engagé quand le seuil de démarrage est atteint. Voir `application/versements.py`.
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.adaptateurs.entrant.routes_versements import (
+        regle_des_versements,
+    )
+    from app.contextes.souscription.application.versements import (
+        engager_si_le_seuil_est_atteint,
+        recevoir_un_versement,
+        situation_du_dossier,
+    )
+    from app.contextes.souscription.domaine.honoraires import CanalDeReglement
+    from app.contextes.souscription.domaine.versements_du_parcours import (
+        NatureVersement,
+        VersementDejaRecu,
+        VersementRefuse,
+    )
+
+    if dossier.etat not in (EtatDossier.ACCEPTEE, EtatDossier.PAYEE):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"dossier {dossier.reference} à l'état {dossier.etat} : l'encaissement "
+                "suit l'acceptation de la proforma."
+            ),
         )
+    if corps.montant is not None and not corps.reference_externe.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Une tranche au guichet porte le numéro de son reçu de caisse.",
+        )
+    versements = comptoir().versements_du_parcours
+    regle = regle_des_versements()
+    situation = situation_du_dossier(dossier, proforma, versements.pour(dossier.reference), regle)
+    instant = maintenant()
+
+    def _confirme(d, *, rejeu: bool, engage: bool) -> EncaissementConfirme:
+        return EncaissementConfirme(
+            dossier=d.reference,
+            etat=d.etat.value,
+            tenant=f"tnt-{adresse}" if engage and adresse else None,
+            slug=adresse if engage else None,
+            rejeu=rejeu,
+        )
+
+    try:
+        if situation.solde or not situation.reste:
+            # Rien à recevoir : soldé (rejeu d'une confirmation), ou couvert par les
+            # frais de traitement. S'il reste à engager, on engage.
+            engagement = engager_si_le_seuil_est_atteint(
+                dossier, proforma, situation, boite=boite_du_parcours(),
+                a_l_instant=instant, reference_externe=corps.reference_externe,
+                slug=adresse or "",
+            )
+            if engagement is None:
+                return _confirme(dossier, rejeu=True, engage=False)
+            if not engagement.rejeu:
+                depot.enregistrer(engagement.dossier)
+            return _confirme(engagement.dossier, rejeu=engagement.rejeu, engage=True)
+
+        montant = corps.montant if corps.montant is not None else situation.reste
+        reference = (
+            f"guichet:{corps.reference_externe.strip()}"
+            if corps.reference_externe.strip()
+            # Tout le reste, sans reçu : la clé dit « ce reste-là », et un double clic
+            # tombe sur la même.
+            else f"guichet-solde:{proforma.numero}:{situation.paye}"
+        )
+        resultat = recevoir_un_versement(
+            dossier=dossier,
+            proforma=proforma,
+            versements=versements,
+            regle=regle,
+            nature=NatureVersement.TRANCHE,
+            montant=montant,
+            canal=CanalDeReglement.GUICHET,
+            reference_externe=reference,
+            constate_par=acces.compte,
+            a_l_instant=instant,
+            boite=boite_du_parcours(),
+            slug=adresse or "",
+        )
+    except VersementDejaRecu:
+        return _confirme(dossier, rejeu=True, engage=False)
+    except VersementRefuse as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
     except EncaissementRefuse as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     except TransitionDossierRefusee as echec:
         raise HTTPException(status_code=409, detail=str(echec)) from echec
 
-    if not resultat.rejeu:
-        depot.enregistrer(resultat.dossier)
-
-    return EncaissementConfirme(
-        dossier=resultat.dossier.reference,
-        etat=resultat.dossier.etat.value,
-        tenant=None if resultat.rejeu else f"tnt-{corps.slug}",
-        slug=None if resultat.rejeu else corps.slug,
-        rejeu=resultat.rejeu,
-    )
+    engagement = resultat.engagement
+    if engagement is not None and not engagement.rejeu:
+        depot.enregistrer(engagement.dossier)
+    return _confirme(resultat.dossier, rejeu=False, engage=engagement is not None)
 
 
-def _boite_du_parcours():
-    """La boîte d'envoi, par la **surface publique** du Transverse.
-
-    ⚠️ La première rédaction importait l'atelier d'orchestration directement, et le
-    test d'architecture l'a refusée : on n'entre chez un autre contexte que par sa
-    surface déclarée. Il avait raison, et le remède a été d'exposer la boîte plutôt
-    que de la reconstruire — deux fabriques seraient deux boîtes en mémoire, l'une
-    déposerait et l'autre publierait.
-    """
-    from app.contextes.transverse.api import boite_d_envoi
-
-    return boite_d_envoi()
 
 
 @routeur.get(
@@ -3507,7 +3311,7 @@ def classer_sans_suite(
             ),
         )
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     try:
         dossier = depot.lire(reference)
     except DossierIntrouvable as echec:
@@ -3559,7 +3363,7 @@ def chercher_un_dossier_commercial(
     except NumeroInvalide:
         requete = q
     resultats = []
-    for dossier in _dossiers().ouverts():
+    for dossier in depot_dossiers().ouverts():
         demande = dossier.demande
         score = pertinence(
             requete,
@@ -3580,3 +3384,8 @@ def chercher_un_dossier_commercial(
             )
         )
     return classer_les_resultats("souscription", resultats, reglages)
+
+
+#: Lot 4 (9 novembre 2026) : la vue des retards lit les mêmes délais et le même annuaire.
+referentiel_de_veille = _referentiel_de_veille
+noms_des_collaborateurs = _noms_des_collaborateurs

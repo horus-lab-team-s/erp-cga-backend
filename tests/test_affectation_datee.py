@@ -38,6 +38,7 @@ from app.contextes.transverse.api import (
 )
 from app.main import creer_application
 from app.partage.horloge import horloge_figee
+from tests.conftest import renforcer_la_session
 from tests.test_transverse import _acces, _administrateur_distinct, depots  # noqa: F401
 
 LE_JOUR = date(2026, 9, 14)
@@ -184,6 +185,7 @@ class TestParLaRoute:
 
     def test_l_administrateur_ne_ferme_pas_sa_propre_habilitation(self, client):
         self._connecter(client, "s.onana@cga-brcg.cm")
+        renforcer_la_session(client)
         reponse = client.post(
             "/transverse/habilitations/H-002/fermeture",
             json={"le": "2026-09-30", "motif": "DEPART"},

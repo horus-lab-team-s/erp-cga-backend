@@ -39,11 +39,33 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
+    DepotAgendaDeCreationMemoire,
+    DepotAppelsDeFondsMemoire,
+    DepotCodesDeDossierMemoire,
+    DepotContratsDHonorairesMemoire,
+    DepotGracesDeReglementMemoire,
+    DepotRegleDeDepassementMemoire,
+    DepotRegleDesVersementsMemoire,
+    DepotReglementsDHonorairesMemoire,
+    DepotRendezVousMemoire,
+    DepotVersementsDuParcoursMemoire,
+)
 from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+    DepotAgendaDeCreationSql,
+    DepotAppelsDeFondsSql,
+    DepotCodesDeDossierSql,
+    DepotContratsDHonorairesSql,
     DepotDevisSql,
+    DepotGracesDeReglementSql,
     DepotPaiementsSql,
+    DepotRegleDeDepassementSql,
+    DepotRegleDesVersementsSql,
+    DepotReglementsDHonorairesSql,
+    DepotRendezVousSql,
     DepotSouscriptionsSql,
     DepotTarifsFixesSql,
+    DepotVersementsDuParcoursSql,
 )
 from app.contextes.souscription.api import (
     CatalogueArrete,
@@ -97,7 +119,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import jour_a_douala, maintenant
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/souscription", tags=["Souscription"])
@@ -119,20 +141,43 @@ class Comptoir:
             self.souscriptions = DepotSouscriptionsMemoire()
             self.paiements = DepotPaiementsMemoire()
             self.tarifs_fixes = DepotTarifsFixesMemoire()
+            self.contrats_honoraires = DepotContratsDHonorairesMemoire()
+            self.reglements_honoraires = DepotReglementsDHonorairesMemoire()
+            self.appels_de_fonds = DepotAppelsDeFondsMemoire()
+            self.regle_de_depassement = DepotRegleDeDepassementMemoire()
+            self.graces_de_reglement = DepotGracesDeReglementMemoire()
+            self.regle_des_versements = DepotRegleDesVersementsMemoire()
+            self.versements_du_parcours = DepotVersementsDuParcoursMemoire()
+            self.agenda_de_creation = DepotAgendaDeCreationMemoire()
+            self.rendez_vous = DepotRendezVousMemoire()
+            self.codes_de_dossier = DepotCodesDeDossierMemoire()
         else:
             self.devis = DepotDevisSql(session, courant())
             self.souscriptions = DepotSouscriptionsSql(session, courant())
             self.paiements = DepotPaiementsSql(session, courant())
             self.tarifs_fixes = DepotTarifsFixesSql(session, courant())
+            self.contrats_honoraires = DepotContratsDHonorairesSql(session, courant())
+            self.reglements_honoraires = DepotReglementsDHonorairesSql(session, courant())
+            self.appels_de_fonds = DepotAppelsDeFondsSql(session, courant())
+            self.regle_de_depassement = DepotRegleDeDepassementSql(session, courant())
+            self.graces_de_reglement = DepotGracesDeReglementSql(session, courant())
+            self.regle_des_versements = DepotRegleDesVersementsSql(session, courant())
+            self.versements_du_parcours = DepotVersementsDuParcoursSql(session, courant())
+            self.agenda_de_creation = DepotAgendaDeCreationSql(session, courant())
+            self.rendez_vous = DepotRendezVousSql(session, courant())
+            self.codes_de_dossier = DepotCodesDeDossierSql(session, courant())
         # ⚠️ LE JOUR ANNONCÉ EST ARRIVÉ. Ce commentaire disait : « il aura sa
         # table le jour où la direction devra changer un tarif sans
         # redéploiement ». La structure de l'offre reste en code ; les PRIX sont
         # les décisions du gérant, conservées en base et rejouées à chaque
         # lecture. Voir `CatalogueArrete`.
         self.services = CatalogueArrete(DepotServicesMemoire(), self.tarifs_fixes)
+        # ⚠️ 9 novembre 2026 : en période d'essai, les clés Tara sont ignorées — le
+        # fournisseur est simulé, aucun débit réel ne peut partir. Voir `paiements_d_essai`.
+        essai = config.paiements_d_essai
         self.fournisseur = FournisseurTara(
-            cle_api=config.tara_cle_api,
-            identifiant_marchand_tara=config.tara_identifiant_marchand,
+            cle_api="" if essai else config.tara_cle_api,
+            identifiant_marchand_tara="" if essai else config.tara_identifiant_marchand,
             adresse_publique=config.adresse_publique,
         )
         boutique = atelier()
@@ -161,14 +206,19 @@ class Comptoir:
         démarrage conserverait une session de requête déjà fermée.
         ─────────────────────────────────────────────────────────────────────────
         """
-        from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-            _boite_du_parcours,
-            _dossiers,
-            _proformas,
+        from app.contextes.souscription.adaptateurs.entrant.sources import (
+            boite_du_parcours,
+            depot_dossiers,
+            depot_proformas,
         )
         from app.contextes.souscription.application.encaissement_du_parcours import (
             SuiteDeProforma,
         )
+        from app.contextes.souscription.application.fonds_de_tiers import SuiteDeFondsDeTiers
+        from app.contextes.souscription.application.reglement_des_honoraires import (
+            SuiteDHonoraires,
+        )
+        from app.contextes.souscription.application.versements import SuiteDeFraisDeTraitement
 
         return {
             NaturePaiement.SOUSCRIPTION: SuiteDeSouscription(
@@ -177,9 +227,34 @@ class Comptoir:
                 journal=self.journal,
             ),
             NaturePaiement.PROFORMA: SuiteDeProforma(
-                dossiers=_dossiers(),
-                proformas=_proformas(),
-                boite=_boite_du_parcours(),
+                dossiers=depot_dossiers(),
+                proformas=depot_proformas(),
+                boite=boite_du_parcours(),
+                journal=self.journal,
+                # 9 novembre 2026 : la proforma se règle en tranches.
+                versements=self.versements_du_parcours,
+                regle=self.regle_des_versements.lire,
+            ),
+            # ⚠️ 14 octobre 2026 : les honoraires des adhérents, réglés depuis leur
+            # espace. Voir `SuiteDHonoraires`.
+            NaturePaiement.HONORAIRES: SuiteDHonoraires(
+                reglements=self.reglements_honoraires,
+                journal=self.journal,
+                boite=boite_du_parcours(),
+            ),
+            # 9 novembre 2026 : les frais de traitement versés à la soumission.
+            NaturePaiement.FRAIS_DE_TRAITEMENT: SuiteDeFraisDeTraitement(
+                dossiers=depot_dossiers(),
+                proformas=depot_proformas(),
+                versements=self.versements_du_parcours,
+                regle=self.regle_des_versements.lire,
+                boite=boite_du_parcours(),
+                journal=self.journal,
+            ),
+            # ⚠️ 14 octobre 2026 : les fonds de tiers (TVA, CNPS sous mandat de paiement).
+            NaturePaiement.FONDS_DE_TIERS: SuiteDeFondsDeTiers(
+                appels=self.appels_de_fonds,
+                boite=boite_du_parcours(),
                 journal=self.journal,
             ),
         }
@@ -371,7 +446,7 @@ def lire_tarifs(
 def fixer_un_tarif(acces: AccesRequis, demande: DemandeDeFixation) -> EtatDesTarifs:
     exiger(acces, Permission.FIXER_LES_TARIFS)
     instant = maintenant()
-    if demande.a_partir_du < instant.date():
+    if demande.a_partir_du < jour_a_douala(instant):
         raise HTTPException(
             status_code=422,
             detail=(
@@ -419,7 +494,7 @@ def fixer_un_tarif(acces: AccesRequis, demande: DemandeDeFixation) -> EtatDesTar
             "motif": demande.motif,
         },
     )
-    return _etat_des_tarifs(instant.date())
+    return _etat_des_tarifs(jour_a_douala(instant))
 
 
 # ── Le devis ─────────────────────────────────────────────────────────────────
@@ -449,8 +524,8 @@ def creer_devis(demande: DemandeDevis) -> Devis:
             reference=_reference("DV"),
             prospect=demande.prospect,
             demandes=demande.lignes,
-            services=boutique.services.charger(instant.date()),
-            a_la_date=instant.date(),
+            services=boutique.services.charger(jour_a_douala(instant)),
+            a_la_date=jour_a_douala(instant),
         )
     except (DevisImpossible, ServiceIntrouvable) as refus:
         raise HTTPException(status_code=422, detail=str(refus)) from refus
@@ -544,7 +619,7 @@ def engager_devis(reference: str, demande: DemandeEngagement) -> Engagement:
     # La suite du parcours n'est pas court-circuitée : on emprunte exactement le
     # chemin d'une vraie notification, celui que le prestataire déclenchera. Ce
     # qui est simulé, c'est l'appel du prestataire, rien d'autre.
-    valide_d_office = configuration().mode_demonstration and not paiement.clos
+    valide_d_office = configuration().paiements_valides_d_office and not paiement.clos
     if valide_d_office:
         traiter_notification(
             {
@@ -560,6 +635,7 @@ def engager_devis(reference: str, demande: DemandeEngagement) -> Engagement:
             suites=boutique.suites,
             journal=boutique.journal,
             a_l_instant=maintenant(),
+            confirmer=False,  # mode démonstration : aucun prestataire à interroger
         )
         # Relus : l'ouverture d'accès a fait évoluer les deux agrégats, et rendre
         # les objets d'avant afficherait « en attente » sur un paiement encaissé.
@@ -615,6 +691,13 @@ def lire_souscription(reference: str) -> Souscription:
 # ── La notification du prestataire ───────────────────────────────────────────
 
 
+def confirmation_requise(fournisseur) -> bool:
+    """Une notification ne vaut qu'après confirmation sortante dès qu'un prestataire réel
+    existe (revue de sécurité du 16 octobre 2026). Le mode simulé n'a personne à
+    interroger, et la production le refuse en amont."""
+    return not fournisseur.simule
+
+
 @routeur.post(
     "/notification/tara",
     summary="Notification d'encaissement du prestataire",
@@ -635,6 +718,20 @@ async def notification_tara(requete: Request) -> ResultatEncaissement:
     except Exception:  # noqa: BLE001 — une charge illisible ne doit pas faire 500
         charge_utile = {}
     boutique = comptoir()
+    # 16 octobre 2026 (revue de sécurité) : sans prestataire réel, une notification ne
+    # peut être que fabriquée. Hors production, c'est la simulation de développement ;
+    # en production, elle est refusée, journalisée, et rien ne s'encaisse.
+    if boutique.fournisseur.simule and configuration().en_production:
+        boutique.journal.ajouter(
+            horodatage=maintenant(),
+            acteur="systeme",
+            action="paiement.notification_refusee",
+            objet_type="notification",
+            apres={"motif": "aucun prestataire réel configuré en production"},
+        )
+        return ResultatEncaissement(
+            rapproche=False, message="notification refusée : aucun prestataire réel."
+        )
 
     # ⚠️ L'encaissement écrit en base, et cette route est asynchrone : tenu sur la
     # boucle d'événements, il figeait le serveur le temps de l'écriture. La route
@@ -648,6 +745,7 @@ async def notification_tara(requete: Request) -> ResultatEncaissement:
             suites=boutique.suites,
             journal=boutique.journal,
             a_l_instant=maintenant(),
+            confirmer=confirmation_requise(boutique.fournisseur),
         )
     )
 
@@ -759,6 +857,10 @@ class Simulation(BaseModel):
 )
 def simuler(identifiant: str, simulation: Simulation) -> ResultatEncaissement:
     boutique = comptoir()
+    if configuration().en_production:
+        # 16 octobre 2026 (revue de sécurité) : sans clé Tara, la production gardait
+        # cette route ouverte, et sans authentification. Un encaissement ne se fabrique pas.
+        raise HTTPException(status_code=404, detail="Not Found")
     if not boutique.fournisseur.simule:
         raise HTTPException(
             status_code=409,
@@ -782,6 +884,7 @@ def simuler(identifiant: str, simulation: Simulation) -> ResultatEncaissement:
         suites=boutique.suites,
         journal=boutique.journal,
         a_l_instant=maintenant(),
+        confirmer=False,  # simulation de développement : aucun prestataire réel
     )
 
 

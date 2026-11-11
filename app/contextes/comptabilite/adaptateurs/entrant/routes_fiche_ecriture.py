@@ -32,8 +32,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.comptabilite.adaptateurs.entrant.routes_http import (
-    _exercice_du_dossier,
     depot,
+    exercice_du_portefeuille,
     periodes_verrouillees_du_dossier,
 )
 from app.contextes.comptabilite.adaptateurs.sortant.depot_ecritures_memoire import (
@@ -57,7 +57,7 @@ from app.contextes.transverse.api import (
     atelier,
     exiger_dossier,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 routeur = APIRouter(prefix="/comptabilite", tags=["Comptabilité · fiche d'écriture"])
 
@@ -208,7 +208,7 @@ def lire_la_fiche(
     verrou = periode_verrouillee_au(
         ecriture.date_operation, periodes_verrouillees_du_dossier(entreprise)
     )
-    exercice_du_dossier = _exercice_du_dossier(entreprise, exercice)
+    exercice_du_dossier = exercice_du_portefeuille(entreprise, exercice)
     clos = bool(exercice_du_dossier and exercice_du_dossier.clos)
     raison = (
         "Un brouillon se corrige ; seule une écriture validée se contre-passe."
@@ -250,8 +250,8 @@ def apercevoir_la_contre_passation(
     _lire(entreprise, exercice, journal, numero)
     return apercevoir_la_contrepassation(
         f"{exercice}/{journal}/{numero:06d}",
-        jour=date_operation or maintenant().date(),
-        exercice=_exercice_du_dossier(entreprise, exercice),
+        jour=date_operation or aujourd_hui(),
+        exercice=exercice_du_portefeuille(entreprise, exercice),
         periodes_verrouillees=periodes_verrouillees_du_dossier(entreprise),
         depot=depot(entreprise),
         par=acces.compte,

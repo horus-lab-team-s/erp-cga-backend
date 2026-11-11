@@ -29,6 +29,7 @@ n'est pas un dossier, c'est tous.
 
 from __future__ import annotations
 
+from app.partage import horloge
 from app.registre.etat import Verdict
 
 __all__ = ["sonde_de_la_cloture"]
@@ -52,9 +53,8 @@ def sonde_de_la_cloture() -> Verdict | None:
         ServiceParametres,
         parametres_communs,
     )
-    from app.partage.horloge import maintenant
 
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     try:
         service = ServiceParametres(list(parametres_communs()))
     except Exception as panne:  # noqa: BLE001 — le motif importe, quel qu'il soit

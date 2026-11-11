@@ -18,6 +18,7 @@ from datetime import date
 from app.contextes.collecte.domaine.demandes import DemandePiece
 from app.contextes.collecte.domaine.pieces import PieceJustificative
 from app.partage.depot_memoire import EntrepotMemoire
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "DepotDemandesMemoire",
@@ -63,7 +64,7 @@ class DepotPiecesMemoire:
     ) -> list[PieceJustificative]:
         return self._trier(
             self._entrepot.filtrer(
-                lambda p: p.entreprise == entreprise and debut <= p.recue_le.date() <= fin
+                lambda p: p.entreprise == entreprise and debut <= jour_a_douala(p.recue_le) <= fin
             )
         )
 

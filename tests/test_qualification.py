@@ -104,6 +104,18 @@ class TestTypage:
         with pytest.raises(ReponseInvalide, match="case cochée"):
             _vide(questionnaire).repondre(questionnaire, "associes", True, T0)
 
+    def test_un_texte_pour_un_entier_se_refuse_en_francais(self):
+        """10 novembre 2026 : le refus s'affiche au collaborateur. Il citait le code de
+        la question et l'exception Python (« invalid literal for int() ») ; il nomme
+        maintenant la question et la forme attendue."""
+        question = _q("salaries_prevus", TypeFait.ENTIER, libelle="Salariés prévus")
+        questionnaire = _questionnaire(question)
+        with pytest.raises(ReponseInvalide) as refus:
+            _vide(questionnaire).repondre(questionnaire, "salaries_prevus", "Douala", T0)
+        message = str(refus.value)
+        assert "Salariés prévus" in message and "nombre entier" in message
+        assert "invalid literal" not in message and "salaries_prevus" not in message
+
     def test_une_case_cochee_n_est_pas_un_montant(self):
         questionnaire = _questionnaire(_q("capital", TypeFait.DECIMAL))
         with pytest.raises(ReponseInvalide, match="case cochée"):
@@ -459,9 +471,12 @@ class TestQuestionnairesDuReferentiel:
 
     def test_la_creation_demande_la_forme_juridique_en_premier(self, repertoire):
         """L'ordre compte : demander le capital social avant la forme juridique
-        fait interrompre le responsable par le client."""
+        fait interrompre le responsable par le client.
+
+        8 novembre 2026 : seule la consultation préalable la précède, à la demande du
+        cabinet (réunion du 4 novembre) : on propose de conseiller AVANT de faire choisir."""
         ordonnees = repertoire.prendre("CREATION").ordonnees
-        assert ordonnees[0].code == "forme_juridique"
+        assert [q.code for q in ordonnees[:2]] == ["consultation_prealable", "forme_juridique"]
         codes = [q.code for q in ordonnees]
         assert codes.index("associes") < codes.index("capital_social")
 

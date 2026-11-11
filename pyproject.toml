@@ -28,6 +28,12 @@ dependencies = [
     # n'est pas une dégradation du dépôt de fichier, c'est le service entier qui
     # ne monte pas. Voir collecte/adaptateurs/entrant/routes_http.py.
     "python-multipart>=0.0.9",
+    # La lecture automatique des factures par Claude — contexte C (décision du cabinet, 14
+    # octobre 2026). ⚠️ La 1.x s'appuie sur `httpx2` et exige `h11>=0.16` : l'environnement doit
+    # porter `httpcore>=1.0.9` pour que `httpx` (Tara) cohabite. Sans clé configurée, rien ne
+    # part : voir `CGA_ANTHROPIC_CLE_API`.
+    "anthropic>=1,<2",
+    "openai>=3,<4",
     # Le document de proforma — contexte M. ⚠️ Pur Python, et c'est la raison du
     # choix : `weasyprint` rend un plus beau document mais réclame Pango et
     # Cairo, donc des bibliothèques système que l'image du serveur n'a pas et
@@ -37,6 +43,11 @@ dependencies = [
     # ⚠️ Sa police Helvetica intégrée couvre le Latin-1, donc les accents
     # français et le signe degré de « n° ». Aucun fichier de police à embarquer.
     "reportlab>=4.0",
+    # 15 octobre 2026 : les balances auxiliaires que la DGI demande au format Excel.
+    "openpyxl>=3.1,<4",
+    # 18 octobre 2026 (point 23) : le projet de contrat en Word, que les parties retouchent.
+    # Pur Python, comme reportlab et openpyxl.
+    "python-docx>=1.1,<2",
 ]
 
 [project.optional-dependencies]

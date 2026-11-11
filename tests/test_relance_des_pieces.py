@@ -251,7 +251,6 @@ class TestLesReglages:
             attentes=_attentes(journaux=["BQ"]),
             du=JUILLET[0],
             date_limite=date(2026, 8, 12),
-            signataire="Léonard FOTSO",
             cabinet="CGA Broad Range",
         )
         assert rendu.texte.splitlines() == [
@@ -259,7 +258,8 @@ class TestLesReglages:
             "• Relevé bancaire du journal BQ, juillet 2026",
             "Vous pouvez les déposer depuis votre espace, en photo. Sans ces pièces avant le "
             "12/08/2026, votre déclaration sera établie sans elles.",
-            "Léonard FOTSO, CGA Broad Range",
+            # 19 octobre 2026 : signé du cabinet, jamais du collaborateur.
+            "L'équipe de CGA Broad Range",
         ]
 
 

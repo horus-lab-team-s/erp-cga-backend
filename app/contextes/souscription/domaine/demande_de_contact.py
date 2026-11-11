@@ -246,6 +246,44 @@ class DemandeDeContact(BaseModel):
     #: D'où vient le visiteur. Voir l'en-tête : clé libre, jamais rejetée.
     origine: str = ORIGINE_INCONNUE
 
+    #: Ce que le visiteur a répondu aux questions que le site lui a posées, par
+    #: code de question, **tel qu'il l'a écrit**. Figé comme le reste : c'est la
+    #: qualification qui porte la valeur convertie, et que le responsable
+    #: corrige. Garder l'original permet de relire ce que le client avait dit
+    #: quand la valeur retenue surprend.
+    #:
+    #: ⚠️ Borné, parce que c'est un dictionnaire reçu d'une route publique : voir
+    #: `_borner_les_declarations`.
+    declarations: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("declarations", mode="before")
+    @classmethod
+    def _borner_les_declarations(cls, valeur: object) -> object:
+        """Écarte le vide, et refuse ce qui n'a pas la forme d'un formulaire.
+
+        Une route publique qui accepte un dictionnaire libre accepte aussi dix
+        mille clés. Les bornes sont larges pour un humain et étroites pour un
+        robot : quarante réponses, trois cents caractères chacune.
+        """
+        if valeur is None:
+            return {}
+        if not isinstance(valeur, dict):
+            raise ValueError("les déclarations sont une liste de réponses par question.")
+        if len(valeur) > 40:
+            raise ValueError("trop de réponses : le formulaire n'en porte pas autant.")
+        propres: dict[str, str] = {}
+        for code, reponse in valeur.items():
+            texte = "" if reponse is None else str(reponse).strip()
+            if not texte:
+                continue
+            if len(str(code)) > 60 or len(texte) > 300:
+                raise ValueError(
+                    f"la réponse à « {str(code)[:60]} » est trop longue : "
+                    "trois cents caractères au plus."
+                )
+            propres[str(code)] = texte
+        return propres
+
     @field_validator("telephone", mode="before")
     @classmethod
     def _normaliser_le_numero(cls, valeur: object) -> object:

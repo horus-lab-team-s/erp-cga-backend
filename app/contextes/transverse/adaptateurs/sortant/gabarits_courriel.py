@@ -47,6 +47,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.partage.marque import logo_disponible
+
 __all__ = [
     "CATALOGUE",
     "Gabarit",
@@ -61,26 +63,30 @@ _INDIGO_900 = "#2e1b4d"
 _INDIGO_700 = "#492f79"
 _MAGENTA_600 = "#8c2d86"
 _INK_900 = "#1a1523"
+_INK_700 = "#3a3448"
 _INK_500 = "#6b6480"
-_LINE_200 = "#e5e1ec"
+_LINE_200 = "#e9e4f0"
 _SURFACE = "#ffffff"
-_SURFACE_ALT = "#faf9fc"
-_WARNING_100 = "#fbf0e2"
-_WARNING = "#b4690e"
+_SURFACE_ALT = "#f4f1f8"
+_LAVANDE = "#f7f3fb"
+_WARNING_100 = "#fdf4e7"
+_WARNING = "#c27a1a"
+_POLICE = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
 #: Le pied de page, identique sur tous les messages. L'agrément y figure parce
 #: qu'il est la seule chose qui distingue un CGA d'un cabinet ordinaire, et
 #: qu'un destinataire qui doute de l'expéditeur le cherche.
-#: ⚠️ **AUCUN TIRET CADRATIM DANS CE QUE LE CLIENT LIT.** La règle valait pour le
-#: document de conception, où la chaîne d'intégration la vérifie ; le cabinet l'a
-#: étendue à tous les messages le 30 septembre. Trente-sept en sortaient, dont
-#: trente-quatre venaient de ce pied et de son séparateur.
-#:
-#: Le nom et l'agrément sont désormais séparés par une virgule, qui dit la même
-#: chose sans le trait.
+#: ⚠️ **AUCUN TIRET CADRATIN DANS CE QUE LE CLIENT LIT** (règle du cabinet, 30 septembre).
+#: 11 novembre 2026 : le pied porte aussi le site et l'adresse de contact, comme les
+#: documents imprimés (`cabinet/identite_des_documents.yaml`).
 _PIED = (
-    "CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048<br />"
-    "Douala Akwa · Yaoundé Elig-Essono · Bafoussam"
+    "<strong style=\"color:#4a4458;\">CGA Broad Range Consulting Group</strong><br />"
+    "Centre de gestion agréé, agrément MINFI/DGI n° 00000048<br />"
+    "Douala Akwa · Yaoundé Elig-Essono · Bafoussam<br />"
+    "<a href=\"https://www.cga-brcgroup.com\" style=\"color:#8c2d86;text-decoration:none;\">"
+    "www.cga-brcgroup.com</a> · "
+    "<a href=\"mailto:contact@cga-brcgroup.com\" style=\"color:#8c2d86;text-decoration:none;\">"
+    "contact@cga-brcgroup.com</a>"
 )
 
 
@@ -105,6 +111,14 @@ class Gabarit(BaseModel):
     #: L'encart d'avertissement, rendu en jaune. Sert aux délais de validité et
     #: aux consignes de sécurité, que le corps courant noierait.
     avertissement: str | None = None
+    #: La clé du contexte qui porte un TABLEAU : une liste de couples
+    #: `(désignation, valeur)`, dont le dernier est le total.
+    #:
+    #: ⚠️ C'est la seule donnée du contexte qui ne soit pas un texte, et elle ne
+    #: passe pas par les marques `{cle}` : un tableau n'a pas de longueur fixe,
+    #: et un gabarit n'a pas de boucles — voir l'en-tête de la classe. Elle est
+    #: facultative à l'envoi : absente du contexte, le tableau ne se dessine pas.
+    tableau: str | None = None
 
 
 class MessageRendu(BaseModel):
@@ -129,12 +143,7 @@ def cles_du_gabarit(gabarit_: Gabarit) -> frozenset[str]:
     if gabarit_.avertissement is not None:
         morceaux.append(gabarit_.avertissement)
     lecteur = Formatter()
-    return frozenset(
-        nom
-        for morceau in morceaux
-        for _, nom, _, _ in lecteur.parse(morceau)
-        if nom
-    )
+    return frozenset(nom for morceau in morceaux for _, nom, _, _ in lecteur.parse(morceau) if nom)
 
 
 def cles_manquantes(gabarit_: Gabarit, contexte: dict[str, Any]) -> frozenset[str]:
@@ -175,9 +184,20 @@ def _sans_balises(texte: str) -> str:
     return texte
 
 
-def _texte(gabarit_: Gabarit, valeurs: dict[str, str]) -> str:
+def _texte(
+    gabarit_: Gabarit, valeurs: dict[str, str], tableau: list[tuple[str, str]] | None = None
+) -> str:
     lignes = [_sans_balises(_remplir(gabarit_.titre, valeurs)), ""]
-    lignes.extend(_sans_balises(_remplir(p, valeurs)) + "\n" for p in gabarit_.paragraphes)
+    # 18 octobre 2026 : un paragraphe qui se remplit à vide ne s'écrit pas (la réponse à un
+    # candidat en a jusqu'à dix, selon la longueur du texte relu).
+    lignes.extend(
+        _sans_balises(_remplir(p, valeurs)) + "\n"
+        for p in gabarit_.paragraphes
+        if _remplir(p, valeurs).strip()
+    )
+    if tableau:
+        lignes.extend(f"  {designation} : {valeur}" for designation, valeur in tableau)
+        lignes.append("")
     if gabarit_.action is not None:
         libelle, adresse = gabarit_.action
         lignes.append(f"{_remplir(libelle, valeurs)} : {_remplir(adresse, valeurs)}\n")
@@ -186,40 +206,90 @@ def _texte(gabarit_: Gabarit, valeurs: dict[str, str]) -> str:
     # ⚠️ `-- ` est le séparateur de signature des courriels, posé par la RFC 3676 :
     # les clients de messagerie le reconnaissent et replient ce qui suit. Un tiret
     # cadratin ne leur dit rien, et le cabinet n'en veut nulle part.
+    lignes.append("Bien cordialement,")
+    lignes.append("L'équipe du cabinet\n")
     lignes.append("-- ")
-    lignes.append(
-        "CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048"
-    )
+    lignes.append("CGA Broad Range Consulting Group, agrément MINFI/DGI n° 00000048")
     lignes.append("Douala Akwa · Yaoundé Elig-Essono · Bafoussam")
+    lignes.append("www.cga-brcgroup.com · contact@cga-brcgroup.com")
     return "\n".join(lignes)
 
 
-def _html(gabarit_: Gabarit, valeurs: dict[str, str]) -> str:
+#: L'identifiant sous lequel le logo voyage DANS le message.
+#:
+#: ⚠️ Une image d'en-tête ne peut pas être une adresse : en démonstration elle
+#: pointerait `localhost`, et la plupart des messageries bloquent de toute façon
+#: les images distantes tant que le destinataire n'a pas cliqué. Elle ne peut pas
+#: non plus être encodée dans le HTML, que Gmail supprime. Reste l'image jointe
+#: au message et désignée par `cid:` : c'est la seule forme affichée partout.
+CID_DU_LOGO = "logo-cga"
+
+
+def _tableau_html(tableau: list[tuple[str, str]]) -> str:
+    """Le détail : lignes fines, total sur un fond lavande (11 novembre 2026)."""
+    rangees = []
+    for rang, (designation, valeur) in enumerate(tableau):
+        dernier = rang == len(tableau) - 1
+        if dernier:
+            style = (
+                f"padding:13px 16px;font-size:15px;font-weight:700;color:{_INDIGO_900};"
+                f"background:{_LAVANDE};"
+            )
+        else:
+            style = (
+                f"padding:10px 16px;font-size:14px;color:{_INK_700};"
+                f"border-bottom:1px solid {_LINE_200};"
+            )
+        rangees.append(
+            f'<tr><td style="{style}">{escape(designation, quote=True)}</td>'
+            f'<td align="right" style="{style}white-space:nowrap;">'
+            f"{escape(valeur, quote=True)}</td></tr>"
+        )
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        f'style="margin:8px 0 24px;border-collapse:separate;border:1px solid {_LINE_200};'
+        'border-radius:10px;overflow:hidden;">' + "".join(rangees) + "</table>"
+    )
+
+
+def _html(
+    gabarit_: Gabarit, valeurs: dict[str, str], tableau: list[tuple[str, str]] | None = None
+) -> str:
     """Le corps HTML. Tables et CSS en ligne — voir l'en-tête."""
     corps = "".join(
-        f'<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:{_INK_900};">'
+        f'<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:{_INK_700};">'
         f"{_remplir(p, valeurs)}</p>"
         for p in gabarit_.paragraphes
+        if _remplir(p, valeurs).strip()
     )
+    if tableau:
+        corps += _tableau_html(tableau)
 
     if gabarit_.action is not None:
         libelle, adresse = gabarit_.action
+        lien = _remplir(adresse, valeurs)
+        # Un bouton arrondi, puis l'adresse en clair : certaines messageries
+        # d'entreprise désactivent les boutons, et un lien recopié doit rester possible.
         corps += (
             '<table role="presentation" cellpadding="0" cellspacing="0" '
-            'style="margin:24px 0;"><tr><td '
-            f'style="background:{_MAGENTA_600};border-radius:6px;">'
-            f'<a href="{_remplir(adresse, valeurs)}" '
-            'style="display:inline-block;padding:13px 26px;font-size:15px;'
-            'font-weight:600;color:#ffffff;text-decoration:none;">'
+            'style="margin:26px 0 10px;"><tr><td '
+            f'bgcolor="{_MAGENTA_600}" style="background:{_MAGENTA_600};border-radius:10px;'
+            'box-shadow:0 2px 6px rgba(140,45,134,.25);">'
+            f'<a href="{lien}" '
+            'style="display:inline-block;padding:14px 30px;font-size:15px;'
+            'font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:.2px;">'
             f"{_remplir(libelle, valeurs)}</a></td></tr></table>"
+            f'<p style="margin:0 0 22px;font-size:12px;line-height:1.5;color:{_INK_500};">'
+            "Si le bouton ne s'ouvre pas, copiez cette adresse dans votre navigateur :<br />"
+            f'<a href="{lien}" style="color:{_MAGENTA_600};word-break:break-all;">{lien}</a></p>'
         )
 
     if gabarit_.avertissement is not None:
         corps += (
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            f'style="margin:20px 0;background:{_WARNING_100};border-left:3px solid '
-            f'{_WARNING};border-radius:4px;"><tr><td style="padding:14px 16px;'
-            f'font-size:14px;line-height:1.55;color:{_INK_900};">'
+            f'style="margin:20px 0 4px;background:{_WARNING_100};border:1px solid #f3dfbf;'
+            f'border-left:4px solid {_WARNING};border-radius:10px;"><tr><td '
+            f'style="padding:14px 18px;font-size:14px;line-height:1.6;color:{_INK_900};">'
             f"{_remplir(gabarit_.avertissement, valeurs)}</td></tr></table>"
         )
 
@@ -245,24 +315,30 @@ def _html(gabarit_: Gabarit, valeurs: dict[str, str]) -> str:
     return f"""\
 {prevu}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" \
-style="background:{_SURFACE_ALT};padding:28px 12px;">
+bgcolor="{_SURFACE_ALT}" style="background:{_SURFACE_ALT};padding:32px 12px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" \
-style="max-width:560px;background:{_SURFACE};border:1px solid {_LINE_200};\
-border-radius:10px;overflow:hidden;font-family:-apple-system,'Segoe UI',\
-Roboto,Helvetica,Arial,sans-serif;">
-<tr><td style="background:{_INDIGO_900};padding:20px 28px;">
-<span style="font-size:15px;font-weight:700;color:#ffffff;letter-spacing:.3px;">\
-CGA Broad Range Consulting Group</span></td></tr>
-<tr><td style="padding:28px;">
-<h1 style="margin:0 0 18px;font-size:20px;line-height:1.35;color:{_INDIGO_700};">\
-{_remplir(gabarit_.titre, valeurs)}</h1>
+style="max-width:600px;background:{_SURFACE};border:1px solid {_LINE_200};\
+border-radius:16px;overflow:hidden;font-family:{_POLICE};\
+box-shadow:0 4px 18px rgba(46,27,77,.06);">
+<tr><td style="padding:0;">{_bandeau()}</td></tr>
+<tr><td style="padding:30px 34px 10px;">
+<p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:1.2px;\
+text-transform:uppercase;color:{_MAGENTA_600};">Votre centre de gestion agréé</p>
+<h1 style="margin:0 0 20px;font-size:22px;line-height:1.35;font-weight:700;\
+color:{_INDIGO_900};">{_remplir(gabarit_.titre, valeurs)}</h1>
 {corps}
 </td></tr>
-<tr><td style="padding:18px 28px;border-top:1px solid {_LINE_200};\
-font-size:12px;line-height:1.6;color:{_INK_500};">{_PIED}<br />\
-<span style="color:{_INK_500};">Ce message vous est adressé par le cabinet qui \
-tient votre dossier. Pour toute question, répondez-y simplement.</span></td></tr>
+<tr><td style="padding:6px 34px 28px;">
+<p style="margin:0;font-size:14px;line-height:1.6;color:{_INK_700};">Bien cordialement,<br />\
+<strong style="color:{_INDIGO_900};">L'équipe du cabinet</strong></p>
+</td></tr>
+<tr><td bgcolor="{_LAVANDE}" style="background:{_LAVANDE};padding:22px 34px;\
+border-top:1px solid {_LINE_200};text-align:center;font-size:12px;line-height:1.7;\
+color:{_INK_500};">{_PIED}<br />\
+<span style="display:inline-block;margin-top:8px;color:#8a8399;font-size:11px;">\
+Ce message vous est adressé par le cabinet qui tient votre dossier. Pour toute question, \
+répondez-y simplement.</span></td></tr>
 </table>
 </td></tr>
 </table>"""
@@ -274,12 +350,72 @@ def rendre(gabarit_: Gabarit, contexte: dict[str, Any]) -> MessageRendu:
     ⚠️ Lève `KeyError` si une marque manque. L'appelant doit avoir consulté
     `cles_manquantes` d'abord — voir l'en-tête, règle 1.
     """
-    brutes = {cle: "" if valeur is None else str(valeur) for cle, valeur in contexte.items()}
+    tableau = _tableau_du_contexte(gabarit_, contexte)
+    brutes = {
+        cle: "" if valeur is None else str(valeur)
+        for cle, valeur in contexte.items()
+        if cle not in CLES_NON_TEXTUELLES and cle != gabarit_.tableau
+    }
     echappees = {cle: escape(valeur, quote=True) for cle, valeur in brutes.items()}
     return MessageRendu(
         objet=_remplir(gabarit_.objet, brutes),
-        texte=_texte(gabarit_, brutes),
-        html=_html(gabarit_, echappees),
+        texte=_texte(gabarit_, brutes, tableau),
+        html=_html(gabarit_, echappees, tableau),
+    )
+
+
+#: La clé du contexte qui porte les pièces jointes : une liste de triplets
+#: `(nom du fichier, octets, type MIME)`. Lue par le transport, jamais rendue.
+CLE_PIECES_JOINTES = "pieces_jointes"
+#: Ce que le rendu ne doit pas convertir en texte : des octets passés par
+#: `str()` deviendraient des kilo-octets de `b'...'` gardés en mémoire pour rien.
+CLES_NON_TEXTUELLES = frozenset({CLE_PIECES_JOINTES})
+
+
+def _tableau_du_contexte(
+    gabarit_: Gabarit, contexte: dict[str, Any]
+) -> list[tuple[str, str]] | None:
+    """Les rangées du tableau, ou `None`. Tolérant : un contexte mal formé ne doit
+    pas empêcher le message de partir sans son tableau."""
+    if gabarit_.tableau is None:
+        return None
+    brut = contexte.get(gabarit_.tableau)
+    if not isinstance(brut, (list, tuple)):
+        return None
+    rangees = [(str(r[0]), str(r[1])) for r in brut if isinstance(r, (list, tuple)) and len(r) == 2]
+    return rangees or None
+
+
+def _bandeau() -> str:
+    """Le logo sur fond blanc, la maison à côté, puis un filet aux couleurs de la marque
+    (11 novembre 2026 : plus clair et plus aéré que le bandeau indigo plein).
+
+    ⚠️ Sans le fichier du logo, le nom de la maison tient seul l'en-tête : un message sans
+    la marque part quand même.
+    """
+    logo = (
+        f'<td width="132" style="padding:22px 0 18px 30px;">'
+        f'<img src="cid:{CID_DU_LOGO}" width="112" alt="CGA Broad Range" '
+        'style="display:block;border:0;width:112px;height:auto;" /></td>'
+        if logo_disponible()
+        else ""
+    )
+    nom = (
+        '<td style="padding:22px 30px 18px 18px;" align="right">'
+        f'<span style="font-size:14px;font-weight:700;color:{_INDIGO_900};'
+        'letter-spacing:.2px;">CGA Broad Range Consulting Group</span><br />'
+        f'<span style="font-size:11px;color:{_INK_500};">'
+        "Comptabilité · Fiscalité · Juridique · Formations</span></td>"
+    )
+    filet = (
+        f'<tr><td colspan="2" height="4" bgcolor="{_MAGENTA_600}" style="height:4px;'
+        f"line-height:4px;font-size:0;background:{_MAGENTA_600};"
+        f'background-image:linear-gradient(90deg,{_INDIGO_700},{_MAGENTA_600});">&nbsp;</td></tr>'
+    )
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        f'bgcolor="{_SURFACE}" style="background:{_SURFACE};">'
+        f"<tr>{logo}{nom}</tr>{filet}</table>"
     )
 
 
@@ -288,6 +424,21 @@ def rendre(gabarit_: Gabarit, contexte: dict[str, Any]) -> MessageRendu:
 # ⚠️ Les clés `{…}` doivent correspondre au contexte des appelants. Le test
 # `test_courriel.py` vérifie chaque gabarit contre le contexte réel de son site
 # d'appel — c'est ce qui empêche qu'un renommage passe inaperçu.
+
+#: 9 novembre 2026 : les phrases communes aux quatre relances d'honoraires. Les moyens
+#: de règlement sont ceux de l'espace adhérent (décision du 14 octobre 2026).
+_MOYENS_DE_REGLEMENT = (
+    "Vous pouvez régler par mobile money (Tara) depuis la page Honoraires de votre "
+    "espace, ou au guichet du cabinet, contre reçu."
+)
+_DEJA_REGLE = (
+    "Si votre règlement vient de partir, merci de ne pas tenir compte de ce message. Pour "
+    "toute question, votre interlocuteur au cabinet reste à votre disposition."
+)
+_AVERTISSEMENT_ESPACE = (
+    "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre mot de "
+    "passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+)
 
 CATALOGUE: dict[str, Gabarit] = {
     g.code: g
@@ -334,10 +485,13 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Votre règlement est bien reçu, et le dossier de "
                 "<strong>{denomination}</strong> est ouvert. Nous préparons son "
                 "immatriculation.",
-                "Il nous faut maintenant vos pièces. Vous pouvez les envoyer "
-                "depuis votre suivi, en photographiant chaque document : la liste "
-                "s'y trouve, et vous y voyez à tout moment où en est votre "
-                "dossier.",
+                # 9 novembre 2026 : la société n'existe pas encore. On ne demande
+                # que ce que le fondateur a déjà ; le reste se prépare avec lui.
+                "Il nous faut maintenant les pièces que vous avez déjà en main. "
+                "Vous pouvez les envoyer depuis votre suivi, en photographiant "
+                "chaque document : la liste s'y trouve, et vous y voyez à tout "
+                "moment où en est votre dossier. Les statuts signés et le bail au "
+                "nom de la société se prépareront ensuite, avec le cabinet.",
                 "Gardez ce message : le lien ci-dessous reste valable jusqu'à "
                 "l'immatriculation de votre société.",
             ),
@@ -345,6 +499,69 @@ CATALOGUE: dict[str, Gabarit] = {
             avertissement=(
                 "Ce lien vous est personnel : il ouvre votre dossier sans mot de "
                 "passe. Ne le transférez pas."
+            ),
+        ),
+        Gabarit(
+            code="creation.dossier_ouvert_avec_compte",
+            objet="Votre dossier {denomination} est ouvert",
+            titre="Nous commençons, {prenom}",
+            paragraphes=(
+                # ─────────────────────────────────────────────────────────────
+                # ⚠️ LE MÊME MESSAGE QUE `creation.dossier_ouvert`, ET UN COMPTE.
+                #
+                # Le cabinet l'a demandé le 14 octobre 2026 : le compte client
+                # s'ouvre au paiement, et elle choisit son mot de passe. Le
+                # bouton y mène.
+                #
+                # ⚠️ Le lien de suivi sans mot de passe reste dans le message,
+                # en clair : c'est lui qui sert le jour où elle n'a pas le temps
+                # de choisir un mot de passe, ou que le bouton a expiré. Un seul
+                # bouton par message (voir `Gabarit`), et c'est le compte qui le
+                # prend, parce que c'est lui qui dure.
+                # ─────────────────────────────────────────────────────────────
+                "Votre règlement est bien reçu, et le dossier de "
+                "<strong>{denomination}</strong> est ouvert. Nous préparons son "
+                "immatriculation.",
+                "Votre espace client est créé à cette adresse. Choisissez votre "
+                "mot de passe : vous y verrez chaque étape de votre création, et "
+                "vous y enverrez les pièces que vous avez déjà, en photographiant "
+                "chaque document. Les statuts signés et le bail au nom de la "
+                "société se prépareront ensuite, avec le cabinet.",
+                "Pas le temps maintenant ? Votre dossier s'ouvre aussi sans mot "
+                "de passe, depuis ce lien personnel, valable jusqu'à "
+                "l'immatriculation : {lien}",
+            ),
+            action=("Choisir mon mot de passe", "{lien_compte}"),
+            avertissement=(
+                "Le bouton ne fonctionne qu'une fois. S'il a expiré, demandez un "
+                "nouveau lien depuis « Mot de passe oublié » sur la page de "
+                "connexion. Le lien de suivi vous est personnel : ne le "
+                "transférez pas."
+            ),
+        ),
+        Gabarit(
+            code="compte.adhesion_ajoutee",
+            objet="Votre société {denomination} est immatriculée",
+            titre="Félicitations, {prenom}",
+            paragraphes=(
+                # ⚠️ ELLE A DÉJÀ SON COMPTE : PAS DE LIEN D'ACTIVATION.
+                #
+                # Ouvert au paiement de sa création, son compte reçoit à
+                # l'immatriculation l'espace adhérent de sa société. Lui
+                # renvoyer `compte.activation_creation` lui ferait choisir un
+                # mot de passe qu'elle a déjà, sur un lien qui n'existe pas.
+                "<strong>{denomination}</strong> est immatriculée. Son numéro de "
+                "contribuable est <strong>{niu}</strong>, et son dossier est "
+                "désormais suivi par le cabinet.",
+                "Votre espace adhérent s'ajoute à votre compte : vos échéances, "
+                "vos justificatifs et les documents que le cabinet dépose pour "
+                "vous s'y trouvent. Connectez-vous avec votre mot de passe "
+                "habituel.",
+            ),
+            action=("Ouvrir mon espace", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre page de connexion habituelle et reste "
+                "valable. Le cabinet ne vous demandera jamais votre mot de passe."
             ),
         ),
         Gabarit(
@@ -439,8 +656,7 @@ CATALOGUE: dict[str, Gabarit] = {
                 # corps était un demi-geste : le même raisonnement valait des
                 # deux côtés, et je ne l'avais pas tiré jusqu'au bout.
                 # ─────────────────────────────────────────────────────────────
-                "Votre demande concernant <strong>{service}</strong> nous est "
-                "bien parvenue.",
+                "Votre demande concernant <strong>{service}</strong> nous est bien parvenue.",
                 "Un responsable l'examine et vous recontacte au "
                 "<strong>{telephone}</strong>. Vous n'avez rien à faire d'ici "
                 "là : si un document nous est nécessaire, il vous sera demandé "
@@ -450,6 +666,92 @@ CATALOGUE: dict[str, Gabarit] = {
                 "Ce message confirme la réception de votre demande. Il ne vaut "
                 "ni devis ni engagement : le montant vous sera proposé après "
                 "examen."
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : l'accusé d'une demande qui porte son code de dossier, et le
+            # rendez-vous pris s'il y en a un. Le code est COURT et se dicte : c'est lui que
+            # le client saisira s'il revient remplir le formulaire.
+            code="demande.accuse_avec_code",
+            objet="Votre demande concernant {service} nous est bien parvenue",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Votre demande concernant <strong>{service}</strong> nous est bien parvenue.",
+                "Votre code de dossier : <strong>{code}</strong>. Gardez ce message : si vous "
+                "complétez votre demande plus tard sur le site, indiquez ce code. Vos frais de "
+                "dossier déjà versés seront retrouvés et déduits.",
+                "{rendez_vous}",
+                "Un responsable vous recontacte au <strong>{telephone}</strong>.",
+            ),
+            avertissement=(
+                "Ce message confirme la réception de votre demande. Il ne vaut "
+                "ni devis ni engagement : le montant vous sera proposé après "
+                "examen."
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : le lien de visioconférence d'un rendez-vous en ligne, posé
+            # par le responsable. L'accusé l'avait promis (« le lien vous sera envoyé »).
+            code="rendez_vous.lien",
+            objet="Le lien de votre rendez-vous en ligne",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "{rendez_vous}",
+                "Le jour venu, ouvrez le lien ci-dessous quelques minutes avant l'heure : un "
+                "conseiller du cabinet vous y attend pour remplir votre dossier avec vous.",
+            ),
+            action=("Rejoindre le rendez-vous", "{lien}"),
+            avertissement=(
+                "Ce lien n'est valable que pour ce rendez-vous. Empêché ? Prévenez le cabinet "
+                "avant l'heure : un rendez-vous manqué sans prévenir peut être pénalisé."
+            ),
+        ),
+        Gabarit(
+            # Lot 4 (9 novembre 2026) : une pénalité de retard décidée par un responsable.
+            code="penalite.infligee",
+            objet="Votre dossier : une pénalité de retard",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Le cabinet a appliqué à votre dossier une pénalité : <strong>{motif}</strong>, "
+                "de <strong>{montant} FCFA</strong>.",
+                "{explication}",
+                "Elle se règle au cabinet. Une question, un empêchement : répondez à ce "
+                "courriel ou appelez votre interlocuteur, qui peut la revoir.",
+            ),
+        ),
+        Gabarit(
+            # Lot 4 (9 novembre 2026) : un document ou une adhésion qui expire, à l'adhérent.
+            code="expiration.adherent",
+            objet="{libelle} : à renouveler",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Pour <strong>{denomination}</strong> : {libelle} {echeance}.",
+                "Pensez à le renouveler, et à transmettre le nouveau document au cabinet depuis "
+                "votre espace. Votre interlocuteur au cabinet en est aussi prévenu.",
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : le rappel de la veille d'un rendez-vous de création.
+            code="rendez_vous.rappel",
+            objet="Rappel : votre rendez-vous avec le cabinet",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "{rendez_vous}",
+                "{acces}",
+                "Empêché ? Prévenez le cabinet avant l'heure : un rendez-vous manqué sans "
+                "prévenir peut être pénalisé.",
+            ),
+        ),
+        Gabarit(
+            # 9 novembre 2026 : une demande rejointe à son dossier par le code.
+            code="demande.rattachee",
+            objet="Votre demande est jointe à votre dossier",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Les informations que vous venez d'envoyer sont jointes à votre dossier. Les "
+                "frais de dossier que vous avez déjà versés y sont retrouvés : ils seront "
+                "déduits du montant de votre proforma.",
+                "{rendez_vous}",
             ),
         ),
         Gabarit(
@@ -594,7 +896,8 @@ CATALOGUE: dict[str, Gabarit] = {
             objet="Votre lien d'accès à l'espace de {denomination}",
             titre="Bonjour {prenom}",
             paragraphes=(
-                "À votre demande, {par}, du cabinet, vous envoie un lien pour {geste}.",
+                # 19 octobre 2026 : le cabinet, jamais le nom du collaborateur.
+                "À votre demande, le cabinet vous envoie un lien pour {geste}.",
                 "Ce lien est valable <strong>{validite}</strong> et ne sert qu'une fois.",
             ),
             action=("Ouvrir mon espace", "{lien}"),
@@ -662,6 +965,35 @@ CATALOGUE: dict[str, Gabarit] = {
         # lien est forgé, par le serveur, sans que le lien transite par personne.
         # La relance, elle, n'en porte aucun (voir plus bas).
         Gabarit(
+            # ─────────────────────────────────────────────────────────────────
+            # ⚠️ LA PROPOSITION AVEC SON DÉTAIL (14 octobre 2026).
+            #
+            # Le cabinet l'a demandé : le courriel doit suivre le style de ses
+            # proformas. La cliente lisait un montant et un bouton ; elle lit
+            # maintenant ce que le prix couvre, rubrique par rubrique, avec le
+            # total en cartouche comme sur le document, qui est joint.
+            #
+            # Un gabarit distinct, et non une variante du suivant : celui-ci
+            # annonce une pièce jointe et un détail. Une proforma émise sans
+            # document n'a ni l'un ni l'autre, et le lui promettre serait faux.
+            # ─────────────────────────────────────────────────────────────────
+            code="proforma.envoi.detaillee",
+            objet="Votre proposition {proforma} : {montant} FCFA",
+            titre="Bonjour {nom}",
+            paragraphes=(
+                "Suite à notre échange, voici notre proposition <strong>{proforma}</strong>. "
+                "Elle se décompose ainsi :",
+            ),
+            tableau="detail",
+            action=("Consulter et accepter ma proposition", "{lien}"),
+            avertissement=(
+                "Le document complet est joint à ce message : il précise les pièces à "
+                "nous fournir, celles que vous recevrez, le délai et les moyens de "
+                "règlement. Ce lien est personnel et reste valable jusqu'au {expire_le}. "
+                "Ne le transférez pas : il permet d'accepter la proposition."
+            ),
+        ),
+        Gabarit(
             code="proforma.envoi",
             objet="Votre proposition {proforma} : {montant} FCFA",
             titre="Bonjour {nom}",
@@ -707,6 +1039,210 @@ CATALOGUE: dict[str, Gabarit] = {
                 "relancée automatiquement et votre dossier sera repris par votre "
                 "interlocuteur."
             ),
+        ),
+        # ── 15 octobre 2026 : l'adhérent apprend ce que le cabinet a fait pour lui ──
+        #
+        # Il voyait le résultat en se connectant, et seulement alors. Une quittance
+        # refusée qu'il ne découvre pas laisse courir l'échéance.
+        Gabarit(
+            code="adherent.quittance_verifiee",
+            objet="Votre quittance {obligation} est vérifiée",
+            titre="C'est en ordre, {prenom}",
+            paragraphes=(
+                "Le cabinet a vérifié la quittance que vous avez envoyée pour "
+                "<strong>{obligation}</strong> ({periode}) : l'échéance de "
+                "<strong>{denomination}</strong> est désormais payée.",
+            ),
+            action=("Voir mes échéances", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        Gabarit(
+            code="adherent.quittance_refusee",
+            objet="Votre quittance {obligation} est à renvoyer",
+            titre="Une précision est nécessaire, {prenom}",
+            paragraphes=(
+                "Le cabinet n'a pas pu valider la quittance envoyée pour "
+                "<strong>{obligation}</strong> ({periode}) de <strong>{denomination}</strong>.",
+                "Motif : {motif}",
+                "Renvoyez la bonne quittance depuis votre espace : l'échéance reste à "
+                "régler tant qu'elle n'est pas vérifiée.",
+            ),
+            action=("Renvoyer la quittance", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        Gabarit(
+            code="adherent.fonds_recus",
+            objet="Le cabinet a reçu vos fonds pour {obligation}",
+            titre="Vos fonds sont reçus, {prenom}",
+            paragraphes=(
+                "Le cabinet a reçu <strong>{montant} FCFA</strong> pour "
+                "<strong>{obligation}</strong> ({periode}) de <strong>{denomination}</strong>.",
+                "Il règle l'administration en votre nom. L'échéance passera à « payée » "
+                "avec la quittance de l'administration, que vous retrouverez dans votre "
+                "espace.",
+            ),
+            action=("Suivre mes échéances", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        # 18 octobre 2026 (point 25) : la réponse à un candidat, telle que le cabinet l'a
+        # relue. Le texte arrive découpé en paragraphes `p1` à `p10` ; les vides ne
+        # s'écrivent pas. Échappé comme toute valeur : aucun balisage ne passe.
+        # 18 octobre 2026 (point 22) : le client d'une prestation ponctuelle apprend qu'un
+        # juriste l'a prise en charge, puis que le livrable est prêt. Sans nom de juriste :
+        # c'est le cabinet qui répond (point 21).
+        Gabarit(
+            code="mission.ouverte",
+            objet="Votre demande {reference} est prise en charge",
+            titre="Votre demande est entre de bonnes mains",
+            paragraphes=(
+                "Bonjour,",
+                "Le cabinet a bien reçu votre règlement et a ouvert le travail sur votre "
+                "demande : <strong>{objet_de_la_demande}</strong>.",
+                "Un juriste du cabinet l'instruit ; un second relit avant que rien ne vous "
+                "soit remis. Vous serez prévenu dès que le livrable sera prêt.",
+            ),
+            # 19 octobre 2026 (point 22) : où en est la demande, sans appeler.
+            action=("Suivre ma demande", "{lien}"),
+            avertissement=(
+                "Ce bouton vous est personnel et reste valable pour cette demande : ne le "
+                "transférez pas. Le cabinet ne vous demandera jamais de mot de passe."
+            ),
+        ),
+        Gabarit(
+            code="mission.livree",
+            objet="Votre demande {reference} est traitée",
+            titre="Votre livrable est prêt",
+            paragraphes=(
+                "Bonjour,",
+                "Le travail sur votre demande <strong>{objet_de_la_demande}</strong> est "
+                "terminé et validé par le cabinet.",
+                "Votre interlocuteur vous le remet et reste disponible pour en parler.",
+            ),
+            action=("Ouvrir mon livrable", "{lien}"),
+            avertissement=(
+                "Ce bouton vous est personnel et reste valable pour cette demande : ne le "
+                "transférez pas. Le cabinet ne vous demandera jamais de mot de passe."
+            ),
+        ),
+        # 19 octobre 2026 (point 25) : le candidat savait sa candidature reçue à l'écran,
+        # puis n'avait plus rien jusqu'à la réponse. L'accusé part au dépôt.
+        Gabarit(
+            code="recrutement.accuse",
+            objet="Votre candidature : {poste}",
+            titre="Candidature bien reçue",
+            paragraphes=(
+                "Bonjour {nom},",
+                "Le cabinet a bien reçu votre candidature au poste de "
+                "<strong>{poste}</strong>, avec votre CV.",
+                "Elle sera lue par la personne chargée du recrutement. Le cabinet vous "
+                "répond, que votre profil soit retenu ou non.",
+                "Vous n'avez rien à renvoyer : un second dépôt pour la même offre n'est "
+                "pas nécessaire.",
+            ),
+        ),
+        Gabarit(
+            code="recrutement.reponse",
+            objet="{objet}",
+            titre="{poste}",
+            paragraphes=tuple(f"{{p{rang}}}" for rang in range(1, 11)),
+        ),
+        Gabarit(
+            code="adherent.honoraires_regles",
+            objet="Reçu de vos honoraires, {periode}",
+            titre="Merci, {prenom}",
+            paragraphes=(
+                "Le règlement de <strong>{montant} FCFA</strong> pour les honoraires de "
+                "<strong>{periode}</strong> de <strong>{denomination}</strong> est bien reçu "
+                "(référence {reference}).",
+                "Votre reçu est disponible dans votre espace, rubrique Honoraires.",
+            ),
+            action=("Voir mon reçu", "{lien}"),
+            avertissement=(
+                "Ce bouton mène à votre espace et reste valable : connectez-vous avec votre "
+                "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
+            ),
+        ),
+        # 9 novembre 2026 : les relances d'honoraires, du travail `relances-des-honoraires`
+        # (réunion du 4 novembre : « leur faire comprendre, à l'avance »). Courtoises et
+        # fermes ; chaque délai cité vient de la règle du cabinet, aucun n'est écrit ici.
+        Gabarit(
+            code="honoraires.echeance_a_regler",
+            objet="Vos honoraires de {periode} sont à régler",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Les honoraires de <strong>{periode}</strong> de <strong>{denomination}"
+                "</strong>, soit <strong>{montant} FCFA</strong>, sont exigibles depuis le "
+                "{exigible_le}. Nous vous remercions de les régler au plus tard le "
+                "<strong>{limite}</strong>.",
+                "Total restant dû à ce jour : <strong>{du} FCFA</strong>.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
+        ),
+        Gabarit(
+            code="honoraires.en_retard",
+            objet="Honoraires de {periode} : règlement en retard",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Sauf erreur de notre part, les honoraires de <strong>{periode}</strong> de "
+                "<strong>{denomination}</strong> ({montant} FCFA), exigibles le {exigible_le}, "
+                "ne sont pas réglés, et le délai de règlement est dépassé.",
+                "Total restant dû à ce jour : <strong>{du} FCFA</strong>. Nous vous prions de "
+                "régulariser sans tarder : au-delà de {mois} mois d'impayé, l'accès à votre "
+                "espace est suspendu.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
+        ),
+        Gabarit(
+            code="honoraires.preavis_suspension",
+            objet="Préavis : votre espace sera suspendu le {suspension_le}",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Des honoraires de <strong>{denomination}</strong> restent impayés depuis "
+                "le {exigible_le} (échéance de {periode}). Total restant dû : <strong>{du} "
+                "FCFA</strong>.",
+                "Sans règlement, l'accès à votre espace sera <strong>suspendu le "
+                "{suspension_le}</strong>, dans {jours} jour(s). Vous pourrez encore consulter "
+                "et régler vos honoraires ; le reste de l'espace sera fermé jusqu'à la "
+                "régularisation. Pour l'éviter, réglez les honoraires en retard avant cette "
+                "date.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
+        ),
+        Gabarit(
+            code="honoraires.acces_suspendu",
+            objet="Votre espace est suspendu : honoraires impayés",
+            titre="Bonjour {prenom}",
+            paragraphes=(
+                "Les honoraires de <strong>{denomination}</strong> exigibles depuis le "
+                "{exigible_le} (échéance de {periode}) ne sont pas réglés : l'accès à votre "
+                "espace est suspendu depuis le {suspension_le}. Total restant dû : <strong>"
+                "{du} FCFA</strong>.",
+                "Vous pouvez toujours consulter et régler vos honoraires. L'accès complet se "
+                "rouvre dès que les échéances impayées depuis plus de {mois} mois sont "
+                "réglées, ou sur accord du cabinet.",
+                _MOYENS_DE_REGLEMENT,
+                _DEJA_REGLE,
+            ),
+            action=("Régler mes honoraires", "{lien}"),
+            avertissement=_AVERTISSEMENT_ESPACE,
         ),
     )
 }

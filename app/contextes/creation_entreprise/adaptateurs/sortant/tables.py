@@ -23,7 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
-__all__ = ["TableDossierCreation"]
+__all__ = ["TableDossierCreation", "TableRegleDesDelaisDeCreation"]
 
 
 class TableDossierCreation(Cloisonne, Document, Base):
@@ -49,3 +49,12 @@ class TableDossierCreation(Cloisonne, Document, Base):
     #: Promu pour retrouver, depuis le portefeuille, le dossier qui a créé une
     #: entreprise. Nul tant que la conversion n'a pas eu lieu.
     converti_en: Mapped[str | None] = mapped_column(String(20))
+
+
+class TableRegleDesDelaisDeCreation(Cloisonne, Document, Base):
+    """Les délais de la création fixés par la direction (lot 4, 9 novembre 2026) : une ligne
+    par locataire. Sans ligne : aucun délai suivi. Voir `domaine/delais.py`."""
+
+    __tablename__ = "regle_des_delais_de_creation"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)

@@ -21,7 +21,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire
+from app.contextes.portefeuille.adaptateurs.entrant.routes_http import lire_le_dossier
 from app.contextes.portefeuille.adaptateurs.sortant.espace_adherent_yaml import (
     charger_la_fiche_adherent,
 )
@@ -34,6 +34,13 @@ from app.contextes.portefeuille.domaine.espace_adherent import (
     choisir_l_interlocuteur,
     signalement_en_double,
 )
+from app.contextes.portefeuille.domaine.fiche_signaletique import (
+    ActiviteDeclaree,
+    ControleDeLEntite,
+    FicheRefusee,
+    FicheSignaletique,
+    MembreDuConseil,
+)
 from app.contextes.portefeuille.domaine.temporel import resoudre
 from app.contextes.transverse.api import (
     AccesRequis,
@@ -44,7 +51,7 @@ from app.contextes.transverse.api import (
     habilitations_actives,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 routeur = APIRouter(prefix="/portefeuille", tags=["Portefeuille · espace de l'adhérent"])
 
@@ -82,7 +89,7 @@ def _interlocuteur(niu: str, jour: date) -> Interlocuteur | None:
         candidats.append(
             CandidatInterlocuteur(
                 compte=compte.identifiant,
-                role=h.role.value,
+                role=str(h.role),
                 nommee_sur_le_dossier=h.portee is not None,
                 debut=h.debut,
                 nom=compte.nom_affiche,
@@ -140,8 +147,8 @@ class MonEntreprise(BaseModel):
 def lire_mon_entreprise(acces: AccesRequis, niu: str) -> MonEntreprise:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
     reglages = _reglages()
-    dossier = _lire(niu)
-    jour = maintenant().date()
+    dossier = lire_le_dossier(niu)
+    jour = aujourd_hui()
     regime = resoudre(dossier.regimes, jour)
     if regime is None:
         raise HTTPException(status_code=409, detail=f"{niu} : aucun régime connu à ce jour.")
@@ -209,7 +216,7 @@ class Signalement(BaseModel):
 def signaler_un_changement(acces: AccesRequis, niu: str, corps: Signalement) -> SignalementLu:
     exiger_dossier(acces, Permission.SIGNALER_UN_CHANGEMENT, niu)
     reglages = _reglages()
-    dossier = _lire(niu)
+    dossier = lire_le_dossier(niu)
     message = corps.message.strip()
     if len(message) < 5:
         raise HTTPException(status_code=422, detail="décrivez le changement en quelques mots.")
@@ -244,3 +251,162 @@ def signaler_un_changement(acces: AccesRequis, niu: str, corps: Signalement) -> 
 
 
 __all__ = ["routeur"]
+
+
+# ── La fiche signalétique de la DSF (15 octobre 2026) ────────────────────────────
+#
+# Fiches R1 à R3 du modèle officiel : ce que le client connaît et que le dossier ne
+# portait pas. Il la renseigne ici, le cabinet la valide. Voir `fiche_signaletique.py`.
+
+OBJET_FICHE = "fiche_dsf"
+
+
+class VueDeLaFiche(BaseModel):
+    fiche: FicheSignaletique
+    #: Ce qui manque encore pour établir la DSF, dans les mots du client.
+    manquants: list[str]
+    #: Ce que le dossier porte déjà et que la DSF reprendra (rappel, non modifiable ici).
+    denomination: str
+    forme_juridique: str
+    rccm: str | None
+    siege: str | None
+
+
+class SaisieDeLaFiche(BaseModel):
+    """Les champs que le client renseigne. Ceux du cycle (état, dates) ne s'envoient pas."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    telephone: str | None = Field(default=None, max_length=40)
+    courriel: str | None = Field(default=None, max_length=200)
+    boite_postale: str | None = Field(default=None, max_length=40)
+    ville: str | None = Field(default=None, max_length=80)
+    adresse_geographique: str | None = Field(default=None, max_length=300)
+    numero_cnps_employeur: str | None = Field(default=None, max_length=40)
+    code_importateur: str | None = Field(default=None, max_length=40)
+    personne_a_contacter: str | None = Field(default=None, max_length=200)
+    professionnel_des_etats: str | None = Field(default=None, max_length=300)
+    signataire_nom: str | None = Field(default=None, max_length=120)
+    signataire_qualite: str | None = Field(default=None, max_length=120)
+    etats_approuves_en_ag: bool | None = None
+    banque: str | None = Field(default=None, max_length=120)
+    numero_de_compte: str | None = Field(default=None, max_length=60)
+    etablissements_au_cameroun: int | None = Field(default=None, ge=0)
+    etablissements_hors_cameroun: int | None = Field(default=None, ge=0)
+    premiere_annee_au_cameroun: int | None = Field(default=None, ge=1900, le=2100)
+    controle: ControleDeLEntite | None = None
+    activites: list[ActiviteDeclaree] = Field(default_factory=list, max_length=20)
+    conseil_d_administration: list[MembreDuConseil] = Field(default_factory=list, max_length=30)
+
+
+class RenvoiDeLaFiche(BaseModel):
+    motif: str = Field(min_length=10, max_length=500)
+
+
+def _vue(entreprise) -> VueDeLaFiche:
+    fiche = entreprise.fiche_dsf or FicheSignaletique()
+    return VueDeLaFiche(
+        fiche=fiche,
+        manquants=fiche.manquants(),
+        denomination=entreprise.denomination,
+        forme_juridique=entreprise.forme_juridique,
+        rccm=entreprise.rccm,
+        siege=entreprise.siege,
+    )
+
+
+def _enregistrer(entreprise, fiche: FicheSignaletique, *, acteur: str, action: str, **apres):
+    from app.contextes.portefeuille.adaptateurs.entrant.routes_http import depot
+
+    depot().enregistrer(entreprise.model_copy(update={"fiche_dsf": fiche}))
+    atelier().journal.ajouter(
+        horodatage=maintenant(),
+        acteur=acteur,
+        action=action,
+        objet_type=OBJET_FICHE,
+        objet_id=entreprise.niu,
+        apres={"etat": fiche.etat.value, **apres},
+    )
+
+
+@routeur.get(
+    "/entreprises/{niu}/fiche-signaletique",
+    summary="La fiche signalétique de la DSF (fiches R1 à R3) et ce qui y manque",
+)
+def lire_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
+    exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
+    return _vue(lire_le_dossier(niu))
+
+
+@routeur.put(
+    "/entreprises/{niu}/fiche-signaletique",
+    summary="Renseigner la fiche signalétique : le client dans son espace, ou le cabinet",
+    responses={409: {"description": "Fiche soumise : en attente de la réponse du cabinet"}},
+)
+def renseigner_la_fiche(acces: AccesRequis, niu: str, saisie: SaisieDeLaFiche) -> VueDeLaFiche:
+    exiger_dossier(acces, Permission.RENSEIGNER_FICHE_DSF, niu)
+    entreprise = lire_le_dossier(niu)
+    try:
+        fiche = (entreprise.fiche_dsf or FicheSignaletique()).modifier(
+            saisie.model_dump(), par=acces.compte, a_l_instant=maintenant()
+        )
+    except FicheRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    _enregistrer(entreprise, fiche, acteur=acces.compte, action="portefeuille.fiche_dsf_renseignee")
+    return _vue(lire_le_dossier(niu))
+
+
+@routeur.post(
+    "/entreprises/{niu}/fiche-signaletique/soumission",
+    summary="Soumettre la fiche au cabinet",
+    responses={409: {"description": "Fiche incomplète, ou déjà soumise"}},
+)
+def soumettre_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
+    exiger_dossier(acces, Permission.RENSEIGNER_FICHE_DSF, niu)
+    entreprise = lire_le_dossier(niu)
+    try:
+        fiche = (entreprise.fiche_dsf or FicheSignaletique()).soumettre(a_l_instant=maintenant())
+    except FicheRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    _enregistrer(entreprise, fiche, acteur=acces.compte, action="portefeuille.fiche_dsf_soumise")
+    return _vue(lire_le_dossier(niu))
+
+
+@routeur.post(
+    "/entreprises/{niu}/fiche-signaletique/validation",
+    summary="Le cabinet valide la fiche soumise",
+    responses={409: {"description": "Aucune fiche soumise"}},
+)
+def valider_la_fiche(acces: AccesRequis, niu: str) -> VueDeLaFiche:
+    exiger_dossier(acces, Permission.VALIDER_FICHE_DSF, niu)
+    entreprise = lire_le_dossier(niu)
+    try:
+        fiche = (entreprise.fiche_dsf or FicheSignaletique()).valider(
+            par=acces.compte, a_l_instant=maintenant()
+        )
+    except FicheRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    _enregistrer(entreprise, fiche, acteur=acces.compte, action="portefeuille.fiche_dsf_validee")
+    return _vue(lire_le_dossier(niu))
+
+
+@routeur.post(
+    "/entreprises/{niu}/fiche-signaletique/renvoi",
+    summary="Le cabinet renvoie la fiche au client, avec ce qu'il doit corriger",
+    responses={409: {"description": "Aucune fiche soumise"}},
+)
+def renvoyer_la_fiche(acces: AccesRequis, niu: str, renvoi: RenvoiDeLaFiche) -> VueDeLaFiche:
+    exiger_dossier(acces, Permission.VALIDER_FICHE_DSF, niu)
+    entreprise = lire_le_dossier(niu)
+    try:
+        fiche = (entreprise.fiche_dsf or FicheSignaletique()).renvoyer(motif=renvoi.motif)
+    except FicheRefusee as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    _enregistrer(
+        entreprise,
+        fiche,
+        acteur=acces.compte,
+        action="portefeuille.fiche_dsf_renvoyee",
+        motif=fiche.motif_du_renvoi,
+    )
+    return _vue(lire_le_dossier(niu))

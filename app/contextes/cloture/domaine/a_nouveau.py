@@ -61,6 +61,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.comptabilite.contrats import (
+    JOURNAL_DES_A_NOUVEAUX,
     Compte,
     DestinationCompte,
     EcritureComptable,
@@ -75,6 +76,7 @@ from app.contextes.comptabilite.contrats import (
 
 __all__ = [
     "COMPTE_RESULTAT_NET",
+    "soldes_par_tiers",
     "JOURNAL_DES_A_NOUVEAUX",
     "Empechement",
     "MotifEmpechement",
@@ -89,7 +91,7 @@ COMPTE_RESULTAT_NET = "13"
 #: ⚠️ Le journal est **séparé des opérations diverses**, et la raison est dans
 #: `plan_syscohada.py` : un journal des à-nouveaux doit porter une écriture par
 #: exercice, et toute autre chose y est suspecte.
-JOURNAL_DES_A_NOUVEAUX = "AN"
+# Le code vit à la comptabilité, qui tient le journal ; il est réexporté ici, inchangé.
 
 
 class MotifEmpechement(StrEnum):
@@ -262,11 +264,31 @@ def obstacles_a_la_cloture(
     return tuple(obstacles)
 
 
+def soldes_par_tiers(
+    ecritures: list[EcritureComptable],
+) -> dict[str, dict[str | None, Decimal]]:
+    """Le solde net (débit moins crédit) de chaque compte, tiers par tiers.
+
+    Les écritures VALIDÉES seulement, comme `balance` : un brouillon n'est pas de la
+    comptabilité, et le reporter ferait naître une dette qui n'a jamais été constatée.
+    """
+    detail: dict[str, dict[str | None, Decimal]] = {}
+    for ecriture in ecritures:
+        if ecriture.etat is not EtatEcriture.VALIDEE:
+            continue
+        for ligne in ecriture.lignes:
+            signe = ligne.montant if ligne.sens is Sens.DEBIT else -ligne.montant
+            par_tiers = detail.setdefault(ligne.compte, {})
+            par_tiers[ligne.tiers] = par_tiers.get(ligne.tiers, Decimal(0)) + signe
+    return detail
+
+
 def lignes_d_a_nouveau(
     soldes: list[SoldeCompte],
     *,
     plan: list[Compte],
     compte_resultat: str = COMPTE_RESULTAT_NET,
+    detail_par_tiers: dict[str, dict[str | None, Decimal]] | None = None,
 ) -> list[LigneEcriture]:
     """Les lignes qui rouvrent l'exercice suivant sur les soldes du précédent.
 
@@ -293,6 +315,7 @@ def lignes_d_a_nouveau(
     ─────────────────────────────────────────────────────────────────────────────
     """
     destinations = {compte.numero: compte.destination for compte in plan}
+    lettrables = {compte.numero for compte in plan if compte.lettrable}
     lignes: list[LigneEcriture] = []
 
     for solde in soldes:
@@ -300,6 +323,43 @@ def lignes_d_a_nouveau(
             continue
         net = solde.total_debit - solde.total_credit
         if net == 0:
+            continue
+        # ⚠️ 15 OCTOBRE 2026 : UN COMPTE DE TIERS SE REPORTE TIERS PAR TIERS.
+        #
+        # Le report tenait en une ligne par compte : le total juste, et plus personne
+        # derrière. Au 1er janvier, l'exercice suivant ne savait plus ce qu'il devait à
+        # chaque fournisseur ni ce que chaque client lui devait : ni balance
+        # auxiliaire, ni lettrage d'un règlement N+1 avec sa facture N.
+        #
+        # ⚠️ LE TOTAL DU COMPTE NE BOUGE PAS : ce qui n'a pas de tiers, ou l'écart entre
+        # le détail et le solde, reste sur une ligne sans tiers. Le bilan d'ouverture
+        # est donc le même, au franc près, que celui de l'ancien report.
+        detail = (detail_par_tiers or {}).get(solde.compte)
+        if solde.compte in lettrables and detail:
+            reste = net
+            for tiers in sorted(t for t in detail if t is not None):
+                part = detail[tiers]
+                if part == 0:
+                    continue
+                reste -= part
+                lignes.append(
+                    LigneEcriture(
+                        compte=solde.compte,
+                        libelle="À-nouveau",
+                        sens=Sens.DEBIT if part > 0 else Sens.CREDIT,
+                        montant=abs(part),
+                        tiers=tiers,
+                    )
+                )
+            if reste != 0:
+                lignes.append(
+                    LigneEcriture(
+                        compte=solde.compte,
+                        libelle="À-nouveau",
+                        sens=Sens.DEBIT if reste > 0 else Sens.CREDIT,
+                        montant=abs(reste),
+                    )
+                )
             continue
         lignes.append(
             LigneEcriture(

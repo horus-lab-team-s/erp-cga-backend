@@ -34,9 +34,9 @@ from app.contextes.collecte.api import (
     pieces_en_memoire,
 )
 from app.contextes.comptabilite.adaptateurs.entrant.routes_http import (
-    _dossier_du_portefeuille,
-    _journaux,
     depot,
+    depot_des_journaux,
+    dossier_du_portefeuille,
 )
 from app.contextes.comptabilite.adaptateurs.sortant.cloture_mensuelle_yaml import (
     charger_les_reglages_de_la_cloture_mensuelle,
@@ -71,7 +71,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala
 from app.partage.locataire import courant
 
 routeur = APIRouter(prefix="/comptabilite", tags=["Comptabilité · clôture mensuelle"])
@@ -95,8 +95,8 @@ def _pieces(entreprise: str) -> list[PieceDuMois]:
             identifiant=p.identifiant,
             reference=p.reference_document,
             etat=p.etat.value,
-            date=p.date_document or p.recue_le.date(),
-            recue_le=p.recue_le.date(),
+            date=p.date_document or jour_a_douala(p.recue_le),
+            recue_le=jour_a_douala(p.recue_le),
         )
         for p in magasin.du_dossier(entreprise)
     ]
@@ -141,7 +141,7 @@ def points_de_cloture_du_mois(
     ecritures = depot(entreprise).lister(exercice)
     banques = {
         j.code: j.compte_contrepartie
-        for j in _journaux.charger()
+        for j in depot_des_journaux.charger()
         if j.nature is NatureJournal.BANQUE and j.compte_contrepartie
     }
     pieces = _pieces(entreprise)
@@ -224,13 +224,13 @@ def lire_la_cloture_du_mois(
     mois: str = Path(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="AAAA-MM"),
 ) -> VueDeCloture:
     exiger_dossier(acces, Permission.LIRE_COMPTABILITE, entreprise)
-    dossier = _dossier_du_portefeuille(entreprise)
+    dossier = dossier_du_portefeuille(entreprise)
     if dossier is None:
         raise HTTPException(status_code=404, detail=f"dossier {entreprise} inconnu.")
     du, au = bornes_du_mois(mois)
     # L'exercice est celui de l'année du mois, comme à la transmission (pas 102).
     exercice = str(du.year)
-    jour = maintenant().date()
+    jour = aujourd_hui()
     points, chiffres, reglages = points_de_cloture_du_mois(entreprise, du, au, exercice)
     revue = next(
         (r for r in depot_des_revues().du_dossier(entreprise) if r.du <= au and du <= r.au),

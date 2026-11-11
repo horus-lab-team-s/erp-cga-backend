@@ -143,11 +143,17 @@ demarrer_api() {
   # tuyau, « … | tail », rien ne s'affiche même du tout, puisque le tuyau reste
   # ouvert tant qu'un descendant en tient l'écriture.
   #
+  # ⚠️ 18 octobre 2026 : L'ORDONNANCEUR TOURNE DANS LE PROCESSUS, comme dans la
+  # composition Docker. Sans lui, la boîte d'envoi ne se publiait jamais : les fonds
+  # reçus, la quittance reversée, la lecture au dépôt et les avis restaient en
+  # attente, et une démonstration s'arrêtait à mi-chemin sans le dire.
+  #
   # `setsid --fork` fait le double saut : il se dédouble, le petit-fils est
   # rattaché à init, et `setsid` rend la main aussitôt. Le script n'a donc plus
   # aucun fils à attendre.
   ( cd "$BACK" && CGA_PERSISTANCE=postgresql CGA_URL_BASE_DE_DONNEES="$URL" \
       CGA_MODE_DEMONSTRATION=true \
+      CGA_ORDONNANCEUR_EN_PROCESSUS=true \
       CGA_ADRESSE_PUBLIQUE_SITE="http://localhost:$PORT_FRONT" \
       CGA_ADRESSE_PUBLIQUE_VITRINE="http://localhost:$PORT_VITRINE" \
       CGA_ORIGINES_CORS="[\"http://localhost:$PORT_FRONT\",\"http://localhost:$PORT_VITRINE\"]" \

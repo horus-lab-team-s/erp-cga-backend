@@ -93,6 +93,7 @@ def convertir(
     adherent: bool = True,
     premiere_cloture: date | None = None,
     par: str | None = None,
+    numero_d_adhesion: str | None = None,
 ) -> tuple[DossierCreation, Entreprise]:
     """Fait naître l'entreprise au portefeuille et clôt le dossier de création.
 
@@ -204,6 +205,10 @@ def convertir(
                     # Centre autant que l'adhérent.
                     debut=a_la_date,
                     fin=None,
+                    # 10 novembre 2026 : le numéro du registre, attribué par l'appelant
+                    # (qui lit le portefeuille). Sans lui, l'adhérent né d'une création
+                    # figurait sans numéro sur la liste de l'article 119 (4).
+                    numero=numero_d_adhesion,
                     motif=MotifChangement.ADHESION,
                     precision=f"Adhésion à l'issue de la création, dossier "
                     f"{dossier.reference}.",

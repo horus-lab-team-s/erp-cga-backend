@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from app.contextes.comptabilite.adaptateurs.entrant.routes_cloture_mensuelle import (
     points_de_cloture_du_mois,
 )
-from app.contextes.comptabilite.adaptateurs.entrant.routes_http import _journaux, depot
+from app.contextes.comptabilite.adaptateurs.entrant.routes_http import depot, depot_des_journaux
 from app.contextes.comptabilite.adaptateurs.sortant.depots_rapprochements import (
     depot_des_rapprochements,
 )
@@ -161,7 +161,7 @@ def _vue(acces: Acces, r: RevueDeDossier) -> VueRevue:
     exercice = depot(r.dossier).lister(r.exercice)
     banques = {
         j.code: j.compte_contrepartie
-        for j in _journaux.charger()
+        for j in depot_des_journaux.charger()
         if j.nature is NatureJournal.BANQUE and j.compte_contrepartie
     }
     return VueRevue(

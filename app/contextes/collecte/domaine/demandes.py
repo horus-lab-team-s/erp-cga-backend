@@ -42,6 +42,7 @@ from pydantic import (
 
 from app.contextes.collecte.domaine.pieces import CanalDepot, TypePiece
 from app.partage.copie import transiter
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "JALONS_RELANCE_PIECE",
@@ -122,7 +123,7 @@ class ReponseDeLAdherent(BaseModel):
         if self.nature is NatureDeReponse.MESSAGE and self.message is None:
             raise ValueError("un message au cabinet ne peut pas être vide.")
         if self.nature is NatureDeReponse.PLUS_TARD:
-            if self.annoncee_pour is None or self.annoncee_pour < self.le.date():
+            if self.annoncee_pour is None or self.annoncee_pour < jour_a_douala(self.le):
                 raise ValueError(
                     "« plus tard » annonce un jour qui n'est pas encore passé : sans lui, le "
                     "cabinet ne sait pas quand relancer."
@@ -216,7 +217,7 @@ class DemandePiece(BaseModel):
                 f"{self.identifiant} : demande {self.statut}, le cabinet n'attend plus cette "
                 "pièce. Votre réponse n'est pas nécessaire."
             )
-        if reponse.le.date() < self.demandee_le:
+        if jour_a_douala(reponse.le) < self.demandee_le:
             raise ValueError(
                 f"{self.identifiant} : réponse du {reponse.le:%d/%m/%Y}, avant la demande du "
                 f"{self.demandee_le:%d/%m/%Y}."
@@ -224,7 +225,7 @@ class DemandePiece(BaseModel):
         derniere = self.derniere_reponse
         if (
             derniere is not None
-            and derniere.le.date() == reponse.le.date()
+            and jour_a_douala(derniere.le) == jour_a_douala(reponse.le)
             and derniere.nature is reponse.nature
             and derniere.message == reponse.message
         ):

@@ -541,7 +541,11 @@ class TestApplicationSurPostgresql:
                 # ⚠️ Le lien d'enrôlement (pas 62) : le premier enrôlement se prouve
                 # par la boîte aux lettres, et l'émission du lien est un acte journalisé.
                 "jeton.emis",
+                # 19 octobre 2026 : la clé attend son premier code, qui l'active et
+                # renforce la session ; le renforcement explicite suit.
+                "compte.second_facteur_en_attente",
                 "compte.second_facteur_enrole",
+                "session.renforcee",
                 "session.renforcee",
                 "obligation.deposee",
             ]

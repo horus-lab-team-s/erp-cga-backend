@@ -30,7 +30,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 __all__ = [
     "Annonce",
@@ -44,6 +44,20 @@ __all__ = [
     "Rubrique",
 ]
 
+
+
+def _lien_sur(valeur: str) -> str:
+    """Un lien du site : https, http, un courriel, un téléphone, ou un chemin du site.
+
+    ⚠️ 19 octobre 2026 (audit de sécurité) : rien ne bornait le schéma. Un
+    « javascript:… » dans le contenu publié s'exécutait au clic dans le domaine du site.
+    """
+    if valeur.startswith(("https://", "http://", "mailto:", "tel:", "/", "#")):
+        return valeur
+    raise ValueError(f"lien refusé : {valeur[:40]!r} (https, mailto:, tel: ou chemin du site)")
+
+
+LienSur = Annotated[str, Field(min_length=1), AfterValidator(_lien_sur)]
 
 class Rubrique(StrEnum):
     """Les rendez-vous éditoriaux du cabinet.
@@ -130,7 +144,7 @@ class AppelAction(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     texte: str = Field(min_length=1)
-    href: str = Field(min_length=1)
+    href: LienSur
 
 
 class Article(BaseModel):
@@ -187,7 +201,7 @@ class Annonce(BaseModel):
     cle: str = Field(min_length=1)
     etiquette: str = Field(min_length=1, max_length=24)
     texte: str = Field(min_length=1)
-    lien: str = Field(min_length=1)
+    lien: LienSur
     libelle_lien: str = Field(min_length=1)
 
     #: Premier et dernier jour d'affichage, inclus. Une promotion de fin d'année
@@ -223,7 +237,7 @@ class Institution(BaseModel):
     cle: str = Field(min_length=1)
     nom: str = Field(min_length=1)
     logo: str = Field(min_length=1)
-    site: str = Field(min_length=1)
+    site: LienSur
 
     #: Retire une bande parasite au bas du fichier, en pourcentage de sa hauteur.
     #: Le logo de la CNPS est distribué avec un bandeau de certifications qui n'a

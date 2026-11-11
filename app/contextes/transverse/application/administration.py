@@ -48,10 +48,18 @@ from app.contextes.transverse.domaine.ports import (
     DepotSessions,
     JournalAudit,
 )
-from app.contextes.transverse.domaine.roles import Permission, Role
+from app.contextes.transverse.domaine.roles import (
+    PERMISSIONS_RESERVEES,
+    Permission,
+    Role,
+    matrice_en_vigueur,
+    permissions_de,
+)
 from app.contextes.transverse.domaine.sessions import MotifRevocation
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
+    "accorder_a_l_ouverture",
     "CourrielDejaPris",
     "ReinitialisationRefusee",
     "RetablissementRefuse",
@@ -64,6 +72,9 @@ __all__ = [
     "fermer_habilitation",
     "inviter_collaborateur",
     "ouvrir_acces_adherent",
+    "ouvrir_acces_client_creation",
+    "etendre_a_l_adhesion",
+    "ExtensionRefusee",
     "retablir_compte",
     "suspendre_compte",
 ]
@@ -91,6 +102,22 @@ def _verifier_adresse_libre(courriel: str, comptes: DepotComptes) -> None:
         )
 
 
+def _exiger_le_droit_d_accorder(par: Acces, role: Role | str) -> None:
+    """Le rôle existe au cabinet, et celui qui l'accorde peut l'accorder (18 octobre 2026).
+
+    ⚠️ `GERER_COMPTES` suffit pour accorder un rôle de métier, pas le rôle de super
+    administrateur : l'administrateur se l'accorderait, et réglerait ensuite la matrice
+    pour se donner tout le reste. Ce rôle-là s'accorde par celui qui règle la matrice,
+    avec son second facteur.
+    """
+    if str(role) not in matrice_en_vigueur():
+        raise ValueError(f"le cabinet n'a pas de rôle {role}.")
+    if role == Role.SUPER_ADMIN:
+        par.exiger(
+            Permission.GERER_ROLES, motif="attribution du rôle de super administrateur"
+        )
+
+
 def inviter_collaborateur(
     *,
     par: Acces,
@@ -100,7 +127,7 @@ def inviter_collaborateur(
     courriel: str,
     nom: str,
     prenom: str,
-    role: Role,
+    role: Role | str,
     portee: frozenset[str] | None,
     depuis: date,
     comptes: DepotComptes,
@@ -117,6 +144,7 @@ def inviter_collaborateur(
     existe, et l'appelant doit le placer dans le courriel sans le conserver.
     """
     par.exiger(Permission.GERER_COMPTES)
+    _exiger_le_droit_d_accorder(par, role)
     _verifier_adresse_libre(courriel, comptes)
 
     compte = Compte(
@@ -280,6 +308,22 @@ def creer_l_administrateur_d_un_tenant(
     return compte, jeton, secret
 
 
+def accorder_a_l_ouverture(
+    habilitation: Habilitation,
+    *,
+    habilitations: DepotHabilitations,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+) -> None:
+    """Une habilitation de plus pour le premier compte d'une base neuve (20 octobre 2026).
+
+    Même enregistrement, même journal que toute habilitation, au nom de l'ouverture : sur
+    une base neuve, personne ne porte encore `GERER_COMPTES`. Voir
+    `app/premier_administrateur.py`.
+    """
+    _enregistrer_habilitation(habilitation, habilitations, journal, ACTEUR_OUVERTURE, a_l_instant)
+
+
 def ouvrir_acces_adherent(
     *,
     identifiant_compte: str,
@@ -311,6 +355,176 @@ def ouvrir_acces_adherent(
     réellement validé. C'est le contexte de souscription qui porte cette garantie,
     pas celui-ci.
     """
+    return _ouvrir_un_acces_externe(
+        role=Role.ADHERENT,
+        dossier=niu,
+        trace={"niu": niu, "souscription": reference_souscription},
+        precision=reference_souscription,
+        identifiant_compte=identifiant_compte,
+        identifiant_habilitation=identifiant_habilitation,
+        identifiant_jeton=identifiant_jeton,
+        courriel=courriel,
+        nom=nom,
+        prenom=prenom,
+        locataire=locataire,
+        depuis=depuis,
+        comptes=comptes,
+        habilitations=habilitations,
+        jetons=jetons,
+        journal=journal,
+        a_l_instant=a_l_instant,
+        telephone=telephone,
+        duree_lien=duree_lien,
+    )
+
+
+def ouvrir_acces_client_creation(
+    *,
+    identifiant_compte: str,
+    identifiant_habilitation: str,
+    identifiant_jeton: str,
+    courriel: str,
+    nom: str,
+    prenom: str,
+    reference_creation: str,
+    locataire: str,
+    depuis: date,
+    comptes: DepotComptes,
+    habilitations: DepotHabilitations,
+    jetons: DepotJetons,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+    telephone: str | None = None,
+    duree_lien: timedelta | None = None,
+) -> tuple[Compte, Jeton, str]:
+    """Ouvre le compte de la cliente qui vient de payer la création de sa société.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME RAISONNEMENT QUE `ouvrir_acces_adherent`, SUR UNE AUTRE PORTÉE.
+
+    Aucun `Acces` : c'est l'encaissement qui déclenche, et il n'y a personne à
+    autoriser. Aucun degré de liberté : le rôle est `CLIENT_CREATION`, la portée
+    est le seul dossier de formalité payé. Une création payée ne peut pas
+    fabriquer un adhérent, ni un collaborateur.
+
+    ⚠️ L'appelant est responsable de n'invoquer cette fonction que pour un
+    dossier de formalité réellement ouvert sur un paiement encaissé.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    return _ouvrir_un_acces_externe(
+        role=Role.CLIENT_CREATION,
+        dossier=reference_creation,
+        trace={"creation": reference_creation},
+        precision=reference_creation,
+        identifiant_compte=identifiant_compte,
+        identifiant_habilitation=identifiant_habilitation,
+        identifiant_jeton=identifiant_jeton,
+        courriel=courriel,
+        nom=nom,
+        prenom=prenom,
+        locataire=locataire,
+        depuis=depuis,
+        comptes=comptes,
+        habilitations=habilitations,
+        jetons=jetons,
+        journal=journal,
+        a_l_instant=a_l_instant,
+        telephone=telephone,
+        duree_lien=duree_lien,
+    )
+
+
+class ExtensionRefusee(ValueError):
+    """Le compte ne peut pas recevoir l'accès adhérent par cette voie."""
+
+
+def etendre_a_l_adhesion(
+    *,
+    compte: Compte,
+    identifiant_habilitation: str,
+    niu: str,
+    reference_creation: str,
+    depuis: date,
+    habilitations: DepotHabilitations,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+) -> Habilitation:
+    """Ajoute le rôle `ADHERENT` au compte de la cliente dont la société est née.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME COMPTE, ET NON UN SECOND.
+
+    Elle a choisi son mot de passe au paiement, et suit sa création depuis des
+    semaines. Lui ouvrir un second compte à l'immatriculation était impossible
+    (une adresse ne sert qu'à un compte) et l'abonné s'arrêtait en silence : sa
+    société entrait au portefeuille, et son espace adhérent ne s'ouvrait jamais.
+
+    ⚠️ **SEULEMENT SI CE COMPTE SUIT CETTE CRÉATION-LÀ.** L'adresse seule ne
+    suffit pas : un collaborateur, ou une autre cliente, peut porter l'adresse
+    déclarée au dossier. Étendre sur la seule adresse donnerait le dossier d'une
+    entreprise à quiconque a saisi la même adresse. C'est l'habilitation
+    `CLIENT_CREATION` portant ce dossier de formalité qui prouve que c'est elle.
+
+    ⚠️ **ON NE FERME PAS SON ACCÈS À LA CRÉATION.** Le dossier clos porte ses
+    numéros et ses pièces ; elle peut vouloir les relire. La portée de
+    `CLIENT_CREATION` n'est pas un NIU, et l'espace adhérent ne la lit pas.
+
+    Rejouable : un événement remis deux fois rend l'habilitation déjà ouverte.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    existantes = habilitations.pour_compte(compte.identifiant)
+    suit_cette_creation = any(
+        h.role is Role.CLIENT_CREATION
+        and h.portee is not None
+        and reference_creation in h.portee
+        for h in existantes
+    )
+    if not suit_cette_creation:
+        raise ExtensionRefusee(
+            f"le compte {compte.identifiant} ne suit pas la création "
+            f"{reference_creation} : l'accès adhérent ne s'étend pas par cette voie."
+        )
+    for deja in existantes:
+        if deja.role is Role.ADHERENT and deja.portee is not None and niu in deja.portee:
+            return deja
+
+    habilitation = Habilitation(
+        identifiant=identifiant_habilitation,
+        compte=compte.identifiant,
+        role=Role.ADHERENT,
+        portee=frozenset({niu}),
+        debut=depuis,
+        motif=MotifHabilitation.SOUSCRIPTION,
+        accordee_par=SYSTEME,
+        precision=reference_creation,
+    )
+    _enregistrer_habilitation(habilitation, habilitations, journal, SYSTEME, a_l_instant)
+    return habilitation
+
+
+def _ouvrir_un_acces_externe(
+    *,
+    role: Role | str,
+    dossier: str,
+    trace: dict[str, str | None],
+    precision: str | None,
+    identifiant_compte: str,
+    identifiant_habilitation: str,
+    identifiant_jeton: str,
+    courriel: str,
+    nom: str,
+    prenom: str,
+    locataire: str,
+    depuis: date,
+    comptes: DepotComptes,
+    habilitations: DepotHabilitations,
+    jetons: DepotJetons,
+    journal: JournalAudit,
+    a_l_instant: datetime,
+    telephone: str | None,
+    duree_lien: timedelta | None,
+) -> tuple[Compte, Jeton, str]:
+    """Le compte, son habilitation à portée unique, son lien d'activation."""
     _verifier_adresse_libre(courriel, comptes)
 
     compte = Compte(
@@ -330,23 +544,20 @@ def ouvrir_acces_adherent(
         action="compte.cree",
         objet_type="compte",
         objet_id=compte.identifiant,
-        apres={
-            "courriel": compte.courriel,
-            "niu": niu,
-            "souscription": reference_souscription,
-        },
+        apres={"courriel": compte.courriel, **trace},
     )
 
     habilitation = Habilitation(
         identifiant=identifiant_habilitation,
         compte=compte.identifiant,
-        # Le rôle et la portée sont imposés — voir la docstring.
-        role=Role.ADHERENT,
-        portee=frozenset({niu}),
+        # Le rôle et la portée sont imposés par l'appelant public — voir les
+        # docstrings de `ouvrir_acces_adherent` et `ouvrir_acces_client_creation`.
+        role=role,
+        portee=frozenset({dossier}),
         debut=depuis,
         motif=MotifHabilitation.SOUSCRIPTION,
         accordee_par=SYSTEME,
-        precision=reference_souscription,
+        precision=precision,
     )
     _enregistrer_habilitation(habilitation, habilitations, journal, SYSTEME, a_l_instant)
 
@@ -368,7 +579,7 @@ def accorder(
     par: Acces,
     identifiant: str,
     compte: str,
-    role: Role,
+    role: Role | str,
     portee: frozenset[str] | None,
     depuis: date,
     motif: MotifHabilitation,
@@ -385,6 +596,7 @@ def accorder(
     `GERER_COMPTES` deviendrait un chemin d'élévation universel.
     """
     par.exiger(Permission.GERER_COMPTES)
+    _exiger_le_droit_d_accorder(par, role)
 
     if portee is None and not par.transverse:
         raise AccesRefuse(
@@ -477,7 +689,7 @@ def affecter_dossier(
     avant = habilitations.lire(identifiant_habilitation)
     enregistrees = avant.affecter(
         niu,
-        le=a_l_instant.date(),
+        le=jour_a_douala(a_l_instant),
         identifiant_successeur=identifiant_successeur,
         par=par.compte,
     )
@@ -557,10 +769,10 @@ def reaffecter_dossier(
         )
     if source.role is not cible.role:
         raise ReaffectationRefusee(
-            f"{source.role.value} vers {cible.role.value} : une réaffectation se fait entre "
+            f"{source.role} vers {cible.role} : une réaffectation se fait entre "
             "collaborateurs du même rôle, sinon personne ne tient plus le dossier."
         )
-    le = a_l_instant.date()
+    le = jour_a_douala(a_l_instant)
     try:
         retirees = source.retirer(niu, le=le, identifiant_successeur=successeur_de, par=par.compte)
         confiees = cible.affecter(
@@ -614,11 +826,31 @@ def reaffecter_dossier(
             "dossier": niu,
             "compte_precedent": source_active.compte,
             "compte": cible_active.compte,
-            "role": cible_active.role.value,
+            "role": str(cible_active.role),
         },
         motif=motif.strip(),
     )
     return source_active, cible_active
+
+
+def _exiger_le_droit_sur_le_compte(
+    par: Acces,
+    identifiant: str,
+    habilitations: DepotHabilitations,
+    a_l_instant: datetime,
+    geste: str,
+) -> None:
+    """Un compte qui tient les droits réservés ne se touche que par celui qui les tient.
+
+    ⚠️ 19 octobre 2026 (audit de sécurité) : `GERER_COMPTES` suffisait pour suspendre le
+    super administrateur ou retirer son second facteur, sans session renforcée. Un
+    administrateur dont le mot de passe a fui désarmait ainsi celui qui règle la matrice.
+    Ces gestes, sur ce compte-là, exigent désormais `GERER_ROLES`, donc le second facteur.
+    """
+    jour = jour_a_douala(a_l_instant)
+    tenus = [h.role for h in habilitations.pour_compte(identifiant) if h.couvre(jour)]
+    if permissions_de(tenus) & PERMISSIONS_RESERVEES:
+        par.exiger(Permission.GERER_ROLES, motif=geste)
 
 
 def suspendre_compte(
@@ -627,6 +859,7 @@ def suspendre_compte(
     identifiant: str,
     motif: str,
     comptes: DepotComptes,
+    habilitations: DepotHabilitations,
     sessions: DepotSessions,
     journal: JournalAudit,
     a_l_instant: datetime,
@@ -648,6 +881,9 @@ def suspendre_compte(
             "administrateur seul laisserait le cabinet sans personne pour gérer les comptes. "
             "Demander à un autre administrateur."
         )
+    _exiger_le_droit_sur_le_compte(
+        par, identifiant, habilitations, a_l_instant, "suspension d'un super administrateur"
+    )
     avant = comptes.lire(identifiant)
     apres = avant.suspendre()
     comptes.enregistrer(apres)
@@ -762,6 +998,7 @@ def reinitialiser_second_facteur(
     identifiant: str,
     motif: str,
     comptes: DepotComptes,
+    habilitations: DepotHabilitations,
     sessions: DepotSessions,
     journal: JournalAudit,
     a_l_instant: datetime,
@@ -794,6 +1031,13 @@ def reinitialiser_second_facteur(
             "on ne réinitialise pas son propre second facteur : un mot de passe qui a fui "
             "suffirait alors à le retirer. Demander à un autre administrateur."
         )
+    _exiger_le_droit_sur_le_compte(
+        par,
+        identifiant,
+        habilitations,
+        a_l_instant,
+        "réinitialisation du second facteur d'un super administrateur",
+    )
     avant = comptes.lire(identifiant)
     if not avant.second_facteur_actif:
         raise ReinitialisationRefusee(

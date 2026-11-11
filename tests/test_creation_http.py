@@ -99,6 +99,10 @@ class TestLaConversion:
         fiche = client.get(f"/portefeuille/entreprises/{corps['niu']}")
         assert fiche.status_code == 200, fiche.text
         assert fiche.json()["denomination"] == corps["denomination"]
+        # 10 novembre 2026 : l'adhésion née de la création porte son numéro de registre,
+        # comme une inscription : la liste de l'article 119 (4) le reprend.
+        (adhesion,) = fiche.json()["adhesions"]
+        assert adhesion["numero"] and adhesion["numero"].startswith("ADH-2026-"), adhesion
         # Convertir deux fois ne crée pas une seconde entreprise.
         assert client.post(
             "/creations/CR-2026-0015/conversion",
@@ -115,3 +119,40 @@ class TestLeDroit:
                 json={"courriel": "l.fotso@cga-brcg.cm", "mot_de_passe": MOT_DE_PASSE_DEMO},
             )
             assert c.post("/creations/CR-2026-0013/abandon", json={"motif": "x"}).status_code == 403
+
+
+class TestLaDirectionLit:
+    """9 novembre 2026 : la direction suit les créations, sans les mener."""
+
+    @staticmethod
+    def _session(c: TestClient, courriel: str) -> None:
+        assert c.post(
+            "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
+        ).status_code == 200
+
+    def test_elle_lit_le_pipeline_et_la_fiche(self):
+        reinitialiser_atelier()
+        creations._depot_memoire.cache_clear()
+        with horloge_figee(LE_JOUR), TestClient(creer_application()) as c:
+            self._session(c, "b.mballa@cga-brcg.cm")
+            pipeline = c.get("/creations/pipeline")
+            assert pipeline.status_code == 200
+            assert pipeline.json(), "le jeu de démonstration porte des créations"
+            assert c.get("/creations/CR-2026-0013").status_code == 200
+
+    def test_elle_ne_mene_aucun_geste(self):
+        reinitialiser_atelier()
+        creations._depot_memoire.cache_clear()
+        with horloge_figee(LE_JOUR), TestClient(creer_application()) as c:
+            self._session(c, "b.mballa@cga-brcg.cm")
+            assert c.post("/creations/CR-2026-0013/abandon", json={"motif": "x"}).status_code == 403
+            vers = {"vers": "SUIVI_IMMATRICULATION"}
+            avancer = c.post("/creations/CR-2026-0013/etape", json=vers)
+            assert avancer.status_code == 403
+            assert c.get("/creations/CR-2026-0013/lien-de-suivi").status_code == 403
+
+    def test_le_comptable_ne_lit_toujours_pas(self):
+        reinitialiser_atelier()
+        with TestClient(creer_application()) as c:
+            self._session(c, "l.fotso@cga-brcg.cm")
+            assert c.get("/creations/pipeline").status_code == 403

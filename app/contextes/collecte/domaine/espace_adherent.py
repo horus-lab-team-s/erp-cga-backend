@@ -48,6 +48,7 @@ from app.contextes.collecte.domaine.demandes import (
     ReponseDeLAdherent,
 )
 from app.contextes.collecte.domaine.pieces import CanalDepot, EtatPiece, PieceJustificative
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "LIBELLES_PAR_DEFAUT",
@@ -100,7 +101,7 @@ def mois_de_la_piece(piece: PieceJustificative) -> str:
     **juillet**, c'est la déclaration de juillet qui l'attend. Tant que le cabinet n'a pas lu la
     date, la réception est la seule date connue, et la pièce changera de mois une fois lue.
     """
-    jour = piece.date_document or piece.recue_le.date()
+    jour = piece.date_document or jour_a_douala(piece.recue_le)
     return f"{jour:%Y-%m}"
 
 

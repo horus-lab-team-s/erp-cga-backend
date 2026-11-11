@@ -18,7 +18,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.comptabilite.adaptateurs.entrant.routes_http import _plan, depot
+from app.contextes.comptabilite.adaptateurs.entrant.routes_http import depot, depot_du_plan
 from app.contextes.comptabilite.adaptateurs.sortant.depots_lettrages import depot_des_lettrages
 from app.contextes.comptabilite.adaptateurs.sortant.lettrage_yaml import (
     charger_les_reglages_du_lettrage,
@@ -81,7 +81,7 @@ def lettrer_des_lignes(
             compte=demande.compte,
             references=demande.lignes,
             ecritures_de_l_exercice=depot(entreprise).lister(demande.exercice),
-            plan=_plan.charger(),
+            plan=depot_du_plan.charger(),
             lettrages_du_compte=depot_lettrages.du_compte(
                 entreprise, demande.exercice, demande.compte
             ),

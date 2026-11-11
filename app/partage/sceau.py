@@ -32,17 +32,44 @@ dossiers.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
+import os
 
-__all__ = ["SceauInvalide", "exiger_le_sceau", "sceller", "valide"]
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+__all__ = [
+    "SceauInvalide",
+    "cle_d_usage",
+    "dechiffrer_la_reference",
+    "exiger_le_sceau",
+    "jeton_opaque",
+    "sceller",
+    "valide",
+]
 
 
 class SceauInvalide(ValueError):
     """Le sceau présenté ne correspond pas à la référence."""
 
 
-def sceller(reference: str, *, secret: str) -> str:
+def cle_d_usage(maitresse: str, usage: str) -> bytes:
+    """La clé d'un seul usage, dérivée de la clé du cabinet (19 octobre 2026).
+
+    ⚠️ La même clé servait à CHIFFRER les secrets du second facteur (le coffre) et à
+    SIGNER les liens de suivi et d'acceptation. Une clé n'a qu'un emploi : un défaut
+    dans l'un, ou une valeur qu'il laisse fuiter, ne doit rien apprendre de l'autre.
+    Chaque usage reçoit donc sa propre clé, dérivée par HMAC-SHA256 sur un libellé
+    fixe (l'étape « expand » de HKDF, la clé du cabinet étant déjà uniforme).
+
+    ⚠️ Le libellé ne change jamais : le changer invaliderait tous les liens émis.
+    """
+    return hmac.new(maitresse.encode(), f"cga/sceau/{usage}".encode(), hashlib.sha256).digest()
+
+
+def sceller(reference: str, *, secret: str, usage: str = "lien-de-suivi") -> str:
     """Le sceau d'une référence.
 
     ⚠️ **Sur la référence seule.** Le lien d'acceptation d'une proforma scelle
@@ -51,20 +78,27 @@ def sceller(reference: str, *, secret: str) -> str:
     lien à chaque jalon franchi, c'est-à-dire précisément quand son porteur a une
     raison de revenir.
     """
-    return hmac.new(secret.encode(), reference.encode(), hashlib.sha256).hexdigest()
+    # ⚠️ `usage` sépare les liens : le sceau qui ouvre le suivi d'une création ne
+    # vaut pas pour joindre une pièce à une demande, et réciproquement.
+    cle = cle_d_usage(secret, usage)
+    return hmac.new(cle, reference.encode(), hashlib.sha256).hexdigest()
 
 
-def valide(reference: str, sceau: str, *, secret: str) -> bool:
+def valide(reference: str, sceau: str, *, secret: str, usage: str = "lien-de-suivi") -> bool:
     """⚠️ `compare_digest`, jamais `==`.
 
     Une comparaison ordinaire s'arrête au premier octet différent, et le temps
     qu'elle met trahit combien d'octets étaient justes. Sur un sceau, cela se
     remonte octet par octet.
     """
-    return bool(sceau) and hmac.compare_digest(sceau, sceller(reference, secret=secret))
+    return bool(sceau) and hmac.compare_digest(
+        sceau, sceller(reference, secret=secret, usage=usage)
+    )
 
 
-def exiger_le_sceau(reference: str, sceau: str, *, secret: str) -> None:
+def exiger_le_sceau(
+    reference: str, sceau: str, *, secret: str, usage: str = "lien-de-suivi"
+) -> None:
     """Lève `SceauInvalide` si le sceau ne vaut pas.
 
     ⚠️ **LE NOM EST LONG EXPRÈS.** Il s'est d'abord appelé `exiger`, comme la
@@ -79,8 +113,35 @@ def exiger_le_sceau(reference: str, sceau: str, *, secret: str) -> None:
     références en lisant les refus. C'est le raisonnement déjà tenu par la
     consultation de proforma et par la résolution des locataires.
     """
-    if not valide(reference, sceau, secret=secret):
+    if not valide(reference, sceau, secret=secret, usage=usage):
         raise SceauInvalide(
             "Ce lien ne s'ouvre pas. Vérifiez que vous l'avez copié en entier, "
             "ou demandez-en un nouveau au cabinet."
         )
+
+
+def jeton_opaque(reference: str, *, secret: str, usage: str) -> str:
+    """Un jeton qui porte la référence CHIFFRÉE, pour un lien public (19 octobre 2026).
+
+    ⚠️ Le sceau ci-dessus accompagne une référence qui circule déjà en clair. Ici, la
+    référence est une donnée interne qui ne doit pas sortir (la demande de contact
+    l'interdit, voir `test_la_reference_du_dossier_ne_circule_pas`) : elle voyage
+    chiffrée et authentifiée (AES-GCM, clé propre à l'usage). Le jeton ne dit rien de
+    ce qu'il désigne, et ne se fabrique pas sans la clé.
+    """
+    nonce = os.urandom(12)
+    chiffre = AESGCM(cle_d_usage(secret, usage)).encrypt(nonce, reference.encode(), None)
+    return base64.urlsafe_b64encode(nonce + chiffre).decode().rstrip("=")
+
+
+def dechiffrer_la_reference(jeton: str, *, secret: str, usage: str) -> str:
+    """La référence que porte le jeton, ou `SceauInvalide` (le même refus qu'un sceau faux)."""
+    try:
+        brut = base64.urlsafe_b64decode(jeton + "=" * (-len(jeton) % 4))
+        clair = AESGCM(cle_d_usage(secret, usage)).decrypt(brut[:12], brut[12:], None)
+        return clair.decode()
+    except (ValueError, InvalidTag, UnicodeDecodeError) as refus:
+        raise SceauInvalide(
+            "Ce lien ne s'ouvre pas. Vérifiez que vous l'avez copié en entier, "
+            "ou demandez-en un nouveau au cabinet."
+        ) from refus

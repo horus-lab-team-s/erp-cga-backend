@@ -80,7 +80,7 @@ from app.contextes.transverse.domaine.teledeclaration import (
     ModeDepot,
     Portail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 from app.partage.locataire import courant, etabli
 
 __all__ = [
@@ -122,9 +122,26 @@ def dossiers_de_demonstration() -> tuple[str, ...]:
 
     return tuple(niu for niu in PORTEFEUILLE_DEMO if niu != DOSSIER_EN_RETARD_VOULU)
 
-#: Ce qui échoit dans ce délai reste ouvert : c'est le retard récent que le dossier
-#: montre. Trente jours laissent ouvert le dernier mois déclaratif, pas plus.
+#: Ce qui échoit dans ce délai est « récent ». Trente jours couvrent le dernier mois
+#: déclaratif, pas plus.
 DELAI_DE_GRACE = timedelta(days=30)
+
+#: ⚠️ UN SEUL RETARD RÉCENT, ET SUR UN SEUL DOSSIER (9 novembre 2026).
+#:
+#: La première règle laissait ouvert TOUT ce qui échoit dans le délai, pour tous les
+#: dossiers, et le mois en cours de déclaration pour TOUTES ses obligations. Mesuré
+#: sur le tableau de bord : « 28 en retard », quarante lignes rouges en premier écran.
+#: Un prospect y lisait un cabinet débordé, pas « un ou deux retards crédibles ».
+#:
+#: Ne restent donc ouverts que : la CNPS du dernier mois du dossier de démonstration
+#: (les relances ont de quoi montrer), la TVA et la CNPS du mois que la comptabilité
+#: de démonstration traite (les gestes de dépôt), et le dossier en retard voulu.
+OBLIGATION_EN_RETARD_RECENT = "CNPS"
+
+#: Ce que la console montre en cours de déclaration sur le mois traité : le dépôt de
+#: la TVA, et le constat de la CNPS au guichet. L'IRPP et l'acompte de ce mois-là sont
+#: déposés, comme le reste.
+OBLIGATIONS_EN_COURS_DE_DECLARATION = frozenset({"TVA", "CNPS"})
 
 #: L'histoire commence où `accuses_demo.py` s'arrête : janvier et février 2024 y
 #: sont déjà déposés. Rien avant : le dossier n'a pas à porter quatre ans d'accusés
@@ -265,11 +282,24 @@ def accuses_a_consigner(jour: date) -> list[tuple[DocumentATransmettre, AccuseRe
             ):
                 mensuelle = (obligation.periode_fin - obligation.periode_debut).days <= 31
                 debut = obligation.periode_debut
+                recente = limite < obligation.echeance <= jour
+                retard_montre = (
+                    recente
+                    and niu == DOSSIER_DE_DEMONSTRATION
+                    and obligation.code_obligation == OBLIGATION_EN_RETARD_RECENT
+                )
+                en_declaration = (
+                    mensuelle
+                    and obligation.code_obligation in OBLIGATIONS_EN_COURS_DE_DECLARATION
+                    and (debut.year, debut.month) in en_traitement
+                )
                 if (
                     obligation.deposee
                     or debut < DEBUT_DE_L_HISTOIRE
-                    or obligation.echeance > limite
-                    or (mensuelle and (debut.year, debut.month) in en_traitement)
+                    # Jamais un dépôt pour une échéance à venir : un accusé est une preuve.
+                    or obligation.echeance > jour
+                    or retard_montre
+                    or en_declaration
                 ):
                     continue
                 a_consigner.append(
@@ -307,4 +337,4 @@ def mettre_la_demonstration_a_jour(locataire: str = LOCATAIRE_PAR_DEFAUT) -> int
                 "la démonstration ne se met à jour qu'en persistance PostgreSQL : en "
                 "mémoire, elle repart de zéro à chaque démarrage."
             )
-        return consigner(boutique.session, locataire, maintenant().date())
+        return consigner(boutique.session, locataire, aujourd_hui())

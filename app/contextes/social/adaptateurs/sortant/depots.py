@@ -12,12 +12,19 @@ from typing import Any
 
 from sqlalchemy import and_, or_
 
-from app.contextes.social.adaptateurs.sortant.tables import TableContrat, TableSalarie
+from app.contextes.social.adaptateurs.sortant.tables import (
+    TableArreteDesCharges,
+    TableContrat,
+    TableSalarie,
+)
+from app.contextes.social.domaine.arrete_des_charges import ArreteDesCharges
 from app.contextes.social.domaine.entites import Contrat, Salarie
 from app.contextes.social.domaine.ports import SalarieIntrouvable
 from app.infrastructure.depot_document import DepotDocument
 
 __all__ = [
+    "DepotArretesDesChargesMemoire",
+    "DepotArretesDesChargesSql",
     "DepotContratsMemoire",
     "DepotContratsSql",
     "DepotSalariesMemoire",
@@ -166,9 +173,7 @@ class DepotContratsSql(DepotDocument[Contrat]):
 
     def du_salarie(self, matricule: str) -> list[Contrat]:
         return self._tous(
-            self._requete()
-            .where(TableContrat.salarie == matricule)
-            .order_by(TableContrat.debut)
+            self._requete().where(TableContrat.salarie == matricule).order_by(TableContrat.debut)
         )
 
     def du_dossier(self, entreprise: str, a_la_date: date | None = None) -> list[Contrat]:
@@ -185,3 +190,42 @@ class DepotContratsSql(DepotDocument[Contrat]):
 
     def enregistrer(self, contrat: Contrat) -> None:
         self._poser(contrat)
+
+
+class DepotArretesDesChargesSql(DepotDocument[ArreteDesCharges]):
+    """Les arrêtés des charges sociales (18 octobre 2026). Voir `TableArreteDesCharges`."""
+
+    _table = TableArreteDesCharges
+    _entite = ArreteDesCharges
+
+    def _cle(self, entite: ArreteDesCharges) -> dict:
+        return {
+            "locataire": self.locataire,
+            "entreprise": entite.entreprise,
+            "periode": entite.periode,
+        }
+
+    def _colonnes(self, entite: ArreteDesCharges) -> dict:
+        return {}
+
+    def lire(self, entreprise: str, periode: str) -> ArreteDesCharges | None:
+        return self._premier(
+            self._requete().where(
+                TableArreteDesCharges.entreprise == entreprise,
+                TableArreteDesCharges.periode == periode,
+            )
+        )
+
+    def enregistrer(self, arrete: ArreteDesCharges) -> None:
+        self._poser(arrete)
+
+
+class DepotArretesDesChargesMemoire:
+    def __init__(self) -> None:
+        self._arretes: dict[tuple[str, str], ArreteDesCharges] = {}
+
+    def lire(self, entreprise: str, periode: str) -> ArreteDesCharges | None:
+        return self._arretes.get((entreprise, periode))
+
+    def enregistrer(self, arrete: ArreteDesCharges) -> None:
+        self._arretes[(arrete.entreprise, arrete.periode)] = arrete

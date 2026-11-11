@@ -31,7 +31,7 @@ from app.contextes.souscription.application.reprise_des_dossiers import (
 )
 from app.infrastructure.config import configuration
 from app.orchestration.ordonnanceur import Travail
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 __all__ = [
@@ -141,5 +141,5 @@ def _candidatures(service: str, dossiers):
         habilitations=boutique.habilitations,
         charge=dossiers.charge_par_responsable(),
         service=service,
-        a_la_date=maintenant().date(),
+        a_la_date=aujourd_hui(),
     )

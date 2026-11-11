@@ -42,6 +42,7 @@ from app.contextes.transverse.api import (
     ServiceNotification,
     ouvrir_acces_adherent,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["OuvertureAccesTransverse"]
 
@@ -84,7 +85,7 @@ class OuvertureAccesTransverse:
             prenom=souscription.prospect.prenom,
             niu=souscription.niu,
             locataire=self._locataire,
-            depuis=a_l_instant.date(),
+            depuis=jour_a_douala(a_l_instant),
             comptes=self._comptes,
             habilitations=self._habilitations,
             jetons=self._jetons,

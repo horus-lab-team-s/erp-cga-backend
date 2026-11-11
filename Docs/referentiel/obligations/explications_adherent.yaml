@@ -24,8 +24,13 @@ deposees_montrees_jours: 90
 explications:
   - code: IGS
     titre: "Impôt trimestriel"
-    de_quoi_s_agit_il: "Cet impôt remplace la TVA et l'impôt sur les bénéfices pour votre entreprise, tant que vos ventes restent sous le plafond de votre régime. Il se règle chaque trimestre, au centre des impôts de rattachement."
+    de_quoi_s_agit_il: "Cet impôt remplace la TVA, la patente et l'impôt sur les bénéfices pour votre entreprise, tant que vos ventes restent sous le plafond de votre régime. Il se règle chaque trimestre, au centre des impôts de rattachement."
     en_cas_de_retard: "Un retard entraîne une majoration. Réglez dès que possible, puis envoyez la quittance : le cabinet la joint à votre dossier."
+
+  - code: IGS_DECLARATION_ANNUELLE
+    titre: "Déclaration annuelle de l'impôt synthétique"
+    de_quoi_s_agit_il: "Une fois par an, avant le 15 mars, vous déclarez les revenus de l'année écoulée. Elle s'ajoute aux versements trimestriels, et peut donner lieu à une régularisation. Le cabinet la prépare à partir de votre comptabilité."
+    en_cas_de_retard: "Un retard expose à une amende. Le cabinet vous prévient avant l'échéance ; confirmez-lui vos chiffres à temps."
 
   - code: TVA
     titre: "TVA du mois"

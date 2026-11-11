@@ -77,6 +77,18 @@ __all__ = [
 
 journal = logging.getLogger(__name__)
 
+
+def _environnement_expose() -> bool:
+    """Exposé ET sans période d'essai déclarée : la simulation y est alors refusée.
+
+    9 novembre 2026 : en période d'essai (`CGA_PAIEMENTS_D_ESSAI`), le serveur de la cliente
+    simule volontairement — c'est déclaré, annoncé et affiché, pas un oubli de clé.
+    """
+    from app.infrastructure.config import configuration
+
+    config = configuration()
+    return config.en_production and not config.paiements_d_essai
+
 #: Voir l'en-tête : `dklo.co`, et non `taramoney.com`.
 ADRESSE_TARA = "https://www.dklo.co"
 
@@ -154,6 +166,21 @@ class FournisseurTara:
         cle_idempotence: str,
         libelle: str,
     ) -> Initiation:
+        if self.simule and _environnement_expose():
+            # ⚠️ 20 octobre 2026 (audit avant la production) : sans clés, la simulation
+            # rendait « accepté » avec une référence factice, et le paiement restait
+            # « en attente » sans que personne ne sache pourquoi. Exposé, on refuse et on
+            # dit quoi faire : le guichet du cabinet reste ouvert.
+            journal.error("Tara sans clés dans un environnement exposé : paiement refusé.")
+            return Initiation(
+                accepte=False,
+                reference_externe=None,
+                message=(
+                    "Le paiement mobile money n'est pas encore ouvert. Réglez au guichet "
+                    "du cabinet, ou réessayez plus tard."
+                ),
+                brut={"refus": "tara-non-configure"},
+            )
         if self.simule:
             journal.warning(
                 "Tara en mode simulé (aucune clé configurée) — aucun appel réseau, "
@@ -178,7 +205,7 @@ class FournisseurTara:
             "webHookUrl": self.adresse_de_rappel(),
             # Vide délibérément : Tara déduit l'opérateur du préfixe.
             "network": "",
-            "productDescription": f"{libelle} — CGA Broad Range Consulting Group",
+            "productDescription": f"{libelle} · CGA Broad Range Consulting Group",
             "returnUrl": f"{self._adresse_publique}/souscription/retour",
         }
         try:

@@ -19,6 +19,8 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.contextes.social.adaptateurs.sortant.depots import (
+    DepotArretesDesChargesMemoire,
+    DepotArretesDesChargesSql,
     DepotContratsMemoire,
     DepotContratsSql,
     DepotSalariesMemoire,
@@ -33,7 +35,7 @@ from app.contextes.social.domaine.ports import DepotContrats, DepotSalaries
 from app.contextes.transverse.api import session_de_travail
 from app.partage.locataire import courant
 
-__all__ = ["depots_du_social", "vider_les_magasins_du_social"]
+__all__ = ["depot_des_arretes", "depots_du_social", "vider_les_magasins_du_social"]
 
 
 def depots_du_social() -> tuple[DepotSalaries, DepotContrats]:
@@ -63,3 +65,16 @@ def _depots_memoire() -> tuple[DepotSalariesMemoire, DepotContratsMemoire]:
 def vider_les_magasins_du_social() -> None:
     """Remet le personnel en mémoire à son état de démonstration. Destinée aux tests."""
     _depots_memoire.cache_clear()
+
+
+@lru_cache
+def _arretes_memoire() -> DepotArretesDesChargesMemoire:
+    return DepotArretesDesChargesMemoire()
+
+
+def depot_des_arretes() -> DepotArretesDesChargesMemoire | DepotArretesDesChargesSql:
+    """Les arrêtés des charges sociales (18 octobre 2026) : en base dans une requête."""
+    session = session_de_travail()
+    if session is None:
+        return _arretes_memoire()
+    return DepotArretesDesChargesSql(session, courant())

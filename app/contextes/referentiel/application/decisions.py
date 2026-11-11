@@ -35,6 +35,7 @@ from app.contextes.referentiel.domaine.surcouche import (
     StatutDecision,
     valeur_conforme_a_l_unite,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "HorsDuCircuit",
@@ -133,7 +134,7 @@ def proposer_une_version(
     raison = valeur_conforme_a_l_unite(valeur, parametre.unite)
     if raison is not None:
         raise DecisionRefusee(f"« {code} » ({parametre.unite.value}) : {raison}")
-    if applicable_du < le.date():
+    if applicable_du < jour_a_douala(le):
         raise DecisionRefusee(
             f"une nouvelle version ne prend pas effet dans le passé ({applicable_du}) : les "
             "calculs déjà rendus sur cette période changeraient sans que personne ne les relise."

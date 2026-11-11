@@ -45,6 +45,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.partage.horloge import jour_a_douala
+
 __all__ = [
     "CandidatInterlocuteur",
     "ExplicationDeRegime",
@@ -226,7 +228,7 @@ def signalement_en_double(
     return any(
         p.nature is nouveau.nature
         and p.message.strip() == nouveau.message.strip()
-        and p.le.date() == nouveau.le.date()
+        and jour_a_douala(p.le) == jour_a_douala(nouveau.le)
         and p.par == nouveau.par
         for p in precedents
     )

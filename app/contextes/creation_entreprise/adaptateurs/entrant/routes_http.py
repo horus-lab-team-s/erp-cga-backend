@@ -15,18 +15,18 @@ aucun écran : le rôle existait, son droit existait, et il n'y avait rien derri
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, timedelta
 from decimal import Decimal
-from functools import lru_cache
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from app.contextes.creation_entreprise.adaptateurs.sortant.donnees_demo import PIPELINE_DEMO
 from app.contextes.creation_entreprise.api import (
+    CanalDeLaPiece,
     ConversionImpossible,
     DepotDossiersCreation,
-    DepotDossiersCreationMemoire,
     DepotDossiersCreationSql,
     DossierCreation,
     DossierCreationIntrouvable,
@@ -40,6 +40,7 @@ from app.contextes.creation_entreprise.api import (
     avancer,
     checklist_de,
     convertir,
+    creations_en_memoire,
     depasse_le_delai_annonce,
     diagnostiquer,
     enregistrer_identifiant,
@@ -49,19 +50,21 @@ from app.contextes.creation_entreprise.api import (
 )
 from app.contextes.portefeuille.api import (
     CentreRattachement,
-    DepotEntreprisesSql,
     FormeJuridique,
     RegimeFiscal,
-    entreprises_en_memoire,
+    depot_entreprises,
+    prochain_numero_d_adhesion,
 )
 from app.contextes.referentiel.api import ServiceParametres, service_parametres
 from app.contextes.transverse.api import (
+    Acces,
     AccesRequis,
     Permission,
     exiger,
+    exiger_dossier,
     session_de_travail,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 
@@ -73,7 +76,7 @@ def _aujourd_hui() -> date:
     une route de souscription, et le test échouait alors sans qu'aucune ligne de
     code n'ait changé.
     """
-    return maintenant().date()
+    return aujourd_hui()
 
 
 _journal_de_creation = logging.getLogger(__name__)
@@ -110,9 +113,9 @@ def depot() -> DepotDossiersCreation:
     return DepotDossiersCreationSql(session, courant())
 
 
-@lru_cache
-def _depot_memoire() -> DepotDossiersCreationMemoire:
-    return DepotDossiersCreationMemoire(list(PIPELINE_DEMO))
+# Lot 4 (9 novembre 2026) : la fabrique unique, partagée avec le pilotage (mémoïsée, donc
+# `cache_clear` reste disponible pour les cas qui repartent d'un magasin vierge).
+_depot_memoire = creations_en_memoire
 
 
 def parametres() -> ServiceParametres:
@@ -209,6 +212,10 @@ class DemandeAbandon(BaseModel):
 class DemandePiece(BaseModel):
     code: str = Field(min_length=1)
     empreinte: str | None = None
+    #: Par où le cabinet l'a reçue : messagerie, guichet, courriel (14 octobre 2026).
+    canal: CanalDeLaPiece | None = None
+    #: Le nom d'une pièce hors liste (code `AUTRE`) ; sans effet sur une pièce connue.
+    libelle: str | None = Field(default=None, max_length=120)
 
 
 class DemandeIdentifiant(BaseModel):
@@ -239,6 +246,19 @@ class DemandeConversion(BaseModel):
 
 
 # ── Lectures ─────────────────────────────────────────────────────────────────
+def _exiger_la_lecture(acces: Acces) -> None:
+    """Lire une création : le chargé des formalités, ou la direction (9 novembre 2026).
+
+    ⚠️ LECTURE SEULEMENT. La direction suit les créations sans les mener : elle lit le
+    pipeline, la fiche et les documents ; elle ne fait avancer, ne réceptionne, n'abandonne
+    ni ne convertit rien — ces gestes restent à `SUIVRE_FORMALITE`. Même règle que la
+    lecture des délais (`routes_delais.py`) : `LIRE_PILOTAGE` ouvre la lecture. Le lien de
+    suivi, qui vaut accès pour la fondatrice, reste aux formalités.
+    """
+    if not acces.detient(Permission.LIRE_PILOTAGE):
+        exiger(acces, Permission.SUIVRE_FORMALITE)
+
+
 @routeur.get("/pipeline", summary="Le pipeline des créations en cours")
 def lister(
     acces: AccesRequis,
@@ -280,7 +300,7 @@ def lister(
     cette question-là se lit dans l'ordre rendu ici, sans filtre.
     ─────────────────────────────────────────────────────────────────────────────
     """
-    exiger(acces, Permission.SUIVRE_FORMALITE)
+    _exiger_la_lecture(acces)
     jour = a_la_date or _aujourd_hui()
     seuil = None
     if immobiles_depuis_jours is not None:
@@ -301,91 +321,8 @@ def checklist(acces: AccesRequis, forme_juridique: FormeJuridique) -> list[Piece
     Consultable dès la qualification, avant même qu'un dossier existe : c'est la
     réponse à « qu'est-ce qu'il me faut ? », première question de tout fondateur.
     """
-    exiger(acces, Permission.SUIVRE_FORMALITE)
+    _exiger_la_lecture(acces)
     return list(checklist_de(forme_juridique))
-
-
-@routeur.get("/{reference}", summary="Un dossier de création")
-def lire(
-    acces: AccesRequis,
-    reference: str,
-    a_la_date: date | None = Query(None),
-) -> FicheDossier:
-    exiger(acces, Permission.SUIVRE_FORMALITE)
-    jour = a_la_date or _aujourd_hui()
-    dossier = _lire(reference)
-    diagnostic = diagnostiquer(dossier, parametres(), jour)
-    return FicheDossier(
-        dossier=dossier,
-        constats=[
-            {"code": c.code, "message": c.message, "bloquant": c.bloquant}
-            for c in diagnostic.constats
-        ],
-        deposable=diagnostic.deposable,
-        etapes_ouvertes=sorted(etapes_ouvertes_depuis(dossier.etape)),
-        en_retard=depasse_le_delai_annonce(dossier, parametres(), jour),
-    )
-
-
-# ── Écritures ────────────────────────────────────────────────────────────────
-@routeur.post("", summary="Ouvrir un dossier de création", status_code=201)
-def ouvrir(acces: AccesRequis, demande: DemandeOuverture) -> DossierCreation:
-    exiger(acces, Permission.SUIVRE_FORMALITE)
-    magasin = depot()
-    try:
-        magasin.lire(demande.reference)
-    except DossierCreationIntrouvable:
-        pass
-    else:
-        raise HTTPException(
-            status_code=409,
-            detail=f"un dossier porte déjà la référence {demande.reference}.",
-        )
-    dossier = ouvrir_dossier(
-        reference=demande.reference,
-        fondateur=demande.fondateur,
-        denomination_souhaitee=demande.denomination_souhaitee,
-        forme_juridique=demande.forme_juridique,
-        activite=demande.activite,
-        siege=demande.siege,
-        capital=demande.capital,
-        a_la_date=_aujourd_hui(),
-        par=acces.compte,
-    )
-    magasin.enregistrer(dossier)
-    return dossier
-
-
-@routeur.post("/{reference}/etape", summary="Faire avancer un dossier")
-def franchir(
-    acces: AccesRequis,
-    reference: str,
-    demande: DemandeAvancement,
-) -> DossierCreation:
-    """Franchit une étape, ou refuse **en disant pourquoi**.
-
-    Le refus rend 409 et non 400 : la requête est bien formée, c'est l'état du
-    dossier qui s'y oppose. La distinction compte pour l'écran, qui affiche un
-    conflit d'état autrement qu'une saisie invalide.
-    """
-    exiger(acces, Permission.SUIVRE_FORMALITE)
-    magasin = depot()
-    dossier = _lire(reference, magasin)
-    try:
-        avance = avancer(
-            dossier,
-            demande.vers,
-            _aujourd_hui(),
-            par=acces.compte,
-            commentaire=demande.commentaire,
-        )
-    except TransitionInterdite as refus:
-        raise HTTPException(status_code=409, detail=str(refus)) from refus
-    magasin.enregistrer(avance)
-    return avance
-
-
-# ══ Ce que la fondatrice voit, sans compte ═══════════════════════════════════
 
 
 class PieceAttendue(BaseModel):
@@ -396,6 +333,12 @@ class PieceAttendue(BaseModel):
     obligatoire: bool
     fournie: bool
     fournie_le: date | None = None
+    #: Un document est joint, et elle peut le relire depuis son compte. Un booléen,
+    #: et non l'empreinte : elle n'a pas à manier un identifiant du magasin.
+    document: bool = False
+    #: 9 novembre 2026 : `FONDATEUR` (à fournir dès maintenant) ou `CONSTITUTION` (s'établit
+    #: avec le cabinet : statuts signés, bail au nom de la société…). Voir l'entité.
+    moment: str = "FONDATEUR"
 
 
 class IdentifiantsDeMaSociete(BaseModel):
@@ -477,6 +420,8 @@ def _suivi(dossier) -> SuiviDeMaCreation:
                 obligatoire=p.obligatoire,
                 fournie=p.fournie_le is not None,
                 fournie_le=p.fournie_le,
+                document=p.empreinte is not None,
+                moment=p.moment,
             )
             for p in dossier.pieces
         ],
@@ -488,6 +433,154 @@ def _suivi(dossier) -> SuiviDeMaCreation:
             immatriculee=dossier.immatriculation.immatriculee,
         ),
     )
+
+
+class PieceQuElleDepose(BaseModel):
+    """Ce que la fondatrice déclare après avoir téléversé son document."""
+
+    code: str = Field(min_length=1, description="Le code de la pièce, tel que le suivi le rend")
+    empreinte: str = Field(
+        min_length=64,
+        max_length=64,
+        description="L'empreinte rendue par le dépôt de fichier scellé",
+    )
+
+
+@routeur.get(
+    "/mes-creations",
+    summary="Les créations que suit la cliente connectée",
+    responses={403: {"description": "Le compte ne suit aucune création"}},
+)
+def mes_creations(acces: AccesRequis) -> list[SuiviDeMaCreation]:
+    """Ses dossiers de formalité, dans les mots du suivi.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ LE MÊME SOUS-ENSEMBLE QUE LE LIEN SIGNÉ (14 octobre 2026)
+
+    Le compte client s'ouvre désormais au paiement. Ce qu'elle lit connectée est
+    exactement ce qu'elle lit par son lien : `SuiviDeMaCreation`, ni jalons
+    internes, ni commentaires du cabinet. Un compte ne lui donne pas plus de
+    droits sur son dossier, il lui évite de chercher un courriel.
+
+    ⚠️ **SA PORTÉE, ET RIEN D'AUTRE.** Les références viennent de son
+    habilitation ; une portée qui porterait aussi un NIU (la même cliente,
+    devenue adhérente) ne désigne aucun dossier de formalité, et s'ignore.
+
+    ⚠️ Déclarée AVANT `GET /{reference}` : sinon « mes-creations » serait lu
+    comme une référence, et la cliente recevrait un refus de collaborateur.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    exiger(acces, Permission.SUIVRE_MA_CREATION)
+    magasin = depot()
+    suivis: list[SuiviDeMaCreation] = []
+    for reference in acces.dossiers or []:
+        try:
+            suivis.append(_suivi(magasin.lire(reference)))
+        except DossierCreationIntrouvable:
+            continue
+    return suivis
+
+
+@routeur.post(
+    "/mes-creations/{reference}/pieces",
+    summary="Déposer une pièce depuis son compte",
+    responses={
+        404: {"description": "Dossier hors de sa portée, ou pièce non attendue"},
+        409: {"description": "Le dossier est clos"},
+    },
+)
+def deposer_depuis_mon_compte(
+    acces: AccesRequis, reference: str, corps: PieceQuElleDepose
+) -> SuiviDeMaCreation:
+    """Rattache le document qu'elle vient de téléverser (`/collecte/fichiers-de-creation`).
+
+    ⚠️ Hors de sa portée rend 404, comme un dossier inconnu : voir `exiger_dossier`.
+    """
+    exiger_dossier(acces, Permission.SUIVRE_MA_CREATION, reference)
+    return _rattacher_sa_piece(_lire(reference), corps, CanalDeLaPiece.ESPACE_CLIENT)
+
+
+@routeur.get("/{reference}", summary="Un dossier de création")
+def lire(
+    acces: AccesRequis,
+    reference: str,
+    a_la_date: date | None = Query(None),
+) -> FicheDossier:
+    _exiger_la_lecture(acces)
+    jour = a_la_date or _aujourd_hui()
+    dossier = _lire(reference)
+    diagnostic = diagnostiquer(dossier, parametres(), jour)
+    return FicheDossier(
+        dossier=dossier,
+        constats=[
+            {"code": c.code, "message": c.message, "bloquant": c.bloquant}
+            for c in diagnostic.constats
+        ],
+        deposable=diagnostic.deposable,
+        etapes_ouvertes=sorted(etapes_ouvertes_depuis(dossier.etape)),
+        en_retard=depasse_le_delai_annonce(dossier, parametres(), jour),
+    )
+
+
+# ── Écritures ────────────────────────────────────────────────────────────────
+@routeur.post("", summary="Ouvrir un dossier de création", status_code=201)
+def ouvrir(acces: AccesRequis, demande: DemandeOuverture) -> DossierCreation:
+    exiger(acces, Permission.SUIVRE_FORMALITE)
+    magasin = depot()
+    try:
+        magasin.lire(demande.reference)
+    except DossierCreationIntrouvable:
+        pass
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail=f"un dossier porte déjà la référence {demande.reference}.",
+        )
+    dossier = ouvrir_dossier(
+        reference=demande.reference,
+        fondateur=demande.fondateur,
+        denomination_souhaitee=demande.denomination_souhaitee,
+        forme_juridique=demande.forme_juridique,
+        activite=demande.activite,
+        siege=demande.siege,
+        capital=demande.capital,
+        a_la_date=_aujourd_hui(),
+        par=acces.compte,
+    )
+    magasin.enregistrer(dossier)
+    return dossier
+
+
+@routeur.post("/{reference}/etape", summary="Faire avancer un dossier")
+def franchir(
+    acces: AccesRequis,
+    reference: str,
+    demande: DemandeAvancement,
+) -> DossierCreation:
+    """Franchit une étape, ou refuse **en disant pourquoi**.
+
+    Le refus rend 409 et non 400 : la requête est bien formée, c'est l'état du
+    dossier qui s'y oppose. La distinction compte pour l'écran, qui affiche un
+    conflit d'état autrement qu'une saisie invalide.
+    """
+    exiger(acces, Permission.SUIVRE_FORMALITE)
+    magasin = depot()
+    dossier = _lire(reference, magasin)
+    try:
+        avance = avancer(
+            dossier,
+            demande.vers,
+            _aujourd_hui(),
+            par=acces.compte,
+            commentaire=demande.commentaire,
+        )
+    except TransitionInterdite as refus:
+        raise HTTPException(status_code=409, detail=str(refus)) from refus
+    magasin.enregistrer(avance)
+    return avance
+
+
+# ══ Ce que la fondatrice voit, sans compte ═══════════════════════════════════
 
 
 def _dossier_scelle(reference: str, sceau: str):
@@ -505,8 +598,10 @@ def _dossier_scelle(reference: str, sceau: str):
 
     try:
         exiger_le_sceau(reference, sceau, secret=_secret_du_suivi())
-        return _lire(reference, depot())
-    except (LienDeSuiviInvalide, DossierCreationIntrouvable) as refus:
+        dossier = _lire(reference, depot())
+        _refuser_un_lien_echu(dossier)
+        return dossier
+    except (LienDeSuiviInvalide, DossierCreationIntrouvable, LienDeSuiviEchu) as refus:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -514,6 +609,31 @@ def _dossier_scelle(reference: str, sceau: str):
                 "entier, ou demandez-en un nouveau au cabinet."
             ),
         ) from refus
+
+
+#: Combien de temps le lien de suivi s'ouvre encore une fois le dossier clos.
+VIE_DU_LIEN_APRES_CLOTURE = timedelta(days=90)
+
+
+def _refuser_un_lien_echu(dossier) -> None:
+    """Un lien de suivi ne vit pas toujours (19 octobre 2026).
+
+    ⚠️ Le sceau ne porte pas de date, et c'est voulu : la création dure des semaines,
+    et un lien qui expirerait en route tomberait quand la fondatrice en a besoin.
+    Mais une fois le dossier clos (société remise, ou abandon), le lien n'a plus rien
+    à faire : trois mois plus tard, il ne s'ouvre plus. Il ouvrait sinon, pour
+    toujours, les pièces d'identité d'une fondatrice à qui retrouverait un vieux
+    courriel. Le refus est le même que pour un lien faux : rien ne s'énumère.
+    """
+    if not dossier.clos:
+        return
+    clos_le = dossier.depuis_le(dossier.etape)
+    if clos_le is not None and aujourd_hui() - clos_le > VIE_DU_LIEN_APRES_CLOTURE:
+        raise LienDeSuiviEchu(dossier.reference)
+
+
+class LienDeSuiviEchu(Exception):
+    """Le dossier est clos depuis plus longtemps que la vie du lien."""
 
 
 def _secret_du_suivi() -> str:
@@ -654,17 +774,6 @@ def suivre_ma_creation(
     return _suivi(_dossier_scelle(reference, s))
 
 
-class PieceQuElleDepose(BaseModel):
-    """Ce que la fondatrice déclare après avoir téléversé son document."""
-
-    code: str = Field(min_length=1, description="Le code de la pièce, tel que le suivi le rend")
-    empreinte: str = Field(
-        min_length=64,
-        max_length=64,
-        description="L'empreinte rendue par le dépôt de fichier scellé",
-    )
-
-
 @routeur.post(
     "/{reference}/suivi/pieces",
     summary="Déposer une pièce depuis le lien reçu, sans compte",
@@ -699,14 +808,6 @@ def deposer_ma_piece(
     ─────────────────────────────────────────────────────────────────────────────
     """
     dossier = _dossier_scelle(reference, s)
-    if dossier.clos:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Ce dossier est clos : le cabinet n'attend plus de pièce. "
-                "Contactez-le si vous pensez qu'il s'agit d'une erreur."
-            ),
-        )
     # ─────────────────────────────────────────────────────────────────────────
     # ⚠️ ELLE NE REMPLIT QUE CE QUI EST ATTENDU D'ELLE.
     #
@@ -723,6 +824,25 @@ def deposer_ma_piece(
     #
     # On restreint donc ici, et ici seulement. Le domaine garde sa largeur.
     # ─────────────────────────────────────────────────────────────────────────
+    return _rattacher_sa_piece(dossier, corps, CanalDeLaPiece.LIEN_DE_SUIVI)
+
+
+def _rattacher_sa_piece(
+    dossier, corps: PieceQuElleDepose, canal: CanalDeLaPiece
+) -> SuiviDeMaCreation:
+    """Range la pièce qu'elle dépose. Partagé par le lien signé et par son compte.
+
+    ⚠️ Les deux portes doivent refuser les mêmes choses : un dossier clos, une
+    pièce que la liste n'attend pas. Recopiées, l'une des deux se serait relâchée.
+    """
+    if dossier.clos:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Ce dossier est clos : le cabinet n'attend plus de pièce. "
+                "Contactez-le si vous pensez qu'il s'agit d'une erreur."
+            ),
+        )
     if not any(p.code == corps.code for p in dossier.pieces):
         raise HTTPException(
             status_code=404,
@@ -733,9 +853,99 @@ def deposer_ma_piece(
             ),
         )
     magasin = depot()
-    avec = fournir_piece(dossier, corps.code, _aujourd_hui(), empreinte=corps.empreinte)
+    avec = fournir_piece(
+        dossier,
+        corps.code,
+        _aujourd_hui(),
+        empreinte=corps.empreinte,
+        canal=canal,
+        versee_par="cliente",
+    )
     magasin.enregistrer(avec)
     return _suivi(avec)
+
+
+@routeur.get(
+    "/{reference}/pieces/{code}/document",
+    summary="Le document d'une pièce de constitution, côté cabinet",
+    responses={404: {"description": "Dossier, pièce ou document introuvable"}},
+)
+def document_de_la_piece(acces: AccesRequis, reference: str, code: str) -> Response:
+    """Le document joint à une pièce de CE dossier, pour le relire ou le télécharger.
+
+    ─────────────────────────────────────────────────────────────────────────────
+    ⚠️ POURQUOI ICI, ET NON PAR `/collecte/fichiers/{empreinte}` (14 octobre 2026)
+
+    Le cabinet a demandé « l'aperçu et le téléchargement des documents déposés,
+    côté administration ». La route par empreinte exige `LIRE_PIECE`, que le
+    chargé de formalités n'a pas : il ne pouvait ouvrir aucun des documents de ses
+    propres dossiers. Lui donner cette permission, ou ouvrir cette route à
+    `SUIVRE_FORMALITE`, lui aurait donné tout fichier du magasin dont il connaît
+    l'empreinte, pièces comptables des adhérents comprises.
+
+    Ici, le document est désigné par **le dossier et la pièce** : on ne sert que
+    l'empreinte que ce dossier porte. Le magasin vit au socle partagé
+    (`app.partage`), la création le lit sans passer par la collecte.
+
+    ⚠️ Les mêmes en-têtes que les autres portes : `attachment`, `nosniff`,
+    `no-store`. L'aperçu se fait dans la console, qui sait ce qu'elle affiche.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+    _exiger_la_lecture(acces)
+    return _le_document(_lire(reference), code)
+
+
+@routeur.get(
+    "/mes-creations/{reference}/pieces/{code}/document",
+    summary="Relire un document qu'elle a déposé, depuis son compte",
+    responses={404: {"description": "Hors de sa portée, ou aucun document"}},
+)
+def mon_document(acces: AccesRequis, reference: str, code: str) -> Response:
+    """Ce qu'elle a envoyé, ou ce que le cabinet a versé pour elle : c'est son dossier."""
+    exiger_dossier(acces, Permission.SUIVRE_MA_CREATION, reference)
+    return _le_document(_lire(reference), code)
+
+
+#: L'extension du fichier rendu, d'après le type lu dans ses octets.
+_EXTENSIONS = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/tiff": "tif",
+}
+
+
+def _le_document(dossier: DossierCreation, code: str) -> Response:
+    """Le fichier de la pièce, ou 404, toujours avec le même message.
+
+    ⚠️ Pièce inconnue, pièce sans document, fichier absent du magasin : une seule
+    réponse. Les distinguer ne servirait à personne de légitime.
+    """
+    from app.contextes.transverse.api import LOCATAIRE_PAR_DEFAUT
+    from app.infrastructure.config import configuration
+    from app.partage.magasin_de_fichiers import CleInvalide, MagasinFichiersLocal
+
+    introuvable = HTTPException(status_code=404, detail="Aucun document pour cette pièce.")
+    piece = next((p for p in dossier.pieces if p.code == code), None)
+    if piece is None or piece.empreinte is None:
+        raise introuvable
+    magasin = MagasinFichiersLocal(Path(configuration().dossier_fichiers), LOCATAIRE_PAR_DEFAUT)
+    try:
+        contenu = magasin.lire(piece.empreinte)
+        type_mime = magasin.type_mime(piece.empreinte)
+    except (CleInvalide, KeyError, FileNotFoundError) as absent:
+        raise introuvable from absent
+    nom = re.sub(r"[^A-Za-z0-9._-]", "", f"{dossier.reference}-{code}")[:100] or "document"
+    nom = f"{nom}.{_EXTENSIONS.get(type_mime, 'bin')}"
+    return Response(
+        content=contenu,
+        media_type=type_mime,
+        headers={
+            "Content-Disposition": f'attachment; filename="{nom}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @routeur.post("/{reference}/pieces", summary="Marquer une pièce comme reçue")
@@ -745,12 +955,23 @@ def recevoir_piece(
     demande: DemandePiece,
 ) -> DossierCreation:
     exiger(acces, Permission.SUIVRE_FORMALITE)
+    # ⚠️ Les deux canaux de la cliente ne se déclarent pas pour elle : un
+    # collaborateur qui écrirait « déposée par la cliente » attribuerait à la
+    # cliente un geste qu'elle n'a pas fait.
+    if demande.canal in (CanalDeLaPiece.LIEN_DE_SUIVI, CanalDeLaPiece.ESPACE_CLIENT):
+        raise HTTPException(
+            status_code=422,
+            detail="Ce canal est celui de la cliente : choisissez messagerie, guichet ou courriel.",
+        )
     magasin = depot()
     dossier = fournir_piece(
         _lire(reference, magasin),
         demande.code,
         _aujourd_hui(),
         empreinte=demande.empreinte,
+        canal=demande.canal,
+        versee_par=acces.compte,
+        libelle=(demande.libelle or "").strip() or None,
     )
     magasin.enregistrer(dossier)
     return dossier
@@ -863,13 +1084,20 @@ def convertir_dossier(
     magasin = depot()
     dossier = _lire(reference, magasin)
     try:
+        jour = _aujourd_hui()
         clos, entreprise = convertir(
             dossier,
-            a_la_date=_aujourd_hui(),
+            a_la_date=jour,
             regime=demande.regime,
             centre=demande.centre,
             adherent=demande.adherent,
             par=acces.compte,
+            # Le numéro suit la séquence de tout le registre, comme une inscription.
+            numero_d_adhesion=(
+                prochain_numero_d_adhesion(depot_entreprises().lister(), jour.year)
+                if demande.adherent
+                else None
+            ),
         )
     except ConversionImpossible as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
@@ -879,11 +1107,7 @@ def convertir_dossier(
     # introuvable au portefeuille (404) : exactement le client « invisible de tous les
     # écrans qui comptent » que l'en-tête de cette route dit empêcher. Le magasin mémoire
     # du portefeuille est celui que ses routes lisent (pas 52).
-    session = session_de_travail()
-    if session is not None:
-        DepotEntreprisesSql(session, courant()).enregistrer(entreprise)
-    else:
-        entreprises_en_memoire().enregistrer(entreprise)
+    depot_entreprises().enregistrer(entreprise)
     enregistree = True
     magasin.enregistrer(clos)
     _annoncer_l_entreprise(clos, entreprise, adherente=demande.adherent)
@@ -985,3 +1209,7 @@ def _lire(reference: str, magasin: DepotDossiersCreation | None = None) -> Dossi
 
 
 __all__ = ["Immatriculation", "Jalon", "routeur"]
+
+
+#: Lot 4 (9 novembre 2026) : les routes des délais lisent un dossier comme les autres.
+lire_un_dossier_de_creation = _lire

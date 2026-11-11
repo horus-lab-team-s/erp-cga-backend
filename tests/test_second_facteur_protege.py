@@ -26,7 +26,12 @@ from app.contextes.transverse.api import (
 )
 from app.main import creer_application
 from app.partage.horloge import maintenant
-from tests.conftest import enroler_par_le_courriel, exige_postgresql, ouvrir_une_session
+from tests.conftest import (
+    enroler_par_le_courriel,
+    exige_postgresql,
+    ouvrir_une_session,
+    renforcer_la_session,
+)
 
 REVISEUR = ("C-003", "a.bouba@cga-brcg.cm")
 ADMINISTRATEUR = ("C-002", "s.onana@cga-brcg.cm")
@@ -49,13 +54,29 @@ def _session(application, courriel):
     return client
 
 
+def _session_forte(application, courriel):
+    """19 octobre 2026 : retirer le second facteur d'un collègue exige le sien."""
+    client = _session(application, courriel)
+    renforcer_la_session(client)
+    return client
+
+
 def _enroler(client):
     return client.post("/transverse/second-facteur")
 
 
-def _renforcer(client, secret):
+def _renforcer(client, secret, decalage=0):
+    """`decalage` : le code de la tranche suivante, pour qui renforce deux fois dans les
+    mêmes trente secondes (un même code ne sert qu'une fois)."""
     return client.post(
-        "/transverse/session/renforcement", json={"code": code_attendu(secret, maintenant())}
+        "/transverse/session/renforcement",
+        json={"code": code_attendu(secret, maintenant(), decalage)},
+    )
+
+
+def _activer(client, secret):
+    return client.post(
+        "/transverse/second-facteur/activation", json={"code": code_attendu(secret, maintenant())}
     )
 
 
@@ -205,9 +226,92 @@ class TestLeTitulaire:
         nouveau = remplacement.json()["secret"]
         assert nouveau != ancien
 
+        # ⚠️ 19 octobre 2026 : tant que la nouvelle clé n'est pas prouvée, l'ancienne vaut.
+        autre = _session(application, REVISEUR[1])
+        assert _renforcer(autre, ancien, decalage=1).json()["facteur_fort"] is True
+
+        assert _activer(client, nouveau).status_code == 200
         autre = _session(application, REVISEUR[1])
         assert _renforcer(autre, ancien).status_code == 401, "l'ancien appareil ne vaut plus"
-        assert _renforcer(autre, nouveau).json()["facteur_fort"] is True
+        # Au code suivant : celui de l'activation de la nouvelle clé a servi.
+        assert _renforcer(autre, nouveau, decalage=1).json()["facteur_fort"] is True
+
+
+class TestUnCodeNeSertQuUneFois:
+    """⚠️ 19 octobre 2026 : un code accepté restait valable quatre-vingt-dix secondes."""
+
+    def test_le_meme_code_ne_renforce_pas_une_seconde_session(self, application):
+        titulaire = _session(application, REVISEUR[1])
+        secret = enroler_par_le_courriel(titulaire)
+        assert _renforcer(titulaire, secret, decalage=1).json()["facteur_fort"] is True
+
+        intrus = _session(application, REVISEUR[1])
+        rejeu = _renforcer(intrus, secret, decalage=1)
+        assert rejeu.status_code == 401, rejeu.text
+        assert "déjà de servir" in rejeu.text
+        # Un code plus ancien encore ne passe pas davantage.
+        assert _renforcer(intrus, secret).status_code == 401
+
+    def test_le_code_qui_active_ne_renforce_pas_une_seconde_session(self, application):
+        """⚠️ 20 octobre 2026, constaté au tournage : l'activation ne retenait pas sa tranche."""
+        titulaire = _session(application, REVISEUR[1])
+        secret = TestLaCleAttendSonPremierCode._cle_affichee(titulaire)
+        assert _activer(titulaire, secret).json()["facteur_fort"] is True
+
+        rejeu = _renforcer(_session(application, REVISEUR[1]), secret)
+        assert rejeu.status_code == 401, rejeu.text
+        assert "déjà de servir" in rejeu.text
+
+
+class TestLaCleAttendSonPremierCode:
+    """⚠️ 19 octobre 2026 : le compte s'enrôlait à l'affichage de la clé.
+
+    Constaté en rédigeant le guide de la console : la page s'est fermée avant que la
+    clé soit saisie dans l'application, et le compte du réviseur portait un second
+    facteur que personne ne connaissait. Il a fallu l'administrateur pour le débloquer.
+    """
+
+    @staticmethod
+    def _cle_affichee(client):
+        assert _enroler(client).status_code == 200
+        (dernier, *_) = atelier().notifications.derniers("compte.second_facteur_confirmation")
+        jeton = dernier.contexte["lien"].split("jeton=", 1)[1]
+        reponse = client.post("/transverse/second-facteur/confirmation", json={"jeton": jeton})
+        assert reponse.status_code == 200, reponse.text
+        return reponse.json()["secret"]
+
+    def test_une_page_perdue_ne_bloque_pas_le_compte(self, application):
+        client = _session(application, REVISEUR[1])
+        self._cle_affichee(client)  # puis la page se ferme : aucun code saisi
+
+        assert client.get("/transverse/moi").json()["second_facteur_enrole"] is False
+        # Le titulaire redemande l'association, et reçoit un nouveau lien.
+        reprise = _enroler(_session(application, REVISEUR[1]))
+        assert reprise.json()["confirmation_par_courriel"] is True
+        assert _courriels("compte.second_facteur_enrole") == []
+
+    def test_le_premier_code_juste_active_et_renforce(self, application):
+        client = _session(application, REVISEUR[1])
+        secret = self._cle_affichee(client)
+
+        reponse = _activer(client, secret)
+        assert reponse.status_code == 200, reponse.text
+        assert reponse.json()["facteur_fort"] is True
+        assert client.get("/transverse/moi").json()["second_facteur_enrole"] is True
+        assert _courriels("compte.second_facteur_enrole") == [REVISEUR[1]]
+
+    def test_un_code_faux_n_active_rien(self, application):
+        client = _session(application, REVISEUR[1])
+        self._cle_affichee(client)
+
+        reponse = client.post("/transverse/second-facteur/activation", json={"code": "000000"})
+        assert reponse.status_code == 401, reponse.text
+        assert client.get("/transverse/moi").json()["second_facteur_enrole"] is False
+
+    def test_sans_cle_en_attente_rien_a_activer(self, application):
+        client = _session(application, REVISEUR[1])
+        reponse = client.post("/transverse/second-facteur/activation", json={"code": "123456"})
+        assert reponse.status_code == 400, reponse.text
 
 
 class TestLaReinitialisation:
@@ -221,7 +325,7 @@ class TestLaReinitialisation:
         titulaire = _session(application, REVISEUR[1])
         _renforcer(titulaire, enroler_par_le_courriel(titulaire))
 
-        reponse = self._reinitialiser(_session(application, ADMINISTRATEUR[1]))
+        reponse = self._reinitialiser(_session_forte(application, ADMINISTRATEUR[1]))
         assert reponse.status_code == 200, reponse.text
         assert reponse.json()["second_facteur_actif"] is False
         assert _courriels("compte.second_facteur_reinitialise") == [REVISEUR[1]]
@@ -240,7 +344,7 @@ class TestLaReinitialisation:
         assert "propre" in reponse.text
 
     def test_rien_a_reinitialiser(self, application):
-        reponse = self._reinitialiser(_session(application, ADMINISTRATEUR[1]))
+        reponse = self._reinitialiser(_session_forte(application, ADMINISTRATEUR[1]))
         assert reponse.status_code == 409, reponse.text
 
     def test_le_reviseur_ne_reinitialise_pas(self, application):
@@ -273,6 +377,7 @@ class TestSurPostgresql:
         ouvrir_une_session(client, REVISEUR[1])
         enroler_par_le_courriel(client)
         ouvrir_une_session(client, ADMINISTRATEUR[1])
+        renforcer_la_session(client)
         reponse = client.post(
             f"/transverse/comptes/{REVISEUR[0]}/second-facteur/reinitialisation",
             json={"motif": MOTIF},

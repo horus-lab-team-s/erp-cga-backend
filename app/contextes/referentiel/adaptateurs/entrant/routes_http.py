@@ -74,3 +74,41 @@ def etat_validation(a_la_date: date = Query(...)) -> EtatValidation:
         non_valides=non_valides,
         opposable=not non_valides,
     )
+
+
+# ── La géographie du Cameroun (8 novembre 2026) ─────────────────────────────
+
+
+@routeur.get(
+    "/geographie/decoupage",
+    summary="Régions, départements et arrondissements du Cameroun",
+    description=(
+        "Le découpage officiel de l'INC (10 régions, 58 départements, 360 arrondissements), "
+        "avec ses codes. Publique : le site la sert au formulaire de création. `cle` est la "
+        "valeur de la question `region_siege`."
+    ),
+)
+def lire_le_decoupage() -> dict:
+    from app.contextes.referentiel.api import geographie
+
+    geo = geographie()
+    return {"regions": geo.decoupage, "source": geo.sources.get("decoupage", "")}
+
+
+@routeur.get(
+    "/geographie/arrondissements/{code}/lieux",
+    summary="Villes, localités et quartiers d'un arrondissement",
+    description=(
+        "Les lieux d'OpenStreetMap rattachés à cet arrondissement. ⚠️ Les quartiers sont "
+        "PARTIELS : le formulaire laisse toujours écrire un quartier absent de la liste."
+    ),
+    responses={404: {"description": "Arrondissement inconnu"}},
+)
+def lire_les_lieux(code: str) -> dict:
+    from app.contextes.referentiel.api import geographie
+
+    geo = geographie()
+    if not geo.arrondissement_connu(code):
+        raise HTTPException(status_code=404, detail=f"arrondissement « {code} » inconnu.")
+    lieux = geo.lieux.get(code, {"villes": [], "localites": [], "quartiers": []})
+    return {"arrondissement": code, **lieux}

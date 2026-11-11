@@ -59,6 +59,7 @@ from pathlib import Path
 from typing import Any
 
 from app.contextes.tenants.api import EtapeOuverture, avec_substitution
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "port_de_stockage",
@@ -222,7 +223,7 @@ def port_des_comptes(unite_de_travail: Any, notifier: Any = None) -> Any:
                 # inaperçu.
                 nom=_nom_donne(contexte, courriel),
                 prenom=_nom_donne(contexte, courriel),
-                depuis=instant.date(),
+                depuis=jour_a_douala(instant),
                 comptes=boutique.comptes,
                 habilitations=boutique.habilitations,
                 jetons=boutique.jetons,

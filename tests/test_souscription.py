@@ -225,7 +225,7 @@ def _verifier(atelier_m, reference="SO-1", a_l_instant=INSTANT):
     )
 
 
-def _notifier(atelier_m, evenement, fournisseur=None, a_l_instant=INSTANT):
+def _notifier(atelier_m, evenement, fournisseur=None, a_l_instant=INSTANT, confirmer=False):
     return traiter_notification(
         {"_evenement": evenement},
         fournisseur=fournisseur or _FournisseurFactice(),
@@ -233,6 +233,7 @@ def _notifier(atelier_m, evenement, fournisseur=None, a_l_instant=INSTANT):
         suites=_suites(atelier_m),
         journal=atelier_m["journal"],
         a_l_instant=a_l_instant,
+        confirmer=confirmer,
     )
 
 
@@ -622,6 +623,50 @@ class TestPaiement:
 # ── L'encaissement de bout en bout ───────────────────────────────────────────
 
 
+class TestUneNotificationNeSuffitPas:
+    """16 octobre 2026, revue de sécurité : Tara ne signe pas ses notifications et la route
+    est publique. Une notification forgée encaissait un paiement jamais débité. Avec un
+    prestataire réel, seule la confirmation sortante (`interroger_statut`) fait foi."""
+
+    FORGEE = EvenementPaiement(identifiant_produit="cle-idempotence-0001", reussi=True)
+
+    def test_sans_confirmation_de_tara_rien_n_est_encaisse(self, atelier_m):
+        _devis(atelier_m)
+        _engager(atelier_m)
+        tara = _FournisseurFactice(statut=None)
+        resultat = _notifier(atelier_m, self.FORGEE, tara, confirmer=True)
+        assert not resultat.rapproche and resultat.statut is None
+        assert atelier_m["souscriptions"].lire("SO-1").etat is not EtatSouscription.PAYEE
+        actions = [e.action for e in atelier_m["journal"].lister()]
+        assert "paiement.notification_non_confirmee" in actions
+
+    def test_c_est_la_reponse_de_tara_qui_decide(self, atelier_m):
+        _devis(atelier_m)
+        _engager(atelier_m)
+        refus = EvenementPaiement(identifiant_produit="cle-idempotence-0001", reussi=False)
+        tara = _FournisseurFactice(statut=refus)
+        resultat = _notifier(atelier_m, self.FORGEE, tara, confirmer=True)
+        assert resultat.statut == StatutPaiement.REJETE
+
+    def test_avec_un_prestataire_reel_la_route_exige_la_confirmation(self):
+        from types import SimpleNamespace
+
+        from app.contextes.souscription.adaptateurs.entrant.routes_http import (
+            confirmation_requise,
+        )
+
+        assert confirmation_requise(SimpleNamespace(simule=False)) is True
+        assert confirmation_requise(SimpleNamespace(simule=True)) is False
+
+    def test_confirmee_elle_encaisse(self, atelier_m):
+        _devis(atelier_m)
+        _engager(atelier_m)
+        resultat = _notifier(
+            atelier_m, self.FORGEE, _FournisseurFactice(statut=self.FORGEE), confirmer=True
+        )
+        assert resultat.rapproche and resultat.statut == StatutPaiement.VALIDE
+
+
 class TestEncaissement:
     def test_la_notification_encaisse_et_n_ouvre_pas_l_acces_sans_verification(self, atelier_m):
         """⚠️ Pas 83 : ce cas s'appelait « la notification ouvre l'accès », et c'était la
@@ -752,6 +797,7 @@ class TestEncaissement:
             suites=_suites(atelier_m),
             journal=atelier_m["journal"],
             a_l_instant=INSTANT,
+            confirmer=False,
         )
         assert not resultat.rapproche
 
@@ -1175,6 +1221,24 @@ class TestApi:
         for charge in charges:
             reponse = client.post("/souscription/notification/tara", json=charge)
             assert reponse.status_code == 200, charge
+
+    def test_en_production_sans_prestataire_rien_ne_se_fabrique(
+        self, client: TestClient, monkeypatch
+    ):
+        """16 octobre 2026, revue de sécurité : sans clé Tara, la production gardait la
+        notification et la simulation ouvertes, sans authentification."""
+        import app.contextes.souscription.adaptateurs.entrant.routes_http as routes
+        from app.infrastructure.config import configuration
+
+        production = configuration().model_copy(update={"environnement": "production"})
+        monkeypatch.setattr(routes, "configuration", lambda: production)
+        forgee = client.post(
+            "/souscription/notification/tara",
+            json={"productId": "x", "status": "SUCCESS", "phoneNumber": "699112233"},
+        )
+        assert forgee.status_code == 200 and forgee.json()["rapproche"] is False
+        assert "refusée" in forgee.json()["message"]
+        assert client.post("/souscription/paiements/PM-1/simulation", json={}).status_code == 404
 
     def test_la_surveillance_est_reservee(self, client: TestClient):
         assert client.get("/souscription/a-activer").status_code == 401

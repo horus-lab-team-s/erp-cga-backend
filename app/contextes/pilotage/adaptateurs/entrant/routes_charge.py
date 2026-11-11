@@ -14,13 +14,12 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.contextes.comptabilite.api import depot_des_revues
-from app.contextes.pilotage.adaptateurs.entrant.routes_http import (
-    _aujourd_hui,
-    _depot_dossiers,
-    _depot_pieces,
-    _echeancier,
-    _ecritures,
-    _sans_echouer,
+from app.contextes.pilotage.adaptateurs.entrant.sources import (
+    depot_dossiers,
+    depot_ecritures,
+    depot_pieces,
+    echeancier_du_dossier,
+    sans_echouer,
 )
 from app.contextes.pilotage.adaptateurs.sortant.charge_yaml import (
     charger_les_reglages_de_la_charge,
@@ -37,14 +36,15 @@ from app.contextes.pilotage.domaine.charge_et_production import (
     proposer_des_reaffectations,
 )
 from app.contextes.transverse.api import (
-    ROLES_INTERNES,
     AccesRequis,
     Permission,
     atelier,
+    est_interne,
     exiger,
     habilitations_actives,
 )
 from app.infrastructure.config import configuration
+from app.partage.horloge import aujourd_hui, jour_a_douala
 
 routeur = APIRouter(prefix="/pilotage", tags=["Pilotage · charge et production"])
 
@@ -68,10 +68,10 @@ class ChargeEtProduction(BaseModel):
 
 def _dossier(entreprise, jour: date, debut: date, fin: date) -> DossierPourLaCharge:
     niu = entreprise.niu
-    pieces = _sans_echouer(lambda: _depot_pieces().du_dossier(niu), [])
-    echeancier = _sans_echouer(lambda: _echeancier(entreprise, str(jour.year), jour), [])
-    ecritures = _sans_echouer(lambda: _ecritures(niu).toutes(str(jour.year)), [])
-    revues = _sans_echouer(lambda: depot_des_revues().du_dossier(niu), [])
+    pieces = sans_echouer(lambda: depot_pieces().du_dossier(niu), [])
+    echeancier = sans_echouer(lambda: echeancier_du_dossier(entreprise, str(jour.year), jour), [])
+    ecritures = sans_echouer(lambda: depot_ecritures(niu).toutes(str(jour.year)), [])
+    revues = sans_echouer(lambda: depot_des_revues().du_dossier(niu), [])
     return DossierPourLaCharge(
         niu=niu,
         denomination=entreprise.denomination,
@@ -82,12 +82,16 @@ def _dossier(entreprise, jour: date, debut: date, fin: date) -> DossierPourLaCha
         retards=sum(1 for i in echeancier if i.en_retard(jour)),
         # ⚠️ Reçues **et** traitées ce mois : la pièce ne retient pas la date de son traitement.
         pieces_traitees_du_mois=sum(
-            1 for p in pieces if p.traitee and debut <= p.recue_le.date() <= fin
+            1 for p in pieces if p.traitee and debut <= jour_a_douala(p.recue_le) <= fin
         ),
         ecritures_du_mois=sum(
-            1 for e in ecritures if e.validee_le is not None and debut <= e.validee_le.date() <= fin
+            1
+            for e in ecritures
+            if e.validee_le is not None and debut <= jour_a_douala(e.validee_le) <= fin
         ),
-        reprises_du_mois=sum(1 for r in revues for m in r.remarques if debut <= m.le.date() <= fin),
+        reprises_du_mois=sum(
+            1 for r in revues for m in r.remarques if debut <= jour_a_douala(m.le) <= fin
+        ),
     )
 
 
@@ -104,9 +108,9 @@ def _porteurs(nius: list[str], jour: date) -> list[PorteurDeDossiers]:
         for h in habilitations_actives(boutique.habilitations.pour_dossier(niu), jour):
             # Ni transverse (accès à tout, ne porte rien), ni adhérent ou inspecteur (portée
             # explicite, mais aucun travail du cabinet) : le défaut trouvé au pas 105.
-            if h.portee is None or h.role not in ROLES_INTERNES:
+            if h.portee is None or not est_interne(h.role):
                 continue
-            compte, role, portes = par_habilitation.get(h.identifiant, (h.compte, h.role.value, []))
+            compte, role, portes = par_habilitation.get(h.identifiant, (h.compte, str(h.role), []))
             portes.append(niu)
             par_habilitation[h.identifiant] = (compte, role, portes)
     porteurs = []
@@ -160,10 +164,10 @@ def lire_les_dossiers_sans_comptable(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger(acces, Permission.AFFECTER_DOSSIER)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
     debut = jour.replace(day=1)
     fin = (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-    entreprises = _depot_dossiers().lister()
+    entreprises = depot_dossiers().lister()
     dossiers = {e.niu: _dossier(e, jour, debut, fin) for e in entreprises}
     return dossiers_sans_comptable(_porteurs(list(dossiers), jour), dossiers)
 
@@ -177,11 +181,11 @@ def lire_la_charge_et_la_production(
     a_la_date: date | None = Query(None, description="Défaut : aujourd'hui"),
 ) -> ChargeEtProduction:
     exiger(acces, Permission.LIRE_PILOTAGE)
-    jour = a_la_date or _aujourd_hui()
+    jour = a_la_date or aujourd_hui()
     debut = jour.replace(day=1)
     fin = (debut + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     reglages = charger_les_reglages_de_la_charge(configuration().dossier_referentiel)
-    entreprises = _depot_dossiers().lister()
+    entreprises = depot_dossiers().lister()
     dossiers = {e.niu: _dossier(e, jour, debut, fin) for e in entreprises}
     porteurs = _porteurs(list(dossiers), jour)
     return ChargeEtProduction(

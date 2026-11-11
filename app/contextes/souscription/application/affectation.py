@@ -51,6 +51,7 @@ from app.contextes.souscription.domaine.affectation import (
     classer,
 )
 from app.contextes.souscription.domaine.dossier_commercial import DossierCommercial
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["ResultatAffectation", "affecter_le_dossier", "reaffecter_le_dossier"]
 
@@ -122,7 +123,7 @@ def affecter_le_dossier(
     une décision passée pour l'expliquer : rejouer avec la grille d'aujourd'hui
     donnerait la bonne réponse d'aujourd'hui à une question d'il y a six mois.
     """
-    verdicts = classer(candidatures, regles, a_la_date or a_l_instant.date())
+    verdicts = classer(candidatures, regles, a_la_date or jour_a_douala(a_l_instant))
     choix = choix_parmi(verdicts)
     if choix is None:
         return ResultatAffectation(dossier=dossier, choix=None, verdicts=verdicts)
@@ -170,7 +171,7 @@ def reaffecter_le_dossier(
     """
     deja_vus = {dossier.responsable, *dossier.responsables_passes}
     restants = [c for c in candidatures if c.responsable not in deja_vus]
-    verdicts = classer(restants, regles, a_la_date or a_l_instant.date())
+    verdicts = classer(restants, regles, a_la_date or jour_a_douala(a_l_instant))
     choix = choix_parmi(verdicts)
     if choix is None:
         return ResultatAffectation(dossier=dossier, choix=None, verdicts=verdicts)

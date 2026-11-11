@@ -228,6 +228,17 @@ class TestPieces:
             "une pièce imprévue ne doit pas bloquer un dépôt : elle est tracée, pas exigée"
         )
 
+    def test_une_piece_hors_liste_prend_son_nom_et_un_rang_libre(self):
+        """18 octobre 2026 : une pièce reçue par WhatsApp que la liste n'a pas prévue."""
+        dossier = fournir_piece(_dossier(), "AUTRE", JOUR, libelle="Plan de localisation")
+        dossier = fournir_piece(dossier, "AUTRE", JOUR, libelle="Bail commercial")
+        ajoutees = {p.code: p.libelle for p in dossier.pieces if p.code.startswith("AUTRE")}
+        assert ajoutees == {"AUTRE-1": "Plan de localisation", "AUTRE-2": "Bail commercial"}
+        # Le libellé ne renomme jamais une pièce de la liste.
+        premiere = dossier.pieces[0]
+        renommee = fournir_piece(dossier, premiere.code, JOUR, libelle="autre nom")
+        assert renommee.pieces[0].libelle == premiere.libelle
+
     def test_un_identifiant_sans_sa_date_est_refuse(self):
         """Sans la date, le délai tenu par le guichet n'est plus reconstituable."""
         from app.contextes.creation_entreprise.api import Immatriculation

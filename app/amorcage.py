@@ -72,7 +72,7 @@ from app.contextes.transverse.api import (
     unite_de_travail,
 )
 from app.demonstration_a_jour import consigner
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 __all__ = ["AmorcageRefuse", "amorcer"]
 
@@ -88,6 +88,17 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
     eux-mêmes créée. Il n'a pas d'équivalent en ligne de commande, et c'est
     délibéré : la seule façon de réamorcer une base est de la recréer.
     """
+    from app.infrastructure.config import configuration
+
+    # ⚠️ 20 octobre 2026 (audit avant la production) : sur une base de production neuve,
+    # rien ne l'arrêtait, et elle aurait posé les comptes de la démonstration avec leur
+    # mot de passe publié. Le premier compte réel se crée par `app.premier_administrateur`.
+    if configuration().en_production:
+        raise AmorcageRefuse(
+            f"environnement {configuration().environnement} : le jeu de démonstration n'a "
+            "rien à faire ici. Créer le premier compte par `python -m "
+            "app.premier_administrateur`."
+        )
     with unite_de_travail(locataire) as boutique:
         if not forcer and boutique.comptes.lister():
             raise AmorcageRefuse(
@@ -179,7 +190,43 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
         # L'AMORÇAGE : les six accusés ci-dessus datent de 2024, et le dossier
         # affichait sinon quatre-vingts périodes en retard. Voir
         # `demonstration_a_jour.py`.
-        accuses_du_jour = consigner(session, locataire, maintenant().date())
+        accuses_du_jour = consigner(session, locataire, aujourd_hui())
+
+        # ── Les honoraires des adhérents (14 octobre 2026) ────────────────
+        #
+        # Datés du jour de l'amorçage, comme les accusés : l'échéancier montre
+        # ses quatre états quel que soit le jour où la base est créée.
+        from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+            DepotContratsDHonorairesSql,
+            DepotReglementsDHonorairesSql,
+        )
+        from app.contextes.souscription.adaptateurs.sortant.honoraires_demo import (
+            honoraires_demo,
+        )
+
+        contrats_honoraires, reglements_honoraires = honoraires_demo(aujourd_hui())
+        for contrat_h in contrats_honoraires:
+            DepotContratsDHonorairesSql(session, locataire).enregistrer(contrat_h)
+        for reglement_h in reglements_honoraires:
+            DepotReglementsDHonorairesSql(session, locataire).enregistrer(reglement_h)
+        # 18 octobre 2026 : la règle de dépassement du cabinet de démonstration. Trente
+        # jours : Bâtiment Plus, en retard d'un mois, se traite encore ; sans règle, le
+        # « d'office » l'aurait bloqué dès l'amorçage.
+        from app.contextes.souscription.adaptateurs.sortant.depots_sql import (
+            DepotRegleDeDepassementSql,
+        )
+        from app.contextes.souscription.domaine.situation_de_reglement import (
+            RegleDeDepassement,
+        )
+
+        DepotRegleDeDepassementSql(session, locataire).enregistrer(
+            RegleDeDepassement(
+                delai_jours=30,
+                motif="règle de la démonstration : un mois de retard toléré",
+                fixee_par="C-010",
+                fixee_le=maintenant(),
+            )
+        )
 
         return {
             "creations": len(PIPELINE_DEMO),
@@ -192,4 +239,5 @@ def amorcer(locataire: str = LOCATAIRE_PAR_DEFAUT, *, forcer: bool = False) -> d
             "demandes": len(DEMANDES_DEMO),
             "ecritures": ecritures_posees,
             "accuses": len(ACCUSES_DEMO) + accuses_du_jour,
+            "contrats_honoraires": len(contrats_honoraires),
         }

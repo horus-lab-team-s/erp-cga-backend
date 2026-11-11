@@ -82,7 +82,7 @@ from app.orchestration.ordonnanceur import Passage as PassageOrdonnance
 from app.orchestration.ordonnanceur import RepriseRefusee, Travail
 from app.orchestration.relais import Abonnements, publier_un_lot
 from app.orchestration.tour import faire_un_tour
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 from app.partage.locataire import courant
 
 _journal = logging.getLogger("cga.ordonnanceur")
@@ -145,7 +145,7 @@ class Atelier:
             # `ports_d_ouverture.py`.
             provisionneur=ProvisionneurLocal(
                 registre,
-                a_la_date=maintenant().date(),
+                a_la_date=aujourd_hui(),
                 stockage=port_de_stockage(configuration().dossier_fichiers),
                 # ⚠️ Le notifieur est résolu ici, au branchement, et non au
                 # chargement du module : la configuration doit être lue

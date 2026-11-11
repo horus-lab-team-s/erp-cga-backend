@@ -31,6 +31,9 @@ from app.contextes.pilotage.adaptateurs.sortant.charge_yaml import (
 from app.contextes.pilotage.adaptateurs.sortant.espace_adherent_yaml import (
     charger_les_reglages_de_l_espace_adherent,
 )
+from app.contextes.pilotage.adaptateurs.sortant.expirations_yaml import (
+    charger_les_reglages_des_expirations,
+)
 from app.contextes.pilotage.adaptateurs.sortant.file_d_anomalies_yaml import (
     charger_les_reglages_de_la_file,
 )
@@ -62,14 +65,16 @@ REGLAGES: tuple[tuple[str, Callable[[Path], object]], ...] = (
     ("les pièces manquantes", charger_les_reglages_des_pieces_manquantes),
     ("le plan de travail", charger_les_reglages_du_plan),
     ("le rapport mensuel", charger_les_reglages_du_rapport),
+    # Lot 4 (9 novembre 2026) : les paliers des alertes d'expiration.
+    ("les alertes d'expiration", charger_les_reglages_des_expirations),
 )
 
 
 def sonde_du_pilotage() -> Verdict | None:
-    """Les sept réglages se chargent-ils ?
+    """Les huit réglages se chargent-ils ?
 
     ⚠️ **Le premier qui tombe fait foi, et il est nommé.** Rendre « trois réglages sur
-    sept sont fautifs » obligerait à tous les charger même après le premier échec, pour
+    huit sont fautifs » obligerait à tous les charger même après le premier échec, pour
     un gain nul : on corrige le premier, on relit la sonde, elle nomme le suivant.
     """
     referentiel = configuration().dossier_referentiel

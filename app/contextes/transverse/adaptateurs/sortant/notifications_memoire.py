@@ -48,11 +48,41 @@ CODES_MESSAGES: dict[str, str] = {
     "creation.dossier_ouvert": (
         "Dossier de formalité ouvert, avec le lien de suivi qui n'expire pas"
     ),
+    # 14 octobre 2026 : le compte client s'ouvre au paiement de la création.
+    "creation.dossier_ouvert_avec_compte": (
+        "Dossier de formalité ouvert, compte client créé : choisir son mot de passe"
+    ),
+    # 15 octobre 2026 : ce que le cabinet a fait pour l'adhérent, sans qu'il se connecte.
+    "adherent.quittance_verifiee": "Quittance vérifiée : l'échéance est payée",
+    "adherent.quittance_refusee": "Quittance à renvoyer, avec le motif",
+    "adherent.fonds_recus": "Fonds reçus par le cabinet, qui règle l'administration",
+    "adherent.honoraires_regles": "Honoraires réglés : le reçu est dans l'espace",
+    # 9 novembre 2026 : les relances d'honoraires (travail `relances-des-honoraires`).
+    "honoraires.echeance_a_regler": "Honoraires exigibles : montant, période et date limite",
+    "honoraires.en_retard": "Honoraires en retard : le délai de règlement est dépassé",
+    "honoraires.preavis_suspension": "Préavis : l'espace sera suspendu à la date dite",
+    "honoraires.acces_suspendu": "Espace suspendu pour honoraires impayés",
+    # 18 octobre 2026 (point 25) : la réponse relue du cabinet à un candidat.
+    "recrutement.reponse": "Réponse du cabinet à un candidat",
+    # 19 octobre 2026 (point 25) : l'accusé automatique, au dépôt de la candidature.
+    "recrutement.accuse": "Accusé de réception d'une candidature",
+    # 18 octobre 2026 (point 22) : la prestation ponctuelle, prise en charge puis livrée.
+    "mission.ouverte": "Prestation ponctuelle prise en charge",
+    "mission.livree": "Prestation ponctuelle livrée",
+    "compte.adhesion_ajoutee": (
+        "Votre société est immatriculée, l'espace adhérent s'ajoute à votre compte"
+    ),
     # Pas 138 : elle engageait son entreprise et ne recevait rien.
     "proforma.acceptation": "Accusé d'acceptation d'une proposition commerciale",
     # Pas 134 : entre le dépôt du formulaire et le premier appel, la cliente
     # n'avait aucune trace écrite de son geste.
     "demande.accuse_de_depot": "Accusé de réception d'une demande de contact",
+    "demande.accuse_avec_code": "Accusé de réception, avec le code de dossier et le rendez-vous",
+    "demande.rattachee": "Une demande jointe à son dossier par le code de dossier",
+    "rendez_vous.lien": "Le lien de visioconférence d'un rendez-vous de création",
+    "rendez_vous.rappel": "Le rappel de la veille d'un rendez-vous de création",
+    "expiration.adherent": "Un document ou une adhésion qui expire, prévenu à l'adhérent",
+    "penalite.infligee": "Une pénalité de retard appliquée au dossier, avec son explication",
     # Pas 133 : une fondatrice n'a pas souscrit, elle a fait immatriculer sa
     # société — et son accès s'ouvre le jour du NIU, pas celui du paiement.
     "compte.activation_creation": (
@@ -71,6 +101,10 @@ CODES_MESSAGES: dict[str, str] = {
     "relance.proforma": "Relance d'une proposition transmise et sans réponse",
     # La proposition elle-même, envoyée au client dès que le responsable l'a émise.
     "proforma.envoi": "Votre proposition est prête, avec le lien pour la consulter",
+    # 14 octobre 2026 : la même, avec le détail des rubriques et le document joint.
+    "proforma.envoi.detaillee": (
+        "Votre proposition, son détail rubrique par rubrique, et le document joint"
+    ),
     "piece.rectificative_demandee": "Le cabinet demande une facture rectificative",
     # Pas 111 : la relance des pièces qui manquent au mois, composée par le comptable.
     "piece.relance": "Les pièces qui manquent pour terminer votre mois",

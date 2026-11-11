@@ -29,6 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.contextes.conformite.domaine.constructeur import Combinaison, ConditionDAnomalie
 from app.contextes.conformite.domaine.entites import Regle
 from app.contextes.referentiel.contrats import StatutValidation
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "EssaiDeRegle",
@@ -113,7 +114,7 @@ class PropositionDeRegle(BaseModel):
             raise PropositionRefusee(
                 f"la règle {self.regle.code} n'est pas en vigueur : il n'y a rien à retirer."
             )
-        if a_compter_du < le.date() or a_compter_du < self.regle.applicable_du:
+        if a_compter_du < jour_a_douala(le) or a_compter_du < self.regle.applicable_du:
             raise PropositionRefusee(
                 "un retrait prend effet aujourd'hui au plus tôt, et pas avant la date d'effet de "
                 "la règle : les contrôles déjà rendus ne changent pas."
@@ -179,6 +180,6 @@ class PropositionDeRegle(BaseModel):
                 "applicable_au": self.fin_d_effet,
                 "statut": StatutValidation.VALIDE,
                 "valide_par": self.tranche_par_nom,
-                "valide_le": self.tranche_le.date(),
+                "valide_le": jour_a_douala(self.tranche_le),
             }
         )

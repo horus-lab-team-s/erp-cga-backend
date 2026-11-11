@@ -46,20 +46,22 @@ def affecter_a_l_arrivee(evenement: EvenementSortant) -> None:
     # Importé à l'appel : les dépôts et le référentiel d'acquisition vivent avec
     # les routes, et ce module est chargé à la composition de l'application.
     from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _candidatures_du_cabinet,
-        _dossiers,
-        _referentiel_d_acquisition,
+        candidatures_du_cabinet,
+    )
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_dossiers,
+        referentiel_d_acquisition,
     )
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     dossier = depot.lire(evenement.charge.get("dossier", ""))
     if dossier.etat is not EtatDossier.DEPOSEE:
         return
 
     resultat = affecter_le_dossier(
         dossier,
-        _candidatures_du_cabinet(dossier.service, depot),
-        _referentiel_d_acquisition()["affectation"],
+        candidatures_du_cabinet(dossier.service, depot),
+        referentiel_d_acquisition()["affectation"],
         maintenant(),
     )
     if resultat.affecte:

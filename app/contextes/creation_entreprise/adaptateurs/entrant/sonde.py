@@ -39,6 +39,7 @@ La sonde est le seul endroit d'où ce silence se voit.
 
 from __future__ import annotations
 
+from app.partage import horloge
 from app.registre.etat import Verdict
 
 __all__ = ["sonde_de_la_creation_d_entreprise"]
@@ -106,9 +107,8 @@ def _les_capitaux_minimaux() -> Verdict | None:
         ServiceParametres,
         parametres_communs,
     )
-    from app.partage.horloge import maintenant
 
-    aujourd_hui = maintenant().date()
+    aujourd_hui = horloge.aujourd_hui()
     try:
         service = ServiceParametres(list(parametres_communs()))
     except Exception as panne:  # noqa: BLE001 — le motif importe, quel qu'il soit

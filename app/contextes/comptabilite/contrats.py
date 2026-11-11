@@ -19,6 +19,7 @@ Les consommateurs prévus sont F · Obligations, qui lira les écritures pour
 
 from __future__ import annotations
 
+from app.contextes.comptabilite.domaine.balance_auxiliaire import JOURNAL_DES_A_NOUVEAUX
 from app.contextes.comptabilite.domaine.entites import (
     AttributFiscal,
     Compte,
@@ -54,6 +55,7 @@ from app.contextes.comptabilite.domaine.projections import (
 )
 
 __all__ = [
+    "JOURNAL_DES_A_NOUVEAUX",
     "AttributFiscal",
     "Compte",
     "DestinationCompte",

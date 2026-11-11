@@ -24,6 +24,7 @@ import pytest
 from app.contextes.obligations.adaptateurs.sortant import effectif as module_effectif
 from app.contextes.obligations.api import effectif_du_dossier
 from app.contextes.social.api import CONTRATS_DEMO, Periode, a_employe_sur
+from app.demonstration_a_jour import DOSSIER_DE_DEMONSTRATION
 from app.partage.copie import transiter
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
@@ -154,5 +155,8 @@ class TestParLesRoutes:
             (r["obligation"]["entreprise"], r["obligation"]["code_obligation"])
             for r in reponse.json()
         }
-        assert (EMPLOYEUR, "CNPS") in sociales, sociales
+        # ⚠️ Le dossier de démonstration, et non `EMPLOYEUR` (9 novembre 2026) : c'est le
+        # seul dont la démonstration garde la CNPS récente ouverte « pour les relances ».
+        # Les autres sont à jour, et une période déposée ne se relance pas.
+        assert (DOSSIER_DE_DEMONSTRATION, "CNPS") in sociales, sociales
         assert (SANS_PERSONNEL, "CNPS") not in sociales

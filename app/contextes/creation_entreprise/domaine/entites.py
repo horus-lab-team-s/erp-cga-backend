@@ -46,7 +46,7 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.contextes.portefeuille.contrats import FormeJuridique
 
@@ -246,6 +246,57 @@ class Immatriculation(BaseModel):
         return all((self.rccm, self.niu, self.patente, self.cnps))
 
 
+class CanalDeLaPiece(StrEnum):
+    """Par où la pièce est arrivée au cabinet.
+
+    ⚠️ AJOUTÉ LE 14 OCTOBRE 2026, À LA DEMANDE DU CABINET : « les documents
+    envoyés par WhatsApp sont versés par le juriste ». Une pièce reçue ne disait
+    pas d'où elle venait : six mois plus tard, devant un document illisible, on ne
+    savait plus s'il fallait le redemander à la cliente ou le rechercher dans une
+    conversation.
+    """
+
+    #: Déposée par la cliente, depuis le lien de suivi sans compte.
+    LIEN_DE_SUIVI = "LIEN_DE_SUIVI"
+    #: Déposée par la cliente, depuis son compte.
+    ESPACE_CLIENT = "ESPACE_CLIENT"
+    #: Reçue par messagerie, versée par un collaborateur.
+    WHATSAPP = "WHATSAPP"
+    #: Apportée au cabinet.
+    GUICHET = "GUICHET"
+    COURRIEL = "COURRIEL"
+
+
+#: Les pièces qui s'établissent PENDANT la constitution, avec le cabinet (9 novembre 2026).
+#:
+#: ⚠️ À l'ouverture du dossier, l'entreprise n'existe pas encore : le fondateur n'a ni
+#: statuts signés (le cabinet les rédige, ou il apporte les siens), ni bail (il se signe au
+#: nom de la société), ni déclaration notariée, ni PV de nomination. Ces pièces restent au
+#: dossier, mais le client ne doit pas lire qu'on les lui demande dès maintenant.
+#: Déduit du CODE : les dossiers déjà ouverts en profitent sans migration.
+PIECES_DE_LA_CONSTITUTION: frozenset[str] = frozenset(
+    {
+        "STATUTS",
+        "JUSTIFICATIF_SIEGE",
+        "DECLARATION_SOUSCRIPTION",
+        "PV_NOMINATION",
+        "COMMISSAIRE_COMPTES",
+        "REGLEMENT_INTERIEUR",
+    }
+)
+
+
+#: Les pièces de l'IMMATRICULATION de l'entreprise et de son personnel (9 novembre 2026).
+#:
+#: ⚠️ Liste du responsable juridique du cabinet : « les documents dont nous avons besoin pour
+#: votre immatriculation et celles de vos employés ». Elles viennent APRÈS la création — la
+#: société a alors son cachet, son téléphone, son adresse — et ne bloquent donc pas le dépôt
+#: du dossier de constitution : voir `pieces_manquantes`.
+PIECES_DE_L_IMMATRICULATION: frozenset[str] = frozenset(
+    {"ID_GERANT", "COORDONNEES_ENTREPRISE", "LISTE_PERSONNEL", "CACHET_ENTREPRISE"}
+)
+
+
 class PieceConstitution(BaseModel):
     """Une pièce attendue au dossier de constitution.
 
@@ -264,10 +315,23 @@ class PieceConstitution(BaseModel):
     fournie_le: date | None = None
     #: Empreinte du fichier au magasin de C · Collecte, si la pièce y est déposée.
     empreinte: str | None = None
+    #: Par où elle est arrivée. `None` pour les pièces reçues avant le 14 octobre 2026.
+    canal: CanalDeLaPiece | None = None
+    #: Qui l'a versée au dossier : un compte du cabinet, ou « cliente ».
+    versee_par: str | None = None
 
     @property
     def fournie(self) -> bool:
         return self.fournie_le is not None
+
+    @computed_field
+    @property
+    def moment(self) -> str:
+        """`FONDATEUR` : il l'a déjà, à fournir dès l'ouverture. `CONSTITUTION` : elle
+        s'établit pendant la constitution, avec le cabinet. Voir `PIECES_DE_LA_CONSTITUTION`."""
+        if self.code in PIECES_DE_L_IMMATRICULATION:
+            return "IMMATRICULATION"
+        return "CONSTITUTION" if self.code in PIECES_DE_LA_CONSTITUTION else "FONDATEUR"
 
 
 class Jalon(BaseModel):
@@ -325,6 +389,11 @@ class DossierCreation(BaseModel):
     #: portefeuille. Sert de lien, et évite de reconvertir deux fois.
     converti_en: str | None = None
     motif_abandon: str | None = None
+    # ── Lot 4 (9 novembre 2026) : les points de départ et d'arrivée des délais ──
+    #: Le cabinet a transmis les statuts au client (fin de la rédaction, début de la validation).
+    statuts_transmis_le: date | None = None
+    #: Le client a retiré ses originaux (fin du délai de retrait).
+    originaux_remis_le: date | None = None
 
     @model_validator(mode="after")
     def _un_abandon_porte_son_motif(self) -> DossierCreation:
@@ -348,8 +417,25 @@ class DossierCreation(BaseModel):
     # ── Lectures ────────────────────────────────────────────────────────────
     @property
     def pieces_manquantes(self) -> tuple[PieceConstitution, ...]:
-        """Les pièces obligatoires encore absentes."""
-        return tuple(p for p in self.pieces if p.obligatoire and not p.fournie)
+        """Les pièces obligatoires de la CONSTITUTION encore absentes.
+
+        ⚠️ 9 novembre 2026 : celles de l'immatriculation (cachet, liste du personnel…) n'y
+        sont pas : elles suivent la création et ne retiennent pas le dépôt du dossier.
+        """
+        return tuple(
+            p
+            for p in self.pieces
+            if p.obligatoire and not p.fournie and p.moment != "IMMATRICULATION"
+        )
+
+    @property
+    def pieces_d_immatriculation_manquantes(self) -> tuple[PieceConstitution, ...]:
+        """Ce qui manque encore pour immatriculer l'entreprise et son personnel."""
+        return tuple(
+            p
+            for p in self.pieces
+            if p.obligatoire and not p.fournie and p.moment == "IMMATRICULATION"
+        )
 
     @property
     def constitution_achevee(self) -> bool:

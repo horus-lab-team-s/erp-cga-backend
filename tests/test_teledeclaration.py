@@ -565,7 +565,15 @@ class TestApi:
         avant = client.get("/transverse/moi").json()
         assert avant["second_facteur_enrole"] is False
         enroler_par_le_courriel(client)
-        apres = client.get("/transverse/moi").json()
+        # ⚠️ 19 octobre 2026 : le premier code ACTIVE la clé et renforce la session où
+        # il a été saisi. Une session ouverte ensuite est enrôlée, mais pas renforcée.
+        assert client.get("/transverse/moi").json()["facteur_fort"] is True
+        autre = TestClient(client.app)
+        autre.post(
+            "/transverse/session",
+            json={"courriel": "a.bouba@cga-brcg.cm", "mot_de_passe": MOT_DE_PASSE_DEMO},
+        )
+        apres = autre.get("/transverse/moi").json()
         assert apres["second_facteur_enrole"] is True
         assert apres["facteur_fort"] is False
 

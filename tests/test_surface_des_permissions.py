@@ -43,14 +43,62 @@ PUBLIQUES: dict[tuple[str, str], str] = {
     ("GET", "/vitrine/articles"): "Contenu du site public, écrit pour être lu.",
     ("GET", "/vitrine/articles/{slug}"): "Contenu du site public, écrit pour être lu.",
     ("GET", "/vitrine/institutions"): "Contenu du site public, écrit pour être lu.",
+    # 16 octobre 2026 : les offres de poste du cabinet. Le candidat les lit et postule
+    # sans compte ; seules les offres publiées et non échues répondent, le CV est un PDF
+    # vérifié sur son contenu, et une personne ne postule qu'une fois à une offre.
+    ("GET", "/vitrine/offres"): "Les postes ouverts, publiés pour être lus.",
+    ("GET", "/vitrine/offres/{identifiant}"): "Un poste ouvert et ses qualifications.",
+    ("GET", "/vitrine/offres/{identifiant}/image"): (
+        "L'image d'un poste ouvert, publiée avec lui ; une offre en brouillon ou close rend 404."
+    ),
+    ("POST", "/vitrine/offres/{identifiant}/candidatures"): (
+        "Postuler ne demande pas de compte : le candidat n'en a pas, et n'a pas à en créer un."
+    ),
     ("GET", "/acquisition/canaux"): (
         "La vitrine doit savoir quels canaux proposer au visiteur. Exiger une "
         "session pour afficher un formulaire reviendrait à demander à quelqu'un de "
         "s'inscrire pour poser une question."
     ),
+    ("GET", "/acquisition/questionnaires/{service}/visiteur"): (
+        "Les questions que le site pose avant qu'un responsable rappelle : le "
+        "visiteur n'a pas de compte. La route ne rend que ce qui est écrit pour "
+        "lui — pas l'aide du juriste, qui dit comment le cabinet chiffre, ni les "
+        "questions que le référentiel réserve au responsable."
+    ),
+    ("POST", "/acquisition/proformas/{numero}/paiement-en-ligne"): (
+        "Le client règle lui-même la proposition qu'il a acceptée : il n'a pas de "
+        "compte. La route est scellée comme l'acceptation, par le lien personnel "
+        "de la proposition, et elle ne constate rien : elle demande le débit, "
+        "c'est la notification de l'opérateur qui encaisse."
+    ),
     ("POST", "/acquisition/demandes"): (
         "Le seul point d'entrée du parcours. Un visiteur n'a pas de compte, et "
         "c'est justement ce que cette route existe pour changer."
+    ),
+    ("POST", "/acquisition/demandes/pieces"): (
+        "Le visiteur joint ses pièces à la demande qu'il vient de déposer : pas de "
+        "compte non plus, mais le jeton de l'accusé, propre à cette demande (point 22)."
+    ),
+    ("GET", "/acquisition/rendez-vous/creneaux"): (
+        "Le visiteur qui préfère un rendez-vous voit les créneaux encore libres : des heures, "
+        "rien d'autre — ni nom, ni dossier (9 novembre 2026)."
+    ),
+    ("POST", "/acquisition/demandes/frais-de-traitement/etat"): (
+        "Le visiteur voit si ses frais de traitement sont versés, sur la page d'après "
+        "l'envoi : sans compte, par le jeton de l'accusé, propre à cette demande et à cet "
+        "usage. Rien d'autre que le montant et un booléen (9 novembre 2026)."
+    ),
+    ("POST", "/acquisition/demandes/frais-de-traitement/paiement-en-ligne"): (
+        "Le visiteur règle ses frais de traitement par mobile money, par le même jeton. "
+        "La route demande le débit d'un montant fixé par le cabinet ; c'est la "
+        "notification de l'opérateur qui constate le versement (9 novembre 2026)."
+    ),
+    ("GET", "/missions/{identifiant}/suivi"): (
+        "Le client suit sa prestation par le lien reçu, sans compte : le sceau est propre "
+        "à la mission et à cet usage (point 22)."
+    ),
+    ("GET", "/missions/{identifiant}/suivi/livrable"): (
+        "Le livrable validé, par le même lien ; rien avant la validation par un second."
     ),
     ("POST", "/acquisition/devis/{reference}/rappel"): (
         "Le prospect d'un devis au prix à confirmer demande qu'on l'appelle : il "
@@ -89,6 +137,10 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Confirmer son propre premier enrôlement. La session désigne le titulaire, et "
         "le jeton reçu à l'adresse du compte est la preuve : il est refusé s'il "
         "appartient à un autre compte (pas 62)."
+    ),
+    ("POST", "/transverse/second-facteur/activation"): (
+        "Activer sa propre clé en attente : la session désigne le titulaire, et le code "
+        "prouve que la clé est dans son téléphone."
     ),
     ("POST", "/transverse/mot-de-passe/oubli"): (
         "Demandée par quelqu'un qui, par définition, ne peut pas se connecter."
@@ -180,6 +232,15 @@ PUBLIQUES: dict[tuple[str, str], str] = {
         "Combien de paramètres restent à valider, donc si un chiffre produit est "
         "opposable. C'est une information sur la plateforme, pas sur un dossier."
     ),
+    # 8 novembre 2026 : la géographie du Cameroun, servie au formulaire de création du site.
+    ("GET", "/referentiel/geographie/decoupage"): (
+        "Le découpage administratif officiel (INC), publié par l'État : régions, "
+        "départements, arrondissements. Le visiteur anonyme en a besoin pour situer son siège."
+    ),
+    ("GET", "/referentiel/geographie/arrondissements/{code}/lieux"): (
+        "Les villes, localités et quartiers d'un arrondissement, tirés d'OpenStreetMap "
+        "(données ouvertes). Rien qui touche un dossier ou une personne."
+    ),
     # ── Les deux outils de développement, fermés hors démonstration ──
     ("GET", "/transverse/courriels"): (
         "La boîte aux lettres de recette. Rend 404 hors mode démonstration : voir "
@@ -212,7 +273,31 @@ def _sans_controle():
             source = inspect.getsource(route.endpoint)
         except (OSError, TypeError):
             continue
-        if any(appel in source for appel in ("exiger(", "exiger_dossier(", "restreindre(")):
+        # ⚠️ LA LISTE DES GARDES RECONNUES, ET POURQUOI ELLE DOIT SUIVRE.
+        #
+        # Ce cas lit le source de chaque route et y cherche un appel de garde. Une
+        # garde nouvelle qu'il ne connaît pas fait paraître la route **ouverte**,
+        # et le cas rougit en accusant un code pourtant correct.
+        #
+        # `exiger_dossier_pour_l_un_de` est entrée le 10 octobre 2026 avec la paie
+        # en libre service : une même route y sert deux rôles qui n'ont aucune
+        # permission en commun, le comptable par `LIRE_COMPTABILITE` et l'adhérent
+        # par `TENIR_SA_PAIE`, et le périmètre du dossier reste contrôlé dans les
+        # deux cas.
+        gardes = (
+            "exiger(",
+            "exiger_dossier(",
+            "exiger_dossier_pour_l_un_de(",
+            "restreindre(",
+            # 19 octobre 2026 : la permission ET la session renforcée, pour les gestes
+            # qui modifient les comptes.
+            "exiger_un_geste_fort(",
+            # 9 novembre 2026 : lire une création d'entreprise, pour le chargé des
+            # formalités OU la direction (`LIRE_PILOTAGE`) ; voir `routes_http.py` de la
+            # création. La garde appelle `exiger` quand la direction n'est pas en cause.
+            "_exiger_la_lecture(",
+        )
+        if any(appel in source for appel in gardes):
             continue
         trouvees.append((sorted(route.methods)[0], chemin))
     return trouvees

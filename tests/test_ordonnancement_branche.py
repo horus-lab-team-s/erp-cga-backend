@@ -97,11 +97,20 @@ class TestLeTourHorsRequete:
             "relais",
             "reconciliation-des-paiements",
             "relance",
+            # 18 octobre 2026 : la lecture au dépôt, après la relance. Elle appelle le réseau,
+            # mais ne lit rien tant que le cabinet ne l'a pas activée.
+            "lecture-au-depot",
             "reprise-des-dossiers",
             "veille-des-dossiers",
             # Pas 115 : les rappels d'échéance des adhérents, en dernier. Un rappel à J-7 n'est pas
             # à la minute, et il ne doit retarder ni l'ouverture d'un tenant payé ni une relance.
             "rappels-d-echeance",
+            # 9 novembre 2026 : le rappel de la veille des rendez-vous de création, après.
+            "rappel-des-rendez-vous",
+            # Lot 4 (9 novembre 2026) : les alertes d'expiration.
+            "alertes-d-expiration",
+            # 9 novembre 2026 : les relances d'honoraires, en dernier.
+            "relances-des-honoraires",
         ]
 
     def test_le_passage_survit_au_tour_suivant(self, en_base, moteur_test):
@@ -120,10 +129,14 @@ class TestLeTourHorsRequete:
         # ⚠️ Trié par **nom** en SQL, et non par ordre d'exécution : le cas
         # précédent garde l'ordre d'exécution, celui-ci garde la persistance.
         assert [ligne.travail for ligne in lignes] == [
+            "alertes-d-expiration",
+            "lecture-au-depot",
+            "rappel-des-rendez-vous",
             "rappels-d-echeance",
             "reconciliation-des-paiements",
             "relais",
             "relance",
+            "relances-des-honoraires",
             "reprise-des-dossiers",
             "veille-des-dossiers",
         ]
