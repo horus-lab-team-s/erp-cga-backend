@@ -126,6 +126,9 @@ from app.contextes.social.adaptateurs.entrant.routes_http import (
 from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
     routeur as routeur_acquisition,
 )
+from app.contextes.souscription.adaptateurs.entrant.routes_attestation import (
+    routeur as routeur_attestation_d_adhesion,
+)
 from app.contextes.souscription.adaptateurs.entrant.routes_http import (
     routeur as routeur_souscription,
 )
@@ -818,6 +821,7 @@ def creer_application() -> FastAPI:
     application.include_router(routeur_pieces_dsf)
     application.include_router(routeur_registre_des_tiers)
     application.include_router(routeur_inscription_au_portefeuille)
+    application.include_router(routeur_attestation_d_adhesion)
     application.include_router(routeur_missions)
     # J · Pilotage vient en dernier des contextes métier : il les agrège tous.
     application.include_router(routeur_pilotage)
