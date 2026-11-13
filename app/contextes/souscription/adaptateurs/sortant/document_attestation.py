@@ -41,6 +41,7 @@ from app.contextes.souscription.adaptateurs.sortant.document_proforma import (
 from app.contextes.souscription.adaptateurs.sortant.identite_des_documents import (
     identite_des_documents,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["AttestationDAdhesion", "empreinte_de_l_attestation", "rendre_l_attestation"]
 
@@ -162,8 +163,8 @@ def rendre_l_attestation(a: AttestationDAdhesion) -> bytes:
     page.setFillColor("#1f1b2b")
     y = _paragraphe(
         page,
-        f"est adhérente du Centre à la date du {_date_longue(a.delivree_le.date())}, et que "
-        "son adhésion est en cours à cette date.",
+        f"est adhérente du Centre à la date du {_date_longue(jour_a_douala(a.delivree_le))}, "
+        "et que son adhésion est en cours à cette date.",
         y,
     )
     y -= 3 * mm
@@ -194,7 +195,7 @@ def rendre_l_attestation(a: AttestationDAdhesion) -> bytes:
 
     y -= 10 * mm
     page.setFont("Helvetica", 10)
-    fait = f"Fait à Douala, le {_date_longue(a.delivree_le.date())}"
+    fait = f"Fait à Douala, le {_date_longue(jour_a_douala(a.delivree_le))}"
     page.drawRightString(_LARGEUR - MARGE, y, fait)
     y -= 7 * mm
     page.setFont("Helvetica-Bold", 10)
