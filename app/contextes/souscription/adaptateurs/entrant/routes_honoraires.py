@@ -274,6 +274,8 @@ class DebitDemande(BaseModel):
     montant: Decimal
     #: Aucun débit réel : la plateforme n'a pas d'identifiants marchands.
     simule: bool
+    #: 17 novembre 2026 : validé d'office (période d'essai ou démonstration).
+    valide_d_office: bool = False
 
 
 @routeur.post(
@@ -333,12 +335,22 @@ def payer_en_ligne(acces: AccesRequis, niu: str, corps: DemandeDeDebit) -> Debit
     )
     if initiation.reference_externe:
         boutique.paiements.enregistrer(paiement.avec_reference(initiation.reference_externe))
+    # ⚠️ 17 novembre 2026 : la période d'essai valide d'office, comme pour les frais et les
+    # tranches de la création. Sans cette ligne, l'adhérent ne pouvait pas régler ses
+    # honoraires en ligne pendant la recette : le débit restait « en attente », et le
+    # suivant était refusé (« Un débit est déjà en attente… »). Éprouvé par le parcours 15.
+    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+        valider_d_office_en_recette,
+    )
+
+    valide = valider_d_office_en_recette(paiement.identifiant)
     return DebitDemande(
         accepte=initiation.accepte,
         message=initiation.message,
         telephone=f"…{telephone[-4:]}",
         montant=paiement.montant,
         simule=bool(boutique.fournisseur.simule),
+        valide_d_office=valide,
     )
 
 

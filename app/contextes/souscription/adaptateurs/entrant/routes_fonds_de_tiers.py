@@ -203,6 +203,8 @@ class DebitDeFondsDemande(BaseModel):
     telephone: str
     montant: Decimal
     simule: bool
+    #: 17 novembre 2026 : validé d'office (période d'essai ou démonstration).
+    valide_d_office: bool = False
 
 
 @routeur.post(
@@ -255,12 +257,20 @@ def confier_en_ligne(
     )
     if initiation.reference_externe:
         boutique.paiements.enregistrer(paiement.avec_reference(initiation.reference_externe))
+    # 17 novembre 2026 : la période d'essai valide d'office, comme les autres paiements en
+    # ligne (voir `routes_honoraires.payer_en_ligne`).
+    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+        valider_d_office_en_recette,
+    )
+
+    valide = valider_d_office_en_recette(paiement.identifiant)
     return DebitDeFondsDemande(
         accepte=initiation.accepte,
         message=initiation.message,
         telephone=f"…{telephone[-4:]}",
         montant=paiement.montant,
         simule=bool(boutique.fournisseur.simule),
+        valide_d_office=valide,
     )
 
 

@@ -633,3 +633,33 @@ def test_le_pipeline_voit_la_creation_vendue_qui_attend_son_seuil(plateforme):
     ouvrir_une_session(client, DIRECTRICE)
     restantes = client.get("/acquisition/creations/en-attente-du-seuil").json()["creations"]
     assert reference not in [c["reference"] for c in restantes]
+
+
+@exige_postgresql
+def test_en_recette_les_honoraires_en_ligne_se_valident_seuls(plateforme, monkeypatch):
+    """17 novembre 2026 : le règlement des honoraires en ligne restait « en attente » en
+    période d'essai, et le suivant était refusé. Il se valide d'office, comme les frais et
+    les tranches, par le chemin d'une vraie notification."""
+    from app.infrastructure.config import configuration
+
+    monkeypatch.setenv("CGA_MODE_DEMONSTRATION", "true")
+    configuration.cache_clear()
+    try:
+        client = plateforme
+        client.cookies.clear()
+        ouvrir_une_session(client, "jp.nkoa@batimentplus.cm")
+        niu = "M081234567890P"
+        echeances = client.get(f"/souscription/honoraires/{niu}").json()["echeances"]
+        due = next(e for e in echeances if e["etat"] in ("A_REGLER", "EN_RETARD"))
+        reponse = client.post(
+            f"/souscription/honoraires/{niu}/paiement-en-ligne",
+            json={"periode": due["debut"], "telephone": "699112244"},
+        )
+        assert reponse.status_code == 202, reponse.text
+        assert reponse.json()["valide_d_office"] is True
+        apres = client.get(f"/souscription/honoraires/{niu}").json()["echeances"]
+        (meme,) = [e for e in apres if e["debut"] == due["debut"]]
+        assert meme["etat"] == "REGLEE", meme
+    finally:
+        monkeypatch.delenv("CGA_MODE_DEMONSTRATION")
+        configuration.cache_clear()
