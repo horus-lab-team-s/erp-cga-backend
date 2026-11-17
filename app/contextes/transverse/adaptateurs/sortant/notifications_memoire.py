@@ -57,6 +57,7 @@ CODES_MESSAGES: dict[str, str] = {
     "adherent.quittance_refusee": "Quittance à renvoyer, avec le motif",
     "adherent.fonds_recus": "Fonds reçus par le cabinet, qui règle l'administration",
     "adherent.honoraires_regles": "Honoraires réglés : le reçu est dans l'espace",
+    "versement.recu": "Reçu d'un versement au cabinet (frais, tranche, pénalité), PDF joint",
     # 9 novembre 2026 : les relances d'honoraires (travail `relances-des-honoraires`).
     "honoraires.echeance_a_regler": "Honoraires exigibles : montant, période et date limite",
     "honoraires.en_retard": "Honoraires en retard : le délai de règlement est dépassé",

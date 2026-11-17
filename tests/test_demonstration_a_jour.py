@@ -23,6 +23,7 @@ from app.demonstration_a_jour import (
     DELAI_DE_GRACE,
     DOSSIER_DE_DEMONSTRATION,
     DOSSIER_EN_RETARD_VOULU,
+    OBLIGATIONS_EN_COURS_DE_DECLARATION,
     accuses_a_consigner,
     dossiers_de_demonstration,
     mettre_la_demonstration_a_jour,
@@ -32,6 +33,9 @@ from app.partage.locataire import etabli
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
 pytestmark = exige_postgresql
+
+#: Le mois des écritures de démonstration (juillet 2026), gardé ouvert à la déclaration.
+MOIS_TRAITE_PAR_LA_DEMONSTRATION = "2026-07-01"
 
 ADHERENT = "jp.nkoa@batimentplus.cm"
 #: Le locataire de la plateforme amorcée par `tests/conftest.py`.
@@ -49,6 +53,19 @@ def test_il_ne_reste_que_des_retards_recents(plateforme):
     echeances = _echeances(plateforme)
     retards = [e for e in echeances if e["etat"] == "EN_RETARD"]
     assert retards, "le dossier doit encore montrer un retard récent, pour les relances"
+    # ⚠️ 17 novembre 2026 : la TVA et la CNPS du mois que la comptabilité de démonstration
+    # traite (juillet 2026) restent OUVERTES par construction, pour que la console montre une
+    # déclaration en cours (`OBLIGATIONS_EN_COURS_DE_DECLARATION`). Elles vieillissent avec le
+    # calendrier : depuis le 14 novembre 2026, la CNPS de juillet dépasse 90 jours. Ce n'est
+    # pas un retard oublié, c'est le mois montré ; la garde porte sur tout le reste.
+    retards = [
+        e
+        for e in retards
+        if not (
+            e["code_obligation"] in OBLIGATIONS_EN_COURS_DE_DECLARATION
+            and e["periode_debut"] == MOIS_TRAITE_PAR_LA_DEMONSTRATION
+        )
+    ]
     for e in retards:
         # Jamais plus de trois mois : ni les 584 jours d'avant, ni une année oubliée.
         assert e["jours"] <= 3 * DELAI_DE_GRACE.days, e

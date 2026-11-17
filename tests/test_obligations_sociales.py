@@ -148,8 +148,17 @@ class TestParLesRoutes:
         """Les relances calculaient leur propre échéancier, sans salariés."""
         client = plateforme
         ouvrir_une_session(client, REVISEUR)
-        # J-2 de l'échéance du 15 octobre, pour la période de septembre.
-        reponse = client.get("/obligations/relances?a_la_date=2026-10-13&exercice=2026")
+        # ⚠️ 17 novembre 2026 : J-2 de la PROCHAINE échéance CNPS, relative au jour. La date
+        # fixe du 13 octobre passait tant que la démonstration, recalée sur le jour réel,
+        # laissait septembre ouvert ; depuis la mi-novembre septembre est consigné, et une
+        # période déposée ne se relance pas. La période du mois courant, elle, reste ouverte.
+        from app.partage.horloge import aujourd_hui
+
+        jour = aujourd_hui()
+        suivant = date(jour.year + (jour.month == 12), jour.month % 12 + 1, 13)
+        reponse = client.get(
+            f"/obligations/relances?a_la_date={suivant.isoformat()}&exercice={jour.year}"
+        )
         assert reponse.status_code == 200, reponse.text
         sociales = {
             (r["obligation"]["entreprise"], r["obligation"]["code_obligation"])

@@ -242,6 +242,9 @@ class TestMontage:
             # Pas 148 : le catalogue des documents de proforma, pour que
             # l'écran ne recopie pas la liste des compositions.
             "/acquisition/compositions-proforma",
+            # 17 novembre 2026 : PROTÉGÉE (formalités, direction, vente ou caisse). Les
+            # créations vendues qui attendent leur seuil : le pipeline les montre.
+            "/acquisition/creations/en-attente-du-seuil",
             "/acquisition/demandes",
             # 9 novembre 2026 : PUBLIQUES, par le jeton opaque des frais de l'accusé.
             # 9 novembre 2026 : PROTÉGÉE par `QUALIFIER_PROSPECT`. Le responsable saisit la

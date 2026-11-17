@@ -152,6 +152,17 @@ CONTEXTES_DES_APPELANTS: dict[str, dict[str, str]] = {
         "denomination": "SARL BATIMENT PLUS",
         "lien": "https://app.cga-brcg.cm/fr/mon-espace/honoraires",
     },
+    "versement.recu": {
+        # Recopié de `abonne_recu_de_versement.envoyer_le_recu` (13 novembre 2026).
+        "prenom": "Awa NDONGO",
+        "montant": "353 500",
+        "objet_du_versement": "règlement de la proforma PRO-2026-0001",
+        "reference": "R-E7F8B85A6EC64CA3",
+        "recu_le": "13/11/2026 à 15h27",
+        "situation": (
+            "Vous avez versé 353 500 FCFA sur 505 000 FCFA ; il reste 151 500 FCFA à régler."
+        ),
+    },
     # 9 novembre 2026 : recopiés de `travail_des_relances_d_honoraires.contexte_de_la_relance`,
     # le même contexte pour les quatre paliers.
     **{

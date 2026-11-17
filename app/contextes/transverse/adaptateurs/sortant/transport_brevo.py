@@ -28,7 +28,9 @@ journalise (« envoyer ne lève jamais »). La clé n'apparaît dans aucun messa
 from __future__ import annotations
 
 import base64
+import logging
 import re
+import time
 from email.message import EmailMessage
 from email.utils import getaddresses, parseaddr
 from typing import Any
@@ -41,8 +43,19 @@ __all__ = ["ADRESSE_API_BREVO", "EnvoiBrevoRefuse", "TransportBrevo", "charge_br
 
 ADRESSE_API_BREVO = "https://api.brevo.com/v3/smtp/email"
 
-#: Le même délai que SMTP, pour la même raison : l'envoi se fait dans le fil de la requête.
-DELAI_RESEAU = 10.0
+#: ⚠️ 13 novembre 2026 : 10 s ne suffisaient pas. En recette en ligne, la proforma d'une
+#: cliente (PDF joint) est restée sans réponse de Brevo au-delà de 10 s, et le courriel
+#: s'est perdu (`ReadTimeout`). 30 s laissent passer un envoi lent avec pièce jointe.
+DELAI_RESEAU = 30.0
+
+#: Les essais d'une remise : le premier, puis deux nouveaux en cas d'incident passager
+#: (coupure réseau, délai dépassé, 429 ou 5xx de Brevo). Un refus 4xx (expéditeur non
+#: validé, clé refusée) ne se rejoue pas : il ne changera pas d'avis.
+ESSAIS = 3
+PAUSES_ENTRE_ESSAIS = (2.0, 5.0)
+_journal = logging.getLogger(__name__)
+#: Remplaçable par les tests, qui n'attendent pas.
+_attendre = time.sleep
 
 #: Le logo tel que le site le sert (`erp-cga-vitrine/public/marque/`).
 CHEMIN_DU_LOGO = "/marque/cga-logo-couleur.jpg"
@@ -117,11 +130,29 @@ class TransportBrevo:
     def remettre(self, message: EmailMessage) -> None:
         charge = charge_brevo(message, adresse_du_logo=self._adresse_du_logo)
         entetes = {"api-key": self._cle_api, "accept": "application/json"}
-        if self._client is not None:
-            reponse = self._client.post(ADRESSE_API_BREVO, json=charge, headers=entetes)
-        else:
-            with httpx.Client(timeout=DELAI_RESEAU) as client:
-                reponse = client.post(ADRESSE_API_BREVO, json=charge, headers=entetes)
+        reponse = None
+        for essai in range(1, ESSAIS + 1):
+            try:
+                if self._client is not None:
+                    reponse = self._client.post(ADRESSE_API_BREVO, json=charge, headers=entetes)
+                else:
+                    with httpx.Client(timeout=DELAI_RESEAU) as client:
+                        reponse = client.post(ADRESSE_API_BREVO, json=charge, headers=entetes)
+            except httpx.TransportError as incident:
+                # ⚠️ Un délai dépassé à la lecture peut cacher un message déjà accepté :
+                # le rejouer risque un doublon. C'est le moindre mal face à une proforma
+                # ou un reçu perdus sans que personne ne le sache.
+                if essai == ESSAIS:
+                    raise
+                _journal.warning("Brevo injoignable (%s), essai %s sur %s", incident, essai, ESSAIS)
+                _attendre(PAUSES_ENTRE_ESSAIS[min(essai, len(PAUSES_ENTRE_ESSAIS)) - 1])
+                continue
+            if (reponse.status_code == 429 or reponse.status_code >= 500) and essai < ESSAIS:
+                _journal.warning("Brevo %s, essai %s sur %s", reponse.status_code, essai, ESSAIS)
+                _attendre(PAUSES_ENTRE_ESSAIS[min(essai, len(PAUSES_ENTRE_ESSAIS)) - 1])
+                continue
+            break
+        assert reponse is not None
         if reponse.status_code >= 400:
             # Le corps de la réponse dit pourquoi (expéditeur non validé, clé refusée…) ;
             # il ne contient ni la clé ni le message.

@@ -592,3 +592,43 @@ def test_hors_recette_rien_ne_se_valide_seul():
 
     # Sans `CGA_MODE_DEMONSTRATION`, la fonction ne lit même pas le paiement.
     assert valider_d_office_en_recette("pay-inexistant") is False
+
+
+@exige_postgresql
+def test_le_pipeline_voit_la_creation_vendue_qui_attend_son_seuil(plateforme):
+    """17 novembre 2026 : entre l'acceptation et le seuil, le dossier ne doit pas disparaître.
+
+    En recette en ligne, aucune règle n'était fixée (seuil 100 %) : la cliente a versé 70 %
+    et le pipeline ne montrait rien jusqu'au solde. La file « en attente du seuil » la montre,
+    et dit que la règle est celle par défaut.
+    """
+    client = plateforme
+    reference, numero = _vente_acceptee(client)
+
+    _en_caisse(client)
+    tranche = client.post(
+        f"/acquisition/proformas/{numero}/encaissement",
+        json={"montant": "100000", "reference_externe": "Reçu 2026-2001"},
+    )
+    assert tranche.status_code == 200 and tranche.json()["etat"] == "ACCEPTEE", tranche.text
+
+    client.cookies.clear()
+    ouvrir_une_session(client, DIRECTRICE)
+    file = client.get("/acquisition/creations/en-attente-du-seuil")
+    assert file.status_code == 200, file.text
+    corps = file.json()
+    assert corps["regle_par_defaut"] is True and corps["seuil_pourcent"] == 100
+    (ligne,) = [c for c in corps["creations"] if c["reference"] == reference]
+    assert Decimal(ligne["paye"]) == Decimal("100000")
+
+    # Soldée : le dossier de formalité s'ouvre, elle quitte la file d'attente.
+    _en_caisse(client)
+    solde = client.post(
+        f"/acquisition/proformas/{numero}/encaissement",
+        json={"reference_externe": "Reçu 2026-2002"},
+    )
+    assert solde.status_code == 200 and solde.json()["etat"] == "PAYEE", solde.text
+    client.cookies.clear()
+    ouvrir_une_session(client, DIRECTRICE)
+    restantes = client.get("/acquisition/creations/en-attente-du-seuil").json()["creations"]
+    assert reference not in [c["reference"] for c in restantes]

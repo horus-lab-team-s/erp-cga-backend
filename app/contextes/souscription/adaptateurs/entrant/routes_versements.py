@@ -17,6 +17,7 @@ Les tranches de la proforma passent par les routes d'avant ce lot (`/reglement`,
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
@@ -33,7 +34,7 @@ from app.contextes.souscription.application.versements import (
     recevoir_un_versement,
     situation_du_dossier,
 )
-from app.contextes.souscription.domaine.dossier_commercial import DossierCommercial
+from app.contextes.souscription.domaine.dossier_commercial import DossierCommercial, EtatDossier
 from app.contextes.souscription.domaine.honoraires import CanalDeReglement
 from app.contextes.souscription.domaine.versements_du_parcours import (
     REGLE_SANS_FRAIS,
@@ -264,3 +265,83 @@ def restituer_le_trop_percu(
         motif=corps.motif,
     )
     return resultat.situation
+
+
+# ── Les créations vendues qui n'ont pas encore démarré ───────────────────────────
+
+
+class CreationEnAttenteDuSeuil(BaseModel):
+    """Une création dont la proforma est acceptée, mais dont le seuil de démarrage n'est
+    pas atteint : le dossier de formalité ne s'ouvrira qu'au seuil."""
+
+    reference: str
+    nom: str
+    telephone: str
+    #: Depuis quand elle est dans cet état (l'acceptation de la proforma).
+    depuis_le: datetime
+    total: Decimal | None
+    paye: Decimal
+    reste: Decimal | None
+    seuil: Decimal | None
+    seuil_pourcent: int
+
+
+class CreationsEnAttenteDuSeuil(BaseModel):
+    #: Aucune règle fixée par le cabinet : le seuil vaut alors 100 % (règlement complet)
+    #: et aucun frais de traitement n'est demandé. Le pipeline le dit, pour que personne
+    #: ne cherche un défaut d'affichage là où il manque un réglage.
+    regle_par_defaut: bool
+    seuil_pourcent: int
+    creations: list[CreationEnAttenteDuSeuil]
+
+
+@routeur_acquisition.get(
+    "/creations/en-attente-du-seuil",
+    summary="Les créations acceptées dont le seuil de démarrage n'est pas atteint",
+)
+def creations_en_attente_du_seuil(acces: AccesRequis) -> CreationsEnAttenteDuSeuil:
+    """⚠️ 17 novembre 2026 : LE DOSSIER NE DOIT JAMAIS DISPARAÎTRE ENTRE LA VENTE ET LE PIPELINE.
+
+    Constaté en recette en ligne le 13 novembre : la cliente avait accepté sa proforma et
+    versé 70 % ; aucune règle n'était fixée, le seuil valait donc 100 %, et le dossier de
+    formalité ne s'est ouvert qu'au solde. Entre les deux, le pipeline ne montrait rien, et
+    l'équipe a conclu que le dossier « ne s'affichait pas ».
+
+    Le pipeline lit donc aussi cette file : ce qui est vendu et attend son seuil, avec ce
+    qui est versé. Ouverte à ceux qui lisent le pipeline (formalités, direction) et à ceux
+    qui vendent ou encaissent.
+    """
+    if not any(
+        acces.detient(p)
+        for p in (
+            Permission.SUIVRE_FORMALITE,
+            Permission.LIRE_PILOTAGE,
+            Permission.LIRE_PROSPECT,
+            Permission.ENCAISSER,
+        )
+    ):
+        exiger(acces, Permission.SUIVRE_FORMALITE)
+    lignes: list[CreationEnAttenteDuSeuil] = []
+    for dossier in depot_dossiers().ouverts(etat=EtatDossier.ACCEPTEE):
+        if dossier.service != "CREATION":
+            continue
+        s = situation_des_versements_de(dossier)
+        lignes.append(
+            CreationEnAttenteDuSeuil(
+                reference=dossier.reference,
+                nom=dossier.demande.nom,
+                telephone=dossier.demande.telephone,
+                depuis_le=dossier.depuis_le,
+                total=s.total,
+                paye=s.paye,
+                reste=s.reste,
+                seuil=s.seuil,
+                seuil_pourcent=s.seuil_pourcent,
+            )
+        )
+    fixee = _comptoir().regle_des_versements.lire()
+    return CreationsEnAttenteDuSeuil(
+        regle_par_defaut=fixee is None,
+        seuil_pourcent=(fixee or REGLE_SANS_FRAIS).seuil_demarrage_pourcent,
+        creations=sorted(lignes, key=lambda ligne: ligne.depuis_le),
+    )

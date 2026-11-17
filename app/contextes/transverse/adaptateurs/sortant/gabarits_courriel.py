@@ -1171,6 +1171,25 @@ CATALOGUE: dict[str, Gabarit] = {
                 "mot de passe habituel. Le cabinet ne vous demandera jamais votre mot de passe."
             ),
         ),
+        # 13 novembre 2026 : le reçu de chaque somme versée au cabinet (frais de traitement,
+        # tranche, pénalité), PDF joint. Constaté en recette en ligne : la cliente payait et
+        # ne recevait rien ; le reçu n'existait qu'au règlement complet, à télécharger.
+        Gabarit(
+            code="versement.recu",
+            objet="Reçu de votre versement de {montant} FCFA",
+            titre="Merci, {prenom}",
+            paragraphes=(
+                "Nous avons bien reçu <strong>{montant} FCFA</strong> au titre de : "
+                "{objet_du_versement} (référence {reference}, le {recu_le}).",
+                "{situation}",
+                "Votre reçu est joint à ce message, au format PDF. Conservez-le : il fait foi "
+                "de votre versement.",
+            ),
+            avertissement=(
+                "Le cabinet ne vous demandera jamais votre mot de passe ni un code reçu par "
+                "SMS. En cas de doute sur ce message, appelez le cabinet."
+            ),
+        ),
         # 9 novembre 2026 : les relances d'honoraires, du travail `relances-des-honoraires`
         # (réunion du 4 novembre : « leur faire comprendre, à l'avance »). Courtoises et
         # fermes ; chaque délai cité vient de la règle du cabinet, aucun n'est écrit ici.

@@ -636,6 +636,16 @@ def _inscrire_les_travaux_periodiques() -> None:
 
     inscrire_un_abonne(NOM_HONORAIRES_REGLES, abonne_avis_honoraires)
 
+    # ⚠️ 13 novembre 2026 : le reçu de chaque somme versée (frais de traitement, tranche,
+    # pénalité), envoyé par courriel avec son PDF. Sans cette ligne, le client paie et ne
+    # reçoit rien : constaté en recette en ligne. Voir `abonne_recu_de_versement.py`.
+    from app.contextes.souscription.adaptateurs.entrant.abonne_recu_de_versement import (
+        abonne_recu_de_versement,
+    )
+    from app.contextes.souscription.application.versements import NOM_VERSEMENT_RECU
+
+    inscrire_un_abonne(NOM_VERSEMENT_RECU, abonne_recu_de_versement)
+
     # ⚠️ **La veille des dossiers, et volontairement sans abonné.** Elle dépose des
     # `DossierEnSouffrance` que le relais publiera, et aucun code ne s'y abonne
     # aujourd'hui : l'alerte reste dans la boîte, en « publié sans abonné », et se

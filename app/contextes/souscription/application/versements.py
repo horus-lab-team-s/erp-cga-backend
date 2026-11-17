@@ -58,6 +58,7 @@ from app.contextes.souscription.domaine.versements_du_parcours import (
 )
 
 __all__ = [
+    "NOM_VERSEMENT_RECU",
     "DepotVersements",
     "SuiteDeFraisDeTraitement",
     "ResultatDuVersement",
@@ -67,6 +68,54 @@ __all__ = [
     "situation_du_dossier",
     "total_a_regler",
 ]
+
+
+#: 13 novembre 2026 : chaque somme reçue du client (frais de traitement, tranche, pénalité,
+#: trop-perçu) traverse la boîte d'envoi ; l'abonné `abonne_recu_de_versement` lui envoie
+#: son reçu par courriel. Constaté en recette en ligne : la cliente payait et ne recevait
+#: rien, le reçu n'existait qu'au règlement complet et seulement à télécharger.
+NOM_VERSEMENT_RECU = "VersementReçu"
+
+
+def _publier_les_versements(
+    boite: BoiteOuDeposer,
+    dossier: DossierCommercial,
+    recus: list[VersementDuParcours],
+    situation: SituationDesVersements,
+) -> None:
+    """Un événement par somme reçue. ⚠️ Une restitution sort de la caisse : pas de reçu.
+
+    L'identifiant dérive du versement : un rejeu ne publie pas deux fois, et l'abonné
+    n'envoie qu'une fois (voir son en-tête).
+    """
+    from app.orchestration.boite_d_envoi import deposer
+
+    for versement in recus:
+        if versement.nature is NatureVersement.RESTITUTION:
+            continue
+        deposer(
+            boite,
+            f"vr-{versement.identifiant}",
+            NOM_VERSEMENT_RECU,
+            versement.identifiant,
+            {
+                "identifiant": versement.identifiant,
+                "dossier": dossier.reference,
+                "nature": versement.nature.value,
+                "montant": str(versement.montant),
+                "canal": versement.canal.value,
+                "reference_externe": versement.reference_externe,
+                "proforma": versement.proforma or "",
+                "constate_le": versement.constate_le.isoformat(),
+                "nom": dossier.demande.nom,
+                "courriel": (dossier.demande.courriel or "").strip(),
+                "total": "" if situation.total is None else str(situation.total),
+                "paye": str(situation.paye),
+                "reste": "" if situation.reste is None else str(situation.reste),
+                "solde": situation.solde,
+            },
+            versement.constate_le,
+        )
 
 
 class DepotVersements(Protocol):
@@ -245,6 +294,7 @@ def recevoir_un_versement(
     )
     versements.enregistrer(versement)
     apres = situation_du_dossier(dossier, proforma, versements.pour(dossier.reference), regle)
+    _publier_les_versements(boite, dossier, [versement], apres)
 
     engagement = None
     if proforma is not None:
@@ -377,6 +427,7 @@ def _recevoir_ce_qui_est_arrive(
         parts.append((nature, montant, reference_externe))
 
     premier: VersementDuParcours | None = None
+    recus: list[VersementDuParcours] = []
     for nature_part, montant_part, reference_part in parts:
         versement = VersementDuParcours(
             identifiant=f"ver-{uuid.uuid4().hex[:16]}",
@@ -392,8 +443,10 @@ def _recevoir_ce_qui_est_arrive(
             constate_par=constate_par,
         )
         versements.enregistrer(versement)
+        recus.append(versement)
         premier = premier or versement
     apres = situation_du_dossier(dossier, proforma, versements.pour(dossier.reference), regle)
+    _publier_les_versements(boite, dossier, recus, apres)
     engagement = None
     if proforma is not None and dossier.etat is not EtatDossier.SANS_SUITE:
         engagement = engager_si_le_seuil_est_atteint(
