@@ -167,6 +167,31 @@ class TestLePremierEnrolementPasseParLaBoite:
         second = client.post("/transverse/second-facteur/confirmation", json={"jeton": jeton})
         assert second.status_code == 410, second.text
 
+    def test_la_cle_vient_avec_son_code_qr_lisible(self, application):
+        """17 novembre 2026 : la clé seule, recopiée à la main, a fait échouer l'association
+        en recette en ligne. La confirmation rend aussi le code QR de l'adresse `otpauth://`,
+        en SVG autonome, et ce code porte exactement la clé rendue."""
+        from reportlab.graphics.barcode.qr import QrCodeWidget
+
+        client = _session(application, REVISEUR[1])
+        _enroler(client)
+        reponse = client.post(
+            "/transverse/second-facteur/confirmation", json={"jeton": self._jeton_envoye()}
+        )
+        assert reponse.status_code == 200, reponse.text
+        corps = reponse.json()
+        assert corps["qr_svg"].startswith("<svg") and "<path" in corps["qr_svg"]
+        assert f"secret={corps['secret']}" in corps["uri"]
+        # Le SVG reproduit module pour module la matrice du code de l'adresse.
+        widget = QrCodeWidget(corps["uri"], barLevel="M")
+        widget.draw()
+        sombres = sum(
+            widget.qr.isDark(r, c)
+            for r in range(widget.qr.getModuleCount())
+            for c in range(widget.qr.getModuleCount())
+        )
+        assert corps["qr_svg"].count("h1v1h-1z") == sombres
+
     def test_le_lien_expire_apres_trente_minutes(self, application):
         from datetime import timedelta
 

@@ -272,6 +272,10 @@ class ProformaConsultee(BaseModel):
     paye: Decimal = Decimal(0)
     reste: Decimal | None = None
     engage: bool = False
+    #: 17 novembre 2026 : le seuil de démarrage, pour que la cliente lise quand son dossier
+    #: démarre (« dès que … FCFA sont versés ») au lieu de le découvrir.
+    seuil: Decimal | None = None
+    seuil_pourcent: int | None = None
     #: 9 novembre 2026 : l'en-tête et le pied du document, pour que la page web porte la
     #: même identité que la proforma imprimée (référentiel `cabinet/`).
     cabinet: IdentiteDesDocuments | None = None
@@ -1081,6 +1085,8 @@ def _versements_consultes(proforma: Proforma) -> dict:
         "paye": situation.paye,
         "reste": situation.reste,
         "engage": dossier.etat is EtatDossier.PAYEE,
+        "seuil": situation.seuil,
+        "seuil_pourcent": situation.seuil_pourcent,
     }
 
 

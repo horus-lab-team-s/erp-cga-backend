@@ -17,6 +17,7 @@ from app.contextes.transverse.adaptateurs.entrant.dependances import (
 from app.contextes.transverse.adaptateurs.entrant.routes_http import (
     nouvel_identifiant,
 )
+from app.contextes.transverse.adaptateurs.sortant.code_qr import code_qr_svg
 from app.contextes.transverse.api import (
     Acces,
     AccesRefuse,
@@ -63,6 +64,8 @@ class Enrolement(BaseModel):
 
     secret: str | None = None
     uri: str | None = None
+    #: 17 novembre 2026 : le code QR de `uri`, en SVG, à scanner avec l'application.
+    qr_svg: str | None = None
     confirmation_par_courriel: bool = False
     consigne: str
 
@@ -111,8 +114,9 @@ def enroler(acces: AccesRequis) -> Enrolement:
         return Enrolement(
             confirmation_par_courriel=True,
             consigne=(
-                "Un lien vient d'être envoyé à l'adresse de votre compte. Ouvrez-le dans "
-                "ce navigateur, où vous êtes connecté : il est valable trente minutes."
+                "Un lien vient d'être envoyé à l'adresse de votre compte (pensez aux "
+                "indésirables). Ouvrez-le de préférence sur cet ordinateur : un code QR "
+                "s'affichera, à scanner avec le téléphone. Il est valable trente minutes."
             ),
         )
 
@@ -130,13 +134,16 @@ def enroler(acces: AccesRequis) -> Enrolement:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
     # Le titulaire est prévenu à l'ACTIVATION (19 octobre 2026) : c'est elle qui change
     # le facteur. Voir `activer`.
+    uri = uri_provisionnement(secret, compte=compte.courriel, emetteur="CGA Broad Range")
     return Enrolement(
         secret=secret,
-        uri=uri_provisionnement(secret, compte=compte.courriel, emetteur="CGA Broad Range"),
+        uri=uri,
+        qr_svg=code_qr_svg(uri),
         consigne=(
-            "Scanner ce code dans une application d'authentification, puis saisir le "
-            "premier code qu'elle affiche : la clé ne sert qu'une fois ce code accepté. "
-            "Vérifier aussi que l'heure du téléphone est à l'heure."
+            "Scannez ce code QR avec l'application d'authentification du téléphone (ou "
+            "saisissez la clé), puis entrez le code à six chiffres qu'elle affiche : la clé "
+            "ne protège le compte qu'une fois ce code accepté. L'heure du téléphone doit "
+            "être réglée automatiquement."
         ),
     )
 
@@ -183,13 +190,16 @@ def confirmer_l_enrolement(
         ) from refus
     except (SecondFacteurDejaActif, PreuveDeBoiteRequise) as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus
+    uri = uri_provisionnement(secret, compte=compte.courriel, emetteur="CGA Broad Range")
     return Enrolement(
         secret=secret,
-        uri=uri_provisionnement(secret, compte=compte.courriel, emetteur="CGA Broad Range"),
+        uri=uri,
+        qr_svg=code_qr_svg(uri),
         consigne=(
-            "Scanner ce code dans une application d'authentification, puis saisir le "
-            "premier code qu'elle affiche : la clé ne sert qu'une fois ce code accepté. "
-            "Vérifier aussi que l'heure du téléphone est à l'heure."
+            "Scannez ce code QR avec l'application d'authentification du téléphone (ou "
+            "saisissez la clé), puis entrez le code à six chiffres qu'elle affiche : la clé "
+            "ne protège le compte qu'une fois ce code accepté. L'heure du téléphone doit "
+            "être réglée automatiquement."
         ),
     )
 

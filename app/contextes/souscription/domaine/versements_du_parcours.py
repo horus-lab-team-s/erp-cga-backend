@@ -144,11 +144,20 @@ class RegleDesVersements(BaseModel):
         return self.frais_par_service.get(service)
 
 
-#: La règle d'un cabinet qui n'en a fixé aucune : pas de frais, tout régler avant.
+#: Le seuil de démarrage du cabinet quand aucune règle n'est fixée (17 novembre 2026).
+#:
+#: ⚠️ Il valait 100 % (« tout régler avant »). En recette en ligne, la règle n'avait pas été
+#: enregistrée : la cliente a versé 70 %, la tranche annoncée par le cabinet, et son dossier
+#: n'a démarré qu'au solde. Décision du 17 novembre 2026 : 70 % par défaut, la pratique du
+#: cabinet ; le super administrateur le change dans « Réglages de l'acquisition ».
+SEUIL_DE_DEMARRAGE_PAR_DEFAUT = 70
+
+#: La règle d'un cabinet qui n'en a fixé aucune : pas de frais, démarrage à 70 %.
 REGLE_SANS_FRAIS = RegleDesVersements(
-    motif="aucune règle fixée : pas de frais de traitement, règlement complet",
+    motif="aucune règle fixée : pas de frais de traitement, démarrage à 70 % du total",
     fixee_par="systeme",
     fixee_le=datetime(2026, 11, 9),
+    seuil_demarrage_pourcent=SEUIL_DE_DEMARRAGE_PAR_DEFAUT,
 )
 
 

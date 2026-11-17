@@ -71,7 +71,8 @@ def _versement(montant: str, nature=NatureVersement.TRANCHE, ref: str = "") -> V
 class TestLaSituation:
     def test_sans_regle_ni_frais_ni_seuil_reduit(self):
         assert REGLE_SANS_FRAIS.frais_de("CREATION") is None
-        assert REGLE_SANS_FRAIS.seuil_demarrage_pourcent == 100
+        # 17 novembre 2026 : 70 % par défaut, la pratique du cabinet (et non plus 100 %).
+        assert REGLE_SANS_FRAIS.seuil_demarrage_pourcent == 70
 
     def test_frais_deduits_puis_tranches_jusqu_au_solde(self):
         total = Decimal("200000")
@@ -617,7 +618,7 @@ def test_le_pipeline_voit_la_creation_vendue_qui_attend_son_seuil(plateforme):
     file = client.get("/acquisition/creations/en-attente-du-seuil")
     assert file.status_code == 200, file.text
     corps = file.json()
-    assert corps["regle_par_defaut"] is True and corps["seuil_pourcent"] == 100
+    assert corps["regle_par_defaut"] is True and corps["seuil_pourcent"] == 70
     (ligne,) = [c for c in corps["creations"] if c["reference"] == reference]
     assert Decimal(ligne["paye"]) == Decimal("100000")
 

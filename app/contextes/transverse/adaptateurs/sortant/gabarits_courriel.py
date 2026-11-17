@@ -836,8 +836,11 @@ CATALOGUE: dict[str, Gabarit] = {
             titre="Bonjour {prenom}",
             paragraphes=(
                 "Vous avez demandé à associer une application d'authentification à votre "
-                "compte. Ouvrez ce lien dans le navigateur où vous êtes connecté pour "
-                "afficher la clé à saisir dans l'application.",
+                "compte. Ouvrez ce lien <strong>sur votre ordinateur</strong> : un code QR "
+                "s'affichera, à scanner avec l'application de votre téléphone (Google "
+                "Authenticator, Microsoft Authenticator, 2FAS…).",
+                "Si vous n'êtes pas connecté sur ce navigateur, la console vous demandera de "
+                "vous connecter, puis ouvrira directement la page de la clé.",
             ),
             action=("Afficher ma clé", "{lien}"),
             avertissement=(
