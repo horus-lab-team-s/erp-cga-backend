@@ -55,7 +55,12 @@ from app.contextes.portefeuille.api import (
     depot_entreprises,
     prochain_numero_d_adhesion,
 )
-from app.contextes.referentiel.api import ServiceParametres, service_parametres
+from app.contextes.referentiel.api import (
+    AucuneVersionApplicable,
+    ParametreInconnu,
+    ServiceParametres,
+    service_parametres,
+)
 from app.contextes.transverse.api import (
     Acces,
     AccesRequis,
@@ -989,9 +994,47 @@ def porter_identifiant(
         "patente": _couple(demande.patente, demande.patente_obtenue_le, "patente"),
         "cnps": _couple(demande.cnps, demande.cnps_obtenue_le, "cnps"),
     }
+    for nom in ("rccm", "niu"):
+        if couples[nom]:
+            couples[nom] = (_au_format(nom, couples[nom][0], couples[nom][1]), couples[nom][1])
     dossier = enregistrer_identifiant(_lire(reference, magasin), **couples)
     magasin.enregistrer(dossier)
     return dossier
+
+
+#: Le code du format au référentiel, et un exemple lisible pour le message de refus.
+_FORMATS = {
+    "niu": ("FORMAT_NIU", "NIU", "une lettre, douze chiffres, une lettre : M112600090017R"),
+    "rccm": ("FORMAT_RCCM", "RCCM", "RC/DLA/2026/B/9001"),
+}
+
+
+def _au_format(nom: str, valeur: str, obtenu_le: date) -> str:
+    """Le NIU ou le RCCM, refusé s'il ne suit pas le format du référentiel (21 novembre 2026).
+
+    ⚠️ POURQUOI ICI : constaté en recette en ligne le 20 novembre 2026, un NIU
+    « P1234567890123 » (treize chiffres) et un RCCM « RC/DLA/2026/2/2026 » ont été
+    acceptés à la saisie ; l'entreprise est entrée au portefeuille avec une anomalie
+    bloquante (« ne respecte pas le format en vigueur »). Le NIU devient la clé du
+    dossier à la conversion et ne se corrige plus ensuite : le refus doit tomber à la
+    saisie, avec le même format que celui que le portefeuille vérifie
+    (`validation_identifiants.py`), lu à la date d'obtention.
+
+    Un format absent du référentiel ne bloque pas la saisie : on ne devine pas.
+    """
+    propre = re.sub(r"\s+", "", valeur).upper()
+    code, libelle, exemple = _FORMATS[nom]
+    try:
+        motif = parametres().valeur_texte(code, obtenu_le)
+    except (ParametreInconnu, AucuneVersionApplicable):
+        return propre
+    if not re.match(motif, propre):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{libelle} « {valeur.strip()} » : il ne suit pas le format attendu "
+            f"({exemple}). Recopiez-le tel qu'il figure sur le document délivré.",
+        )
+    return propre
 
 
 def _couple(valeur: str | None, obtenu_le: date | None, nom: str) -> tuple[str, date] | None:

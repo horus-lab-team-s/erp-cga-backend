@@ -85,6 +85,26 @@ class TestLaDateDesEcritures:
         assert reponse.status_code == 422
         assert "pas encore passée" in reponse.json()["detail"]
 
+    def test_un_niu_ou_un_rccm_hors_format_est_refuse_a_la_saisie(self, client):
+        """Recette en ligne du 20 novembre 2026 : « P1234567890123 » et
+        « RC/DLA/2026/2/2026 » passaient, puis le portefeuille les marquait bloquants."""
+        for corps, attendu in (
+            ({"niu": "P1234567890123", "niu_obtenu_le": "2026-08-01"}, "NIU « P1234567890123 »"),
+            ({"rccm": "RC/DLA/2026/2/2026", "rccm_obtenu_le": "2026-08-01"}, "RCCM"),
+        ):
+            reponse = client.post("/creations/CR-2026-0014/identifiants", json=corps)
+            assert reponse.status_code == 422, reponse.text
+            assert attendu in reponse.json()["detail"]
+            assert "format attendu" in reponse.json()["detail"]
+
+    def test_un_niu_saisi_avec_espaces_et_minuscules_est_remis_au_format(self, client):
+        reponse = client.post(
+            "/creations/CR-2026-0014/identifiants",
+            json={"niu": " m 112600090017 r ", "niu_obtenu_le": "2026-08-01"},
+        )
+        assert reponse.status_code == 200, reponse.text
+        assert reponse.json()["immatriculation"]["niu"] == "M112600090017R"
+
 
 class TestLaConversion:
     def test_l_entreprise_convertie_est_au_portefeuille(self, client):
