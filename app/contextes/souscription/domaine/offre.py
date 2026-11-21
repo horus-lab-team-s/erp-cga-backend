@@ -230,8 +230,12 @@ class Formule(BaseModel):
         Sérialisé, parce que c'est le champ qui commande l'affichage du bouton
         « Souscrire ». Le front ne doit pas déduire cette règle d'un montant nul —
         il la lirait un jour comme « gratuit ».
+
+        ⚠️ 19 octobre 2026 : LE TARIF OUVERT, et non tout l'historique. Une fixation
+        clôt le tarif sans montant et ouvre le prix arrêté ; à lire tous les tarifs, un
+        service qui avait un jour été « à fixer » restait invendable pour toujours.
         """
-        return all(t.montant is not None for t in self.tarifs)
+        return _tarif_ouvert_chiffre(self.tarifs)
 
     def couvre(self, chiffre_affaires: Decimal) -> bool:
         if chiffre_affaires < self.plancher:
@@ -299,7 +303,7 @@ class Service(BaseModel):
             return False
         if self.formules:
             return any(f.souscriptible_en_ligne for f in self.formules)
-        return all(t.montant is not None for t in self.tarifs)
+        return _tarif_ouvert_chiffre(self.tarifs)
 
     def tarif_au(self, a_la_date: date) -> Tarif:
         """Le tarif d'un service à barème unique."""
@@ -361,6 +365,12 @@ class TarifFixe(BaseModel):
     motif: str = Field(min_length=3)
     fixe_par: str = Field(min_length=1)
     fixe_le: datetime
+
+
+def _tarif_ouvert_chiffre(tarifs: Sequence[Tarif]) -> bool:
+    """Le tarif sans date de fin porte un montant (voir `Formule.souscriptible_en_ligne`)."""
+    ouverts = [t for t in tarifs if t.au is None]
+    return bool(ouverts) and all(t.montant is not None for t in ouverts)
 
 
 def _ouvrir_une_periode(tarifs: list[Tarif], fixation: TarifFixe) -> list[Tarif]:

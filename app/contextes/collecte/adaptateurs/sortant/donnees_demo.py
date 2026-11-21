@@ -58,6 +58,7 @@ from app.contextes.collecte.domaine.pieces import (
     empreinte,
 )
 from app.contextes.conformite.api import FACTURES_DEMO
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "DEMANDES_DEMO",
@@ -254,11 +255,11 @@ def _construire() -> dict[str, PieceJustificative]:
                     )
                 }
             )
-        elif recue_le.date() <= _TRAITEES_JUSQU_AU:
+        elif jour_a_douala(recue_le) <= _TRAITEES_JUSQU_AU:
             dossier = facture.destinataire.niu
             numeros[dossier] = numeros.get(dossier, 0) + 1
             piece = piece.comptabiliser(f"2026/AC/{numeros[dossier]:06d}")
-        elif recue_le.date() > _LUES_JUSQU_AU:
+        elif jour_a_douala(recue_le) > _LUES_JUSQU_AU:
             # Reçue mais pas encore ouverte par le comptable : elle repart à
             # l'état RECUE, sans les données du document.
             piece = piece.model_copy(

@@ -197,7 +197,8 @@ class TestLaRouteDeFixation:
     def test_la_direction_voit_ce_qui_reste_a_fixer(self, client: TestClient):
         _connecter(client, "b.mballa@cga-brcg.cm")
         etat = client.get("/souscription/tarifs", params={"a_la_date": "2026-09-21"}).json()
-        # Libératoire, réel simplifié, réel, paie, domiciliation, formation : six
+        # Libératoire, réel simplifié, réel, paie, domiciliation, formation, et les
+        # deux tranches de la DSF achetée en ligne (19 octobre 2026, point 24) : huit
         # prix à fixer ; la création et le ponctuel se chiffrent sur étude.
         #
         # ⚠️ LE COMPTE MONTE QUAND L'OFFRE S'ÉLARGIT, ET C'EST CE QU'ON VEUT
@@ -206,7 +207,7 @@ class TestLaRouteDeFixation:
         # est précisément celui qui le lui dit. Un service ajouté sans que ce
         # compte bouge serait un service dont personne n'aurait à valider le
         # prix.
-        assert etat["a_fixer"] == 6
+        assert etat["a_fixer"] == 8
         fixables = {(x["service"], x["formule"]) for x in etat["lignes"] if x["fixable"]}
         assert ("CREATION", None) not in fixables
 
@@ -215,8 +216,8 @@ class TestLaRouteDeFixation:
         r = client.post("/souscription/tarifs", json=FIXATION)
         assert r.status_code == 201, r.text
         etat = r.json()
-        # Un prix fixé, il en reste cinq. Voir le cas précédent pour le total.
-        assert etat["a_fixer"] == 5
+        # Un prix fixé, il en reste sept. Voir le cas précédent pour le total.
+        assert etat["a_fixer"] == 7
         ligne = next(x for x in etat["lignes"] if x["service"] == "DOMICILIATION")
         assert ligne["statut"] == "FIXE"
         assert ligne["fixe_par"] == "C-001"

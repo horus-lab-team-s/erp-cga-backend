@@ -16,6 +16,10 @@ la plus stable.
 
 from __future__ import annotations
 
+from app.contextes.portefeuille.domaine.documents_a_echeance import (
+    DocumentAEcheance,
+    documents_en_vigueur,
+)
 from app.contextes.portefeuille.domaine.entites import (
     Adhesion,
     Associe,
@@ -25,7 +29,10 @@ from app.contextes.portefeuille.domaine.entites import (
     Exercice,
     FormeJuridique,
     MandatDeclaratif,
+    MandatDePaiement,
+    NatureActivite,
     RegimeFiscal,
+    SecteurReelDOffice,
     StatutIntrouvable,
     StatutRattachement,
     StatutRegime,
@@ -47,6 +54,8 @@ from app.contextes.portefeuille.domaine.temporel import MotifChangement, Periode
 
 __all__ = [
     "PALIER_ALERTE",
+    "DocumentAEcheance",
+    "documents_en_vigueur",
     "Adhesion",
     "Associe",
     "CentreRattachement",
@@ -55,7 +64,10 @@ __all__ = [
     "Entreprise",
     "Exercice",
     "FormeJuridique",
+    "NatureActivite",
+    "SecteurReelDOffice",
     "MandatDeclaratif",
+    "MandatDePaiement",
     "MotifChangement",
     "Periode",
     "RegimeFiscal",

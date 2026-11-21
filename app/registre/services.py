@@ -363,7 +363,12 @@ ARETES_AUTORISEES: dict[str, set[str]] = {
     # entreprise. Il ne lit rien d'autre, et surtout n'écrit nulle part : une
     # souscription dit qu'un accès a été payé, pas que l'entreprise est connue.
     # Voir Docs/architecture/10-flux-fonctionnels.md.
-    "souscription": {"portefeuille"},
+    #
+    # ⚠️ Et M lit C pour une seule question depuis le 14 octobre 2026 : la quittance que le
+    # cabinet porte sur un appel de fonds (paiement sous mandat) est-elle une pièce DE CE
+    # dossier ? Sans elle, la quittance d'un autre adhérent rendait « payée » une échéance
+    # que l'administration n'a pas reçue. C ne lit pas M : pas de cycle.
+    "souscription": {"portefeuille", "collecte"},
     # N appartient au socle, au même titre que A et K, et pour la même raison : il ne
     # dépend de rien. Le plan de contrôle décide qu'un sous-domaine répond et à qui ;
     # la passerelle le lit à chaque requête, et un contexte métier peut légitimement

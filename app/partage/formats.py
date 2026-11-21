@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
+from app.partage.horloge import a_douala
+
 __all__ = [
     "ESPACE_FINE",
     "MOIS",
@@ -89,7 +91,9 @@ def moment_long(instant: datetime) -> str:
     n'a rien à convertir. ⚠️ Le jour où un adhérent de la diaspora existe, ce
     silence devient un défaut.
     """
-    return f"{date_longue(instant.date())} à {instant.hour:02d}h{instant.minute:02d}"
+    # ⚠️ 16 octobre 2026 : l'instant UTC était affiché tel quel, une heure trop tôt.
+    local = a_douala(instant)
+    return f"{local.day} {MOIS[local.month - 1]} {local.year} à {local.hour:02d}h{local.minute:02d}"
 
 
 # ── Le montant en toutes lettres ─────────────────────────────────────────────

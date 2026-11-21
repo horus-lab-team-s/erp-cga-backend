@@ -95,6 +95,16 @@ abonnements:
     texte: "Accusé de réception {accuse}, pour le dossier {dossier}."
     lien: "/obligations"
 
+  # ── Lot 4 (9 novembre 2026) : ce qui expire au portefeuille ──
+  # L'adhérent, lui, est prévenu par courriel (gabarit `expiration.adherent`).
+  - action: expiration.signalee
+    destinataires:
+      permissions: [SAISIR_ECRITURE, LIRE_PILOTAGE]
+      dossier: dossier
+    titre: "{libelle} : {denomination}"
+    texte: "Échéance le {expire_le} ({jours} jours). À renouveler avec l'adhérent."
+    lien: "/portefeuille/{dossier}"
+
   # ── Accès : celui qui reçoit un accès ou un dossier le sait ──
   - action: habilitation.accordee
     destinataires:
@@ -287,6 +297,16 @@ abonnements:
     titre: "{titre} : à régler avant le {echeance}"
     texte: "{periode}, dans {jours} jour(s). Une fois réglée, envoyez la quittance depuis vos échéances."
     lien: "/mon-espace/echeances"
+
+  # 9 novembre 2026 : les relances d'honoraires (échéance à régler, retard, préavis de
+  # suspension, accès suspendu) arrivent aussi dans l'espace de l'adhérent. Le titre et le
+  # texte sont composés par le travail `relances-des-honoraires`, selon le palier.
+  - action: honoraires.relance_adressee
+    destinataires:
+      compte: compte
+    titre: "{titre}"
+    texte: "{texte}"
+    lien: "/mon-espace/honoraires"
 
   # Pas 110 : le comptable signale une écriture au réviseur, depuis sa fiche, à tout moment.
   - action: comptabilite.ecriture_signalee

@@ -43,7 +43,7 @@ from __future__ import annotations
 from datetime import date
 
 from app.contextes.obligations.domaine.echeances import Periodicite, TypeObligation
-from app.contextes.portefeuille.contrats import RegimeFiscal
+from app.contextes.portefeuille.contrats import CentreRattachement, RegimeFiscal
 from app.contextes.transverse.contrats import Portail
 
 __all__ = ["CATALOGUE_OBLIGATIONS", "DepotTypesObligationMemoire"]
@@ -100,6 +100,18 @@ CATALOGUE_OBLIGATIONS: list[TypeObligation] = [
         jour_limite=15,
         regimes_concernes=[RegimeFiscal.IGS],
     ),
+    # 15 octobre 2026 : CGI art. C 41 (1), la déclaration détaillée des revenus de
+    # l'année écoulée, au plus tard le 15 mars, distincte des versements trimestriels.
+    TypeObligation(
+        code="IGS_DECLARATION_ANNUELLE",
+        portail=Portail.DGI_TELEDECLARATION,
+        libelle="Impôt général synthétique, déclaration annuelle des revenus",
+        periodicite=Periodicite.ANNUELLE_CIVILE,
+        jour_civil=15,
+        mois_civil=3,
+        l_annee_suivante=True,
+        regimes_concernes=[RegimeFiscal.IGS],
+    ),
     TypeObligation(
         code="DSF",
         portail=Portail.DGI_TELEDECLARATION,
@@ -108,6 +120,14 @@ CATALOGUE_OBLIGATIONS: list[TypeObligation] = [
         delai_jours_apres_cloture=75,
         # Vide, et c'est délibéré — voir l'en-tête du module.
         decalage_par_centre={},
+        # 15 octobre 2026 : CGI 2026, art. 18 (déclaration des résultats « présentée
+        # conformément au système comptable OHADA ») et art. C 44 (3) pour l'IGS. Les
+        # 75 jours restent pour un centre que la table ne connaîtrait pas.
+        date_civile_par_centre={
+            CentreRattachement.DGE: (3, 15),
+            CentreRattachement.CIME: (4, 15),
+            CentreRattachement.CDI: (5, 15),
+        },
     ),
     TypeObligation(
         code="PATENTE",
@@ -119,6 +139,9 @@ CATALOGUE_OBLIGATIONS: list[TypeObligation] = [
         # Due en début d'année pour l'année en cours : c'est un droit d'exercer
         # payé d'avance, pas la déclaration d'une période écoulée.
         payable_d_avance=True,
+        # 15 octobre 2026 : l'IGS est libératoire de la patente (CGI art. C 38) ; un
+        # adhérent au synthétique ne la doit pas.
+        regimes_concernes=[RegimeFiscal.REEL],
     ),
 ]
 

@@ -160,6 +160,41 @@ class TestLeSeuilDAdhesion:
         assert "Q17" in droit.motif
 
 
+class TestLeDepotDansLesDelais:
+    """⚠️ CGI 2026, art. 119 (2) : l'adhérent perd les avantages quand sa déclaration
+    n'est pas souscrite dans les délais. La date de l'accusé est la date opposable."""
+
+    ECHEANCE = date(2024, 4, 15)
+
+    def _droit(self, *, deposee_le=None, au=date(2024, 3, 1)):
+        return apprecier_le_droit(
+            PORTEFEUILLE_DEMO[INTERMITTENT],
+            _exercice(2023),
+            chiffre_affaires=Decimal(40000000),
+            seuil_adhesion=SEUIL,
+            borne_adhesion=Borne.EXCLUSE,
+            echeance_declaration=self.ECHEANCE,
+            deposee_le=deposee_le,
+            au=au,
+        )
+
+    def test_deposee_a_l_echeance_le_droit_reste_ouvert(self):
+        assert self._droit(deposee_le=self.ECHEANCE).ouvert is True
+
+    def test_deposee_apres_l_echeance_le_droit_se_ferme_et_le_dit(self):
+        droit = self._droit(deposee_le=date(2024, 4, 16))
+        assert droit.ouvert is False and droit.declaration_hors_delai is True
+        assert "art. 119 (2)" in droit.motif and "16/04/2024" in droit.motif
+
+    def test_avant_l_echeance_une_dsf_non_deposee_ne_ferme_rien(self):
+        """La liasse se prépare AVANT le dépôt."""
+        assert self._droit(au=date(2024, 4, 15)).ouvert is True
+
+    def test_l_echeance_passee_sans_depot_ferme_le_droit(self):
+        droit = self._droit(au=date(2024, 4, 16))
+        assert droit.ouvert is False and "non déposée" in droit.motif
+
+
 class TestParLaRoute:
     """La liasse, sur PostgreSQL, avec des ventes produites par les routes réelles."""
 
@@ -257,3 +292,14 @@ class TestParLaRoute:
         liasse = self._liasse(client, "?adherent_sur_l_exercice=true")
         assert liasse["droit_cga"]["ouvert"] is False
         assert self._abattement(liasse) == []
+
+
+@exige_postgresql
+def test_la_liasse_ferme_le_droit_d_une_dsf_en_retard(plateforme):
+    """NGUEMA : DSF 2025 due au 15/05/2026 (centre divisionnaire), sans accusé au
+    15 octobre 2026. Art. 119 (2) : le droit aux avantages est fermé, et la liasse le dit."""
+    client = plateforme
+    ouvrir_une_session(client, "a.bouba@cga-brcg.cm")
+    droit = client.get("/cloture/dossiers/P027788990011M/liasse/2025").json()["droit_cga"]
+    assert droit["ouvert"] is False and droit["declaration_hors_delai"] is True
+    assert "15/05/2026" in droit["motif"]

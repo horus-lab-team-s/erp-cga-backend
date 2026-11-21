@@ -148,6 +148,16 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
     # martèle le formulaire ne remplissait donc plus seulement une table, il
     # occupait des gens.
     Regle(
+        chemin="/vitrine/offres/*",
+        methode="POST",
+        # 16 octobre 2026 (revue de sécurité) : postuler est public et dépose un PDF de
+        # 5 Mo. Sans borne, un automate remplit le disque du magasin en changeant de
+        # téléphone. Dix par heure et par adresse : un cybercafé entier y tient.
+        maximum=10,
+        fenetre=3600,
+        motif="candidature",
+    ),
+    Regle(
         chemin="/acquisition/demandes",
         methode="POST",
         # Trente par heure et par adresse : un cabinet entier derrière une seule
@@ -156,6 +166,15 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
         maximum=30,
         fenetre=3600,
         motif="dépôt de demande de contact",
+    ),
+    # 19 octobre 2026 (point 22) : les pièces jointes à une demande. Cinq par demande
+    # au plus, et chacune pèse jusqu'à 10 Mo : la limite borne aussi le disque.
+    Regle(
+        chemin="/acquisition/demandes/pieces",
+        methode="POST",
+        maximum=30,
+        fenetre=3600,
+        motif="pièce jointe à une demande",
     ),
     Regle(
         chemin="/acquisition/devis/*",
@@ -176,6 +195,18 @@ REGLES_PAR_DEFAUT: tuple[Regle, ...] = (
         maximum=60,
         fenetre=3600,
         motif="acceptation ou transmission de proforma",
+    ),
+    # 19 octobre 2026 (audit) : l'adresse de notification ne demande ni session ni
+    # signature (Tara ne signe pas). Sans limite, un tiers qui la connaît pouvait la
+    # marteler et remplir les notifications non rattachées. Tara notifie un
+    # encaissement à la fois : trois cents en cinq minutes depuis une même adresse,
+    # c'est déjà une journée de guichet.
+    Regle(
+        chemin="/souscription/notification/tara",
+        methode="POST",
+        maximum=300,
+        fenetre=300,
+        motif="notification du prestataire de paiement",
     ),
     Regle(
         chemin="/souscription/devis",

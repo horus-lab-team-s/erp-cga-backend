@@ -82,6 +82,7 @@ __all__ = [
     "TableJeton",
     "TableLectureDesNotifications",
     "TableMandat",
+    "TableRoleDuCabinet",
     "TableSession",
 ]
 
@@ -120,6 +121,11 @@ class TableCompte(Cloisonne, Base):
     #: compris, soit 83 caractères aujourd'hui. La marge couvre un changement
     #: d'algorithme sans migration. Voir `coffre.py`.
     secret_totp: Mapped[str | None] = mapped_column(String(255))
+    #: La clé montrée, pas encore prouvée par un premier code (19 octobre 2026). Scellée
+    #: comme `secret_totp`.
+    secret_totp_en_attente: Mapped[str | None] = mapped_column(String(255))
+    #: La dernière tranche TOTP acceptée, contre le rejeu d'un code (19 octobre 2026).
+    derniere_tranche_totp: Mapped[int | None] = mapped_column(BigInteger)
 
     etat: Mapped[str] = mapped_column(String(32), nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -380,3 +386,32 @@ class TableLectureDesNotifications(Cloisonne, Base):
     locataire: Mapped[str] = mapped_column(String(_ID), primary_key=True)
     compte: Mapped[str] = mapped_column(String(_ID), primary_key=True)
     lu_jusqu_au_rang: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class TableRoleDuCabinet(Cloisonne, Base):
+    """Un rôle tel que le cabinet l'a réglé (18 octobre 2026).
+
+    ─────────────────────────────────────────────────────────────────────────
+    SEUL CE QUI DIFFÈRE DE LA MATRICE LIVRÉE
+
+    Un rôle livré n'a de ligne que si le cabinet a touché à ses droits ; un rôle créé
+    par le cabinet en a toujours une. La matrice en vigueur est la livrée recouverte
+    de ces lignes (`roles.matrice_en_vigueur`). Une plateforme mise à jour qui ajoute
+    un droit à un rôle livré le donne donc aux cabinets qui n'ont rien réglé, et pas
+    à celui qui a fixé ce rôle lui-même : c'est sa décision, elle prime.
+
+    ⚠️ Les droits sont une liste JSON : une valeur de la fiche, sans existence propre.
+    Qui a réglé quoi, et ce qui était avant, va au journal d'audit.
+    ─────────────────────────────────────────────────────────────────────────
+    """
+
+    __tablename__ = "role_du_cabinet"
+
+    locataire: Mapped[str] = mapped_column(String(_ID), primary_key=True)
+    code: Mapped[str] = mapped_column(String(40), primary_key=True)
+    libelle: Mapped[str] = mapped_column(String(80), nullable=False)
+    permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    systeme: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    externe: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reglee_par: Mapped[str | None] = mapped_column(String(200))
+    reglee_le: Mapped[datetime | None] = mapped_column(DateTime)

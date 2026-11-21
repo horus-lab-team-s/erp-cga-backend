@@ -24,6 +24,7 @@ import pytest
 from app.contextes.obligations.adaptateurs.sortant import effectif as module_effectif
 from app.contextes.obligations.api import effectif_du_dossier
 from app.contextes.social.api import CONTRATS_DEMO, Periode, a_employe_sur
+from app.demonstration_a_jour import DOSSIER_DE_DEMONSTRATION
 from app.partage.copie import transiter
 from tests.conftest import exige_postgresql, ouvrir_une_session
 
@@ -147,12 +148,24 @@ class TestParLesRoutes:
         """Les relances calculaient leur propre échéancier, sans salariés."""
         client = plateforme
         ouvrir_une_session(client, REVISEUR)
-        # J-2 de l'échéance du 15 octobre, pour la période de septembre.
-        reponse = client.get("/obligations/relances?a_la_date=2026-10-13&exercice=2026")
+        # ⚠️ 17 novembre 2026 : J-2 de la PROCHAINE échéance CNPS, relative au jour. La date
+        # fixe du 13 octobre passait tant que la démonstration, recalée sur le jour réel,
+        # laissait septembre ouvert ; depuis la mi-novembre septembre est consigné, et une
+        # période déposée ne se relance pas. La période du mois courant, elle, reste ouverte.
+        from app.partage.horloge import aujourd_hui
+
+        jour = aujourd_hui()
+        suivant = date(jour.year + (jour.month == 12), jour.month % 12 + 1, 13)
+        reponse = client.get(
+            f"/obligations/relances?a_la_date={suivant.isoformat()}&exercice={jour.year}"
+        )
         assert reponse.status_code == 200, reponse.text
         sociales = {
             (r["obligation"]["entreprise"], r["obligation"]["code_obligation"])
             for r in reponse.json()
         }
-        assert (EMPLOYEUR, "CNPS") in sociales, sociales
+        # ⚠️ Le dossier de démonstration, et non `EMPLOYEUR` (9 novembre 2026) : c'est le
+        # seul dont la démonstration garde la CNPS récente ouverte « pour les relances ».
+        # Les autres sont à jour, et une période déposée ne se relance pas.
+        assert (DOSSIER_DE_DEMONSTRATION, "CNPS") in sociales, sociales
         assert (SANS_PERSONNEL, "CNPS") not in sociales

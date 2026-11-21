@@ -59,8 +59,8 @@ def accuser_le_depot(evenement: EvenementSortant, *, notifier: Any = None) -> No
     """
     # Importé à l'appel : les dépôts vivent avec les routes, et ce module est
     # chargé à la composition de l'application.
-    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
-        _dossiers,
+    from app.contextes.souscription.adaptateurs.entrant.sources import (
+        depot_dossiers,
     )
 
     # ⚠️ Par `transverse.api`, et non par le module de dépendances. L'abonné
@@ -69,7 +69,7 @@ def accuser_le_depot(evenement: EvenementSortant, *, notifier: Any = None) -> No
     # `tests/test_architecture.py` le vérifie.
     from app.contextes.transverse.api import service_de_notification
 
-    depot = _dossiers()
+    depot = depot_dossiers()
     dossier = depot.lire(evenement.charge.get("dossier", ""))
 
     if dossier.accuse_de_depot_le is not None:
@@ -117,16 +117,41 @@ def accuser_le_depot(evenement: EvenementSortant, *, notifier: Any = None) -> No
     # qu'elle se lira — pas celle de WhatsApp par commodité.
     # ─────────────────────────────────────────────────────────────────────────
     poste = notifier or service_de_notification()
-    poste.envoyer(
-        "demande.accuse_de_depot",
-        destinataire=courriel,
-        contexte={
-            "prenom": demande.nom,
-            "reference": dossier.reference,
-            "service": _libelle_du_service(demande.service_souhaite),
-            "telephone": demande.telephone,
-        },
+    contexte = {
+        "prenom": demande.nom,
+        "reference": dossier.reference,
+        "service": _libelle_du_service(demande.service_souhaite),
+        "telephone": demande.telephone,
+    }
+    # 9 novembre 2026 : le code de dossier, et le rendez-vous pris, s'il y en a un.
+    from app.contextes.souscription.adaptateurs.entrant.routes_acquisition import (
+        phrase_du_rendez_vous,
     )
+    from app.contextes.souscription.adaptateurs.entrant.routes_http import comptoir
+    from app.contextes.souscription.domaine.rendez_vous import EtatRendezVous
+
+    boutique = comptoir()
+    code = boutique.codes_de_dossier.du_dossier(dossier.reference)
+    if code is not None:
+        prevu = next(
+            (
+                r
+                for r in boutique.rendez_vous.pour(dossier.reference)
+                if r.etat is EtatRendezVous.PREVU
+            ),
+            None,
+        )
+        poste.envoyer(
+            "demande.accuse_avec_code",
+            destinataire=courriel,
+            contexte={
+                **contexte,
+                "code": code.lisible,
+                "rendez_vous": phrase_du_rendez_vous(prevu),
+            },
+        )
+    else:
+        poste.envoyer("demande.accuse_de_depot", destinataire=courriel, contexte=contexte)
 
     # ⚠️ **APRÈS L'ENVOI, ET NON AVANT.** Marquer d'abord ferait qu'un poste
     # indisponible laisserait un dossier « accusé » sans que rien ne soit parti,

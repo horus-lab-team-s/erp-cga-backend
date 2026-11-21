@@ -36,7 +36,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.contextes.comptabilite.adaptateurs.entrant.routes_http import _journaux, depot
+from app.contextes.comptabilite.adaptateurs.entrant.routes_http import depot, depot_des_journaux
 from app.contextes.comptabilite.adaptateurs.sortant.depots_rapprochements import (
     depot_des_rapprochements,
 )
@@ -277,7 +277,7 @@ class DemandeDImport(BaseModel):
 )
 def importer(acces: AccesRequis, entreprise: str, demande: DemandeDImport) -> VueRapprochement:
     exiger_dossier(acces, Permission.SAISIR_ECRITURE, entreprise)
-    journal = next((j for j in _journaux.charger() if j.code == demande.journal), None)
+    journal = next((j for j in depot_des_journaux.charger() if j.code == demande.journal), None)
     if journal is None:
         raise HTTPException(status_code=422, detail=f"journal {demande.journal} inconnu.")
     par_fichier = demande.profil is not None or demande.fichier_base64 is not None

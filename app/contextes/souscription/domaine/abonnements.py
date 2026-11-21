@@ -63,6 +63,7 @@ from app.contextes.souscription.domaine.souscriptions import (
     EtatSouscription,
     Souscription,
 )
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "DELAI_APPEL",
@@ -233,7 +234,7 @@ def echeancier(
     )
 
     depart = souscription.prend_effet_le
-    fin = souscription.close_le.date() if souscription.close_le else None
+    fin = jour_a_douala(souscription.close_le) if souscription.close_le else None
 
     echeances: list[EcheanceAbonnement] = []
     numero = 1

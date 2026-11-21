@@ -265,23 +265,35 @@ class ParametreResolu(BaseModel):
 
 
 class TrancheBareme(BaseModel):
-    """Une tranche : de `plancher` inclus à `plafond` exclu, à ce taux.
+    """Une tranche : de `plancher` inclus à `plafond` exclu, à ce taux OU pour ce montant.
 
     Borne haute **exclue**, comme partout dans ce projet. Sans cette convention,
     un revenu exactement égal à deux millions relèverait de deux tranches à la
     fois, et le calcul dépendrait de l'ordre de parcours.
 
     `plafond` à `None` marque la dernière tranche, celle qui n'a pas de fin.
+
+    ⚠️ `taux` OU `montant`, jamais les deux (15 octobre 2026). Un barème progressif
+    (IRPP) taxe chaque fraction à son taux ; un barème à montant fixe par palier (TDL,
+    redevance audiovisuelle) rend le montant du palier où tombe l'assiette, entier. La
+    TDL était modélisée en taux « faute de structure adéquate » : c'est cette structure.
     """
 
     model_config = ConfigDict(frozen=True)
 
     plancher: Decimal
     plafond: Decimal | None = None
-    taux: Decimal
+    taux: Decimal | None = None
+    montant: Decimal | None = None
 
     @model_validator(mode="after")
     def _bornes_coherentes(self) -> TrancheBareme:
+        if (self.taux is None) == (self.montant is None):
+            raise ValueError(
+                f"tranche à {self.plancher} : un taux OU un montant fixe, et un seul."
+            )
+        if self.montant is not None and self.montant < 0:
+            raise ValueError(f"tranche à {self.plancher} : montant négatif {self.montant}")
         if self.plancher < 0:
             raise ValueError(f"tranche à plancher négatif : {self.plancher}")
         if self.plafond is not None and self.plafond <= self.plancher:
@@ -289,6 +301,36 @@ class TrancheBareme(BaseModel):
                 f"tranche incohérente : plafond {self.plafond} <= plancher {self.plancher}"
             )
         return self
+
+
+def appliquer_les_tranches(tranches: list[TrancheBareme], assiette: Decimal) -> Decimal:
+    """L'impôt dû sur cette assiette. Un seul calcul pour la version et le barème résolu.
+
+    ⚠️ **Progressif, jamais un taux moyen appliqué au tout.** Chaque tranche ne taxe
+    que la fraction qui la traverse. Appliquer le taux de la tranche atteinte à
+    l'assiette entière — l'erreur la plus fréquente sur ce calcul — produirait un
+    impôt très supérieur, et un salarié augmenté de mille francs verrait son net
+    baisser.
+
+    ⚠️ **À montant fixe, le montant du palier, entier** : la TDL d'un salaire de
+    80 000 est celle du palier 75 000-100 000, pas une somme de fractions.
+    """
+    triees = sorted(tranches, key=lambda t: t.plancher)
+    if triees[0].montant is not None:
+        # La première tranche part de zéro (contrôlé à la construction) : un palier
+        # existe toujours. Une assiette négative est celle du premier.
+        base = max(assiette, Decimal(0))
+        palier = next(t for t in reversed(triees) if base >= t.plancher)
+        return palier.montant or Decimal(0)
+    if assiette <= 0:
+        return Decimal(0)
+    du = Decimal(0)
+    for tranche in triees:
+        if assiette <= tranche.plancher:
+            break
+        haut = assiette if tranche.plafond is None else min(assiette, tranche.plafond)
+        du += (haut - tranche.plancher) * (tranche.taux or Decimal(0)) / Decimal(100)
+    return du
 
 
 class VersionBareme(BaseModel):
@@ -338,6 +380,11 @@ class VersionBareme(BaseModel):
                 f"la dernière tranche est fermée à {triees[-1].plafond} : les revenus "
                 "au-delà n'auraient aucun taux."
             )
+        if len({t.montant is None for t in triees}) > 1:
+            raise ValueError(
+                "un barème est progressif (des taux) ou à montant fixe par palier (des "
+                "montants), pas les deux : mêlés, aucun calcul ne serait juste."
+            )
         if self.applicable_au is not None and self.applicable_au <= self.applicable_du:
             raise ValueError(
                 f"borne de validité incohérente : {self.applicable_au} <= {self.applicable_du}"
@@ -355,23 +402,8 @@ class VersionBareme(BaseModel):
         return self.applicable_au is None or a_la_date < self.applicable_au
 
     def appliquer(self, assiette: Decimal) -> Decimal:
-        """L'impôt dû sur cette assiette, tranche par tranche.
-
-        ⚠️ **Barème progressif, jamais un taux moyen appliqué au tout.** Chaque
-        tranche ne taxe que la fraction qui la traverse. Appliquer le taux de la
-        tranche atteinte à l'assiette entière — l'erreur la plus fréquente sur ce
-        calcul — produirait un impôt très supérieur, et un salarié augmenté de
-        mille francs verrait son net baisser.
-        """
-        if assiette <= 0:
-            return Decimal(0)
-        du = Decimal(0)
-        for tranche in sorted(self.tranches, key=lambda t: t.plancher):
-            if assiette <= tranche.plancher:
-                break
-            haut = assiette if tranche.plafond is None else min(assiette, tranche.plafond)
-            du += (haut - tranche.plancher) * tranche.taux / Decimal(100)
-        return du
+        """L'impôt dû sur cette assiette. Voir `appliquer_les_tranches`."""
+        return appliquer_les_tranches(self.tranches, assiette)
 
 
 class Bareme(BaseModel):
@@ -416,10 +448,8 @@ class BaremeResolu(BaseModel):
     note: str | None = None
 
     def appliquer(self, assiette: Decimal) -> Decimal:
-        du = Decimal(0)
-        for tranche in sorted(self.tranches, key=lambda t: t.plancher):
-            if assiette <= tranche.plancher:
-                break
-            haut = assiette if tranche.plafond is None else min(assiette, tranche.plafond)
-            du += (haut - tranche.plancher) * tranche.taux / Decimal(100)
-        return du
+        return appliquer_les_tranches(self.tranches, assiette)
+
+    @property
+    def a_montant_fixe(self) -> bool:
+        return self.tranches[0].montant is not None

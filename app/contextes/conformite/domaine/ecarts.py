@@ -50,6 +50,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contextes.conformite.domaine.entites import Constat, Severite
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "MotifType",
@@ -403,4 +404,5 @@ def a_regulariser(ecart: EcartDeConstat, politique: PolitiqueDEcart, a_la_date: 
     """
     if ecart.piece_appui or not piece_appui_exigee_pour(ecart, politique):
         return False
-    return (a_la_date - ecart.propose_le.date()).days > politique.delai_de_regularisation_jours
+    ecoules = (a_la_date - jour_a_douala(ecart.propose_le)).days
+    return ecoules > politique.delai_de_regularisation_jours

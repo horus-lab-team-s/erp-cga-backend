@@ -33,14 +33,14 @@ from app.contextes.cloture.domaine.entites import (
     SensPoste,
     SystemeDsf,
 )
+from app.contextes.cloture.domaine.etats_dgi import (
+    ACTIF,
+    COMPTE_DE_RESULTAT,
+    PASSIF,
+    etablir_les_etats_dgi,
+)
 from app.contextes.cloture.domaine.postes import poste_du_compte, postes_du_systeme
 from app.contextes.comptabilite.api import SoldeCompte
-from app.contextes.referentiel.api import (
-    AucuneVersionApplicable,
-    ParametreInconnu,
-    ServiceParametres,
-    StatutValidation,
-)
 
 __all__ = [
     "EtatsFinanciers",
@@ -104,32 +104,31 @@ class EtatsFinanciers:
         return all(c.satisfait for c in self.controles)
 
 
-def determiner_le_systeme(
-    chiffre_affaires: Decimal, parametres: ServiceParametres, a_la_date
-) -> tuple[SystemeDsf, bool]:
-    """Le système de présentation, constaté et jamais choisi.
+def determiner_le_systeme(regime: str) -> tuple[SystemeDsf, bool]:
+    """Le système de présentation de la DSF, constaté sur le RÉGIME FISCAL du dossier.
 
-    Rend le système **et** un drapeau disant si le seuil employé est validé.
+    ─────────────────────────────────────────────────────────────────────────
+    ⚠️ 15 OCTOBRE 2026 : AU CAMEROUN, C'EST LE RÉGIME QUI DÉCIDE, PAS UN SEUIL
 
-    ⚠️ Le seuil du référentiel est unique là où le texte OHADA en module trois
-    selon l'activité — négoce, artisanat, services. La valeur retenue est la plus
-    élevée des trois, ce qui classe **en Système Normal** une entité de services
-    proche du seuil que le texte admettrait au SMT. Le sur-classement est le sens
-    d'erreur le moins dommageable — une liasse plus détaillée que nécessaire est
-    acceptée, l'inverse est rejeté — mais il est signalé plutôt que subi.
+    Le décret n° 2019/262 du 28 mai 2019 (art. 5 et 6, reproduit au CGI 2026) :
+    le Système Normal pour le régime du réel ; le Système Minimal de Trésorerie
+    pour l'ancien régime simplifié. Celui-ci est supprimé (CGI art. 93 ter) : ce
+    sont les contribuables à l'IGS tenus à une comptabilité (CGI art. C 44, dès
+    10 M FCFA) qui la tiennent au SMT.
 
-    Un seuil absent du référentiel rend le Système Normal : c'est le régime de
-    droit commun, et le retenir par défaut ne fait courir aucun risque de rejet.
+    La plateforme comparait le chiffre d'affaires au seuil de l'AUDCIF (art. 13),
+    unique puis par activité : une règle OHADA générale, que le décret camerounais
+    remplace. Le seuil, c'est le RÉGIME qui l'a déjà appliqué (art. 93 quater).
+
+    Rend le système et un drapeau de réserve : un régime inconnu donne le Système
+    Normal (le droit commun, que le portail accepte toujours) et se signale.
+    ─────────────────────────────────────────────────────────────────────────
     """
-    try:
-        resolu = parametres.resoudre("SEUIL_SYSTEME_NORMAL", a_la_date)
-    except (ParametreInconnu, AucuneVersionApplicable):
-        return SystemeDsf.NORMAL, True
-    # ⚠️ La borne du référentiel, et non un `>=` écrit ici : le texte réserve le
-    # système minimal à qui « reste sous » le seuil, et c'est le référentiel qui le
-    # dit. Un seuil sans borne lève plutôt que de classer au hasard.
-    systeme = SystemeDsf.NORMAL if resolu.atteint(chiffre_affaires) else SystemeDsf.MINIMAL
-    return systeme, resolu.statut is not StatutValidation.VALIDE
+    if regime == "REEL":
+        return SystemeDsf.NORMAL, False
+    if regime == "IGS":
+        return SystemeDsf.MINIMAL, False
+    return SystemeDsf.NORMAL, True
 
 
 def assembler_les_etats(
@@ -153,6 +152,23 @@ def assembler_les_etats(
     doublerait l'actif immobilisé.
     ─────────────────────────────────────────────────────────────────────────
     """
+    if systeme is SystemeDsf.NORMAL:
+        lignes, non_couverts_officiels = _lignes_officielles(soldes)
+        etats = EtatsFinanciers(
+            systeme=systeme,
+            lignes=lignes,
+            comptes_non_couverts=non_couverts_officiels,
+            controles=(),
+            systeme_non_valide=systeme_non_valide,
+        )
+        return EtatsFinanciers(
+            systeme=etats.systeme,
+            lignes=etats.lignes,
+            comptes_non_couverts=etats.comptes_non_couverts,
+            controles=_controler(etats, soldes),
+            systeme_non_valide=systeme_non_valide,
+        )
+
     par_poste: dict[str, list[tuple[str, Decimal]]] = {}
     non_couverts: list[str] = []
 
@@ -199,6 +215,47 @@ def assembler_les_etats(
         controles=_controler(etats, soldes),
         systeme_non_valide=systeme_non_valide,
     )
+
+
+def _lignes_officielles(
+    soldes: list[SoldeCompte],
+) -> tuple[tuple[LigneLiasse, ...], tuple[str, ...]]:
+    """Le Système Normal aux codes REF officiels du modèle DGI (15 octobre 2026).
+
+    ⚠️ La liasse portait des codes qui ressemblaient aux codes officiels sans en avoir
+    le sens (AI pour les incorporelles, AZ pour les amortissements…). Elle lit
+    désormais la table officielle (`etats_dgi.py`), la même que le fichier déposé :
+    l'écran, le PDF et le fichier DGI disent la même chose, ligne pour ligne.
+
+    Les lignes sont celles de DÉTAIL, montants signés comme sur le modèle (l'actif
+    net d'amortissements, l'apporteur non appelé en négatif). Le résultat de
+    l'exercice (CJ) n'y figure pas : il se déduit du bilan, et c'est ce que le
+    contrôle de concordance compare au compte de résultat.
+    """
+    etats = etablir_les_etats_dgi({s.compte: s.solde for s in soldes})
+    lignes: list[LigneLiasse] = []
+
+    def ajouter(code: str, libelle: str, sens: SensPoste, montant: Decimal) -> None:
+        if montant == 0 and code not in etats.comptes:
+            return
+        lignes.append(
+            LigneLiasse(
+                poste=code,
+                libelle=libelle,
+                sens=sens,
+                montant=montant,
+                comptes=etats.comptes.get(code, ()),
+            )
+        )
+
+    for code, libelle, _ in ACTIF:
+        ajouter(code, libelle, SensPoste.ACTIF, etats.actif[code].net)
+    for code, libelle, _ in PASSIF:
+        ajouter(code, libelle, SensPoste.PASSIF, etats.passif[code])
+    for code, libelle, _, nature in COMPTE_DE_RESULTAT:
+        sens = SensPoste.CHARGE if nature == "C" else SensPoste.PRODUIT
+        ajouter(code, libelle, sens, etats.resultat[code])
+    return tuple(lignes), tuple(sorted(set(etats.comptes_non_couverts)))
 
 
 #: Le seul poste dont le montant reste signé — voir `assembler_les_etats`.

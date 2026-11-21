@@ -29,7 +29,6 @@ from typing import Protocol
 
 from app.contextes.comptabilite.domaine.entites import Compte, EcritureComptable, Journal
 from app.contextes.comptabilite.domaine.imputation import PlanImputation
-from app.contextes.comptabilite.domaine.lettrage import LettrageDeLignes
 from app.contextes.comptabilite.domaine.rapprochement import RapprochementBancaire
 from app.contextes.comptabilite.domaine.revue import RevueDeDossier
 
@@ -147,14 +146,3 @@ class DepotRevues(Protocol):
     def enregistrer(self, revue: RevueDeDossier) -> None: ...
 
 
-class DepotLettrages(Protocol):
-    """Les lettrages d'un cabinet (pas 108). Un lettrage défait reste : sa lettre ne se
-    réutilise pas, et l'on doit pouvoir dire ce qui avait été apparié."""
-
-    def du_compte(self, dossier: str, exercice: str, compte: str) -> list[LettrageDeLignes]:
-        """Tous, défaits compris, dans l'ordre de leur lettre."""
-        ...
-
-    def du_dossier(self, dossier: str, exercice: str) -> list[LettrageDeLignes]: ...
-
-    def enregistrer(self, lettrage: LettrageDeLignes) -> None: ...

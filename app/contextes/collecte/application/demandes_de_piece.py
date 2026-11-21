@@ -40,6 +40,7 @@ from app.contextes.collecte.domaine.demandes import (
 from app.contextes.collecte.domaine.pieces import CanalDepot, TypePiece
 from app.contextes.collecte.domaine.ports import DepotDemandes, DepotPieces
 from app.partage.erreurs import message_lisible
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "DemandeIntrouvable",
@@ -185,7 +186,7 @@ def satisfaire_une_demande(
     # ⚠️ Les deux gardes suivantes viennent de l'essai réel du pas 74 : la pièce
     # PJ-2026-0019, reçue en juillet et elle-même visée par une demande de
     # rectificative, a satisfait la demande d'une autre facture émise le 3 août.
-    if recue.recue_le.date() < demande.demandee_le:
+    if jour_a_douala(recue.recue_le) < demande.demandee_le:
         raise DemandeRefusee(
             f"la pièce {piece} a été reçue le {recue.recue_le:%d/%m/%Y}, avant la demande "
             f"{identifiant} du {demande.demandee_le:%d/%m/%Y} : elle ne peut pas y répondre."
@@ -268,7 +269,7 @@ def repondre_a_une_demande(
             le=le,
             par=par,
             annoncee_pour=(
-                le.date() + timedelta(days=jours_si_plus_tard)
+                jour_a_douala(le) + timedelta(days=jours_si_plus_tard)
                 if nature is NatureDeReponse.PLUS_TARD
                 else None
             ),

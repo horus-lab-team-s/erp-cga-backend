@@ -49,6 +49,7 @@ from app.contextes.souscription.domaine.ports import (
 )
 from app.contextes.souscription.domaine.souscriptions import Souscription
 from app.contextes.transverse.api import JournalAudit
+from app.partage.horloge import jour_a_douala
 
 __all__ = ["EngagementRefuse", "engager", "nouvelle_cle_idempotence"]
 
@@ -86,7 +87,7 @@ def engager(
     Rend les deux : l'écran affiche l'un et surveille l'autre.
     """
     propose = devis.lire(reference_devis)
-    aujourd_hui = a_l_instant.date()
+    aujourd_hui = jour_a_douala(a_l_instant)
 
     if not propose.payable(aujourd_hui):
         raise EngagementRefuse(_pourquoi_pas_payable(propose, aujourd_hui))

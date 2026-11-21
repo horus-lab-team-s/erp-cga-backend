@@ -98,6 +98,31 @@ class CompositionProforma(BaseModel):
     applicable_au: date | None = None
     rubriques: tuple[Rubrique, ...] = Field(min_length=1)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ LA SECONDE PAGE DES PROFORMAS DU CABINET (14 octobre 2026).
+    #
+    # Les documents papier ne s'arrêtent pas au total : ils disent au client ce
+    # qu'il doit apporter, ce qu'il recevra, en combien de temps, et comment
+    # payer. Le document émis par la plateforme s'arrêtait au montant en toutes
+    # lettres. Le client recevait un prix, puis un appel pour lui dicter la
+    # liste des pièces : ce que le papier disait en une page.
+    #
+    # Facultatifs, et vides par défaut : une composition qui ne les porte pas
+    # s'imprime comme avant, sur une page.
+    # ─────────────────────────────────────────────────────────────────────────
+    documents_a_fournir: tuple[str, ...] = ()
+    documents_a_recevoir: tuple[str, ...] = ()
+    delai_d_execution: str = ""
+
+    @property
+    def a_une_suite(self) -> bool:
+        """Y a-t-il quelque chose à imprimer après le total ?"""
+        return bool(
+            self.documents_a_fournir
+            or self.documents_a_recevoir
+            or self.delai_d_execution
+        )
+
     @property
     def total(self) -> Decimal:
         """La somme des sous-totaux. **Jamais une valeur saisie.**"""

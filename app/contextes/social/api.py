@@ -18,8 +18,11 @@ Ce que le social promet :
 * chaque ligne portant **son assiette, son taux et le code du paramètre** qui l'a
   produite, et signalant si cette valeur n'est pas encore validée.
 
-Consommateurs : `pilotage` (effectif et masse salariale), et `obligations` pour une
-seule question depuis le pas 56 : `a_employe_sur`, lue à travers `depots_du_social`.
+Consommateurs : `pilotage` (effectif et masse salariale), et `obligations` pour deux
+questions : `a_employe_sur` depuis le pas 56, lue à travers `depots_du_social`, et
+depuis le 18 octobre 2026 le montant que le cabinet a arrêté pour la CNPS et les
+retenues d'un mois (`depot_des_arretes`, `montant_arrete_pour`), qui préremplit
+l'appel de fonds d'un adhérent mandaté.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ from app.contextes.social.adaptateurs.sortant.donnees_demo import (
     SALARIES_DEMO,
 )
 from app.contextes.social.adaptateurs.sortant.magasins import (
+    depot_des_arretes,
     depots_du_social,
     vider_les_magasins_du_social,
 )
@@ -58,6 +62,7 @@ from app.contextes.social.application.personnel import (
     inscrire_un_salarie,
     ouvrir_un_contrat,
 )
+from app.contextes.social.domaine.arrete_des_charges import montant_arrete_pour
 from app.contextes.social.domaine.entites import (
     CODE_ACCIDENTS_TRAVAIL,
     CODE_FORFAIT,
@@ -109,11 +114,13 @@ __all__ = [
     "a_employe_sur",
     "calculer_bulletin",
     "clore_un_contrat",
+    "depot_des_arretes",
     "depots_du_social",
     "etablir_la_declaration",
     "evaluer_les_avantages",
     "identifiant_de_contrat",
     "inscrire_un_salarie",
+    "montant_arrete_pour",
     "ouvrir_un_contrat",
     "vider_les_magasins_du_social",
 ]

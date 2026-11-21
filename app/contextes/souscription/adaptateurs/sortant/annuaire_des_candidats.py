@@ -55,13 +55,15 @@ __all__ = ["ROLES_PORTEURS", "monter_les_candidatures"]
 #: `AFFECTER_DOSSIER` entrera dans cette liste sans que personne y pense ; une liste
 #: écrite à la main l'aurait oublié, et le nouveau collaborateur n'aurait jamais reçu
 #: de dossier sans qu'aucune erreur ne se produise.
-def roles_porteurs() -> frozenset[Role]:
-    from app.contextes.transverse.api import PERMISSIONS_PAR_ROLE, Permission
+#:
+#: 18 octobre 2026 : lu à la matrice du cabinet, rôles qu'il a créés compris.
+def roles_porteurs() -> frozenset[Role | str]:
+    from app.contextes.transverse.api import Permission, matrice_en_vigueur, role_de
 
     return frozenset(
-        role
-        for role, permissions in PERMISSIONS_PAR_ROLE.items()
-        if Permission.QUALIFIER_PROSPECT in permissions
+        role_de(fiche.code)
+        for fiche in matrice_en_vigueur().values()
+        if Permission.QUALIFIER_PROSPECT in fiche.permissions
     )
 
 

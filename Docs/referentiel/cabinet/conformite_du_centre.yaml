@@ -1,0 +1,30 @@
+# Ce que la loi impose au Centre lui-même (10 novembre 2026).
+#
+# Source : Code général des impôts, édition 2026, articles 118 et 119 (p. 68-69),
+# https://www.impots.cm/sites/default/files/publications/CODE%20GENERAL%20DES%20IMPOTS%202026%20%20VERSION%20FRANCAISE.pdf
+# consulté le 10/11/2026. Relevé complet : erp-cga-brcg/Docs/cga-obligations-cgi-2026.md.
+#
+# ⚠️ Les valeurs légales changent avec une loi de finances : on les met à jour ICI, avec
+# leur nouvelle source, sans toucher au code.
+
+# Art. 119 (3) : avantages du promoteur « justifiant d'au moins cent (100) adhérents actifs ».
+seuil_adherents_actifs: 100
+
+# Art. 118 (5) : « un (1) professionnel pour deux mille (2 000) adhérents », au moins un
+# conseil fiscal et un expert-comptable inscrit à l'ordre compétent.
+adherents_par_professionnel: 2000
+
+# Art. 118 (3) : droits d'adhésion, par an.
+droits_d_adhesion: {minimum: 25000, maximum: 50000}
+
+# Art. 118 (4) : cotisations annuelles, selon le régime de l'adhérent.
+cotisation_igs: {minimum: 50000, maximum: 150000}
+cotisation_reel: {minimum: 50000, maximum: 250000}
+
+# Les professionnels du Centre, DÉCLARÉS PAR LE CABINET.
+#
+# ⚠️ Vides tant que le cabinet ne les a pas renseignés : l'écran le dit, il n'invente
+# personne. Une ligne par professionnel, avec son numéro d'inscription à l'ordre, par ex. :
+#   - {nom: "Prénom NOM", inscription: "ONECCA n° …"}
+conseils_fiscaux: []
+experts_comptables: []

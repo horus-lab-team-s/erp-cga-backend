@@ -44,6 +44,7 @@ seule, comme le verrou de compte. Rien n'a besoin de venir la lever.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -77,6 +78,17 @@ class MotifRevocation(StrEnum):
     SUSPENSION_DU_COMPTE = "SUSPENSION_DU_COMPTE"
 
 
+def reference_de_session(identifiant: str) -> str:
+    """Ce qui désigne une session au journal et dans les messages, sans la livrer.
+
+    ⚠️ 19 octobre 2026 (audit de sécurité) : l'identifiant de session EST le secret
+    porteur. Écrit tel quel au journal d'audit, il laissait quiconque lit le journal
+    rejouer la session du super administrateur. Le journal n'en garde qu'une empreinte :
+    assez pour relier les évènements d'une même session, rien pour la reprendre.
+    """
+    return "S#" + hashlib.sha256(identifiant.encode("utf-8")).hexdigest()[:16]
+
+
 class SessionInvalide(RuntimeError):
     """La session n'existe pas, a expiré, ou a été révoquée."""
 
@@ -105,6 +117,11 @@ class Session(BaseModel):
     #: jamais renforcée. Voir l'en-tête.
     renforcee_jusqu_a: datetime | None = None
 
+    @property
+    def reference(self) -> str:
+        """L'empreinte qui désigne la session hors du dépôt. Voir `reference_de_session`."""
+        return reference_de_session(self.identifiant)
+
     @computed_field
     @property
     def revoquee(self) -> bool:
@@ -127,11 +144,11 @@ class Session(BaseModel):
     def exiger_active(self, a_l_instant: datetime) -> None:
         if self.revoquee:
             raise SessionInvalide(
-                f"session {self.identifiant} révoquée le {self.revoquee_le} "
+                f"session {self.reference} révoquée le {self.revoquee_le} "
                 f"({self.motif_revocation})"
             )
         if a_l_instant >= self.expire_le:
-            raise SessionInvalide(f"session {self.identifiant} expirée le {self.expire_le}")
+            raise SessionInvalide(f"session {self.reference} expirée le {self.expire_le}")
 
     def revoquer(self, a_l_instant: datetime, motif: MotifRevocation) -> Session:
         """Ferme la session. Une session déjà révoquée le reste, sans erreur :

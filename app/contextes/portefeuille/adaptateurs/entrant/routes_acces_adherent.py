@@ -26,7 +26,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contextes.portefeuille.adaptateurs.entrant.routes_http import _lire
+from app.contextes.portefeuille.adaptateurs.entrant.routes_http import lire_le_dossier
 from app.contextes.transverse.api import (
     AccesRequis,
     EtatCompte,
@@ -42,7 +42,7 @@ from app.contextes.transverse.api import (
     renvois_du_jour,
     type_de_lien,
 )
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, jour_a_douala, maintenant
 
 routeur = APIRouter(prefix="/portefeuille", tags=["Portefeuille · accès des adhérents"])
 
@@ -94,7 +94,7 @@ def _renvois(compte: str) -> list[LienRenvoye]:
 
 def _adherents(niu: str):
     boutique = atelier()
-    jour = maintenant().date()
+    jour = aujourd_hui()
     comptes = []
     for h in habilitations_actives(boutique.habilitations.pour_dossier(niu), jour):
         # `pour_dossier` ne rend que les habilitations qui couvrent ce dossier, et un adhérent a
@@ -112,7 +112,7 @@ def _adherents(niu: str):
 )
 def lire_les_acces(acces: AccesRequis, niu: str) -> list[AccesDUnAdherent]:
     exiger_dossier(acces, Permission.RELANCER_ADHERENT, niu)
-    _lire(niu)
+    lire_le_dossier(niu)
     return [
         AccesDUnAdherent(
             compte=c.identifiant,
@@ -148,7 +148,7 @@ def renvoyer_un_lien(
     acces: AccesRequis, niu: str, compte: str, demande: DemandeDeLien
 ) -> LienRenvoye:
     exiger_dossier(acces, Permission.RELANCER_ADHERENT, niu)
-    dossier = _lire(niu)
+    dossier = lire_le_dossier(niu)
     reglages = reglages_du_renvoi()
     verification = demande.verification.strip()
     if len(verification) < reglages.verification_minimum:
@@ -167,7 +167,7 @@ def renvoyer_un_lien(
     try:
         type_jeton = type_de_lien(titulaire.etat)
         if (
-            renvois_du_jour([r.le.date() for r in _renvois(compte)], instant.date())
+            renvois_du_jour([jour_a_douala(r.le) for r in _renvois(compte)], jour_a_douala(instant))
             >= reglages.renvois_par_jour
         ):
             raise RenvoiRefuse(
@@ -196,7 +196,6 @@ def renvoyer_un_lien(
         contexte={
             "prenom": titulaire.appellation,
             "denomination": dossier.denomination,
-            "par": acces.nom_complet,
             "geste": geste,
             "validite": validite,
             "lien": f"{chemin}?jeton={secret}",

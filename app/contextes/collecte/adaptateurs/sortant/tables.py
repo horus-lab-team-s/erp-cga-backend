@@ -16,7 +16,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
-__all__ = ["TableDemandePiece", "TablePieceJustificative"]
+__all__ = [
+    "TableConsentementDeLecture",
+    "TableDemandePiece",
+    "TableLecturePreparee",
+    "TablePieceJustificative",
+    "TableReglageDeLecture",
+]
 
 
 class TablePieceJustificative(Cloisonne, Document, Base):
@@ -68,3 +74,30 @@ class TableDemandePiece(Cloisonne, Document, Base):
     #: Promue : c'est elle qui décide si un dossier peut être déposé, et la
     #: requête « que reste-t-il de bloquant » se pose à chaque échéance.
     bloquante: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
+class TableReglageDeLecture(Cloisonne, Document, Base):
+    """La lecture au dépôt, activée ou non pour le cabinet (18 octobre 2026)."""
+
+    __tablename__ = "reglage_de_lecture"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class TableConsentementDeLecture(Cloisonne, Document, Base):
+    """L'accord d'un adhérent à la lecture automatique de ses pièces (18 octobre 2026)."""
+
+    __tablename__ = "consentement_de_lecture"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    niu: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class TableLecturePreparee(Cloisonne, Document, Base):
+    """Ce que l'agent a lu d'une pièce déposée, en attente d'un collaborateur (18 octobre 2026)."""
+
+    __tablename__ = "lecture_preparee"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    piece: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entreprise: Mapped[str] = mapped_column(String(64), nullable=False)

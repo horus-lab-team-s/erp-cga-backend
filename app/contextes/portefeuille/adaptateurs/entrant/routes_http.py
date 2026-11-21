@@ -36,7 +36,9 @@ from app.contextes.portefeuille.api import (
     Exercice,
     InscriptionRefusee,
     MotifChangement,
+    NatureActivite,
     RegimeFiscal,
+    SecteurReelDOffice,
     StatutIntrouvable,
     inscrire_un_regime,
     inscrire_une_adhesion,
@@ -60,7 +62,7 @@ from app.contextes.transverse.api import (
     session_de_travail,
 )
 from app.infrastructure.config import configuration
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui
 from app.partage.locataire import courant
 from app.partage.recherche import (
     ReponseDeRecherche,
@@ -116,6 +118,10 @@ class LigneDossier(BaseModel):
     denomination: str
     forme_juridique: str
     activite: str | None
+    #: 15 octobre 2026 : négoce, artisanat ou services (AUDCIF art. 13). `None` : non
+    #: renseignée, le seuil des services s'applique.
+    nature_activite: NatureActivite | None = None
+    reel_d_office: SecteurReelDOffice | None = None
     siege: str | None
 
     regime: RegimeFiscal
@@ -147,6 +153,8 @@ def _resoudre(entreprise: Entreprise, a_la_date: date) -> LigneDossier:
         denomination=entreprise.denomination,
         forme_juridique=entreprise.forme_juridique,
         activite=entreprise.activite,
+        nature_activite=entreprise.nature_activite,
+        reel_d_office=entreprise.reel_d_office,
         siege=entreprise.siege,
         regime=entreprise.regime_au(a_la_date),
         centre=entreprise.rattachement_au(a_la_date),
@@ -161,7 +169,7 @@ def _resoudre(entreprise: Entreprise, a_la_date: date) -> LigneDossier:
     )
 
 
-def _lire(niu: str) -> Entreprise:
+def lire_le_dossier(niu: str) -> Entreprise:
     try:
         return depot().lire(niu)
     except EntrepriseIntrouvable as absence:
@@ -213,7 +221,7 @@ def lire_entreprise(acces: AccesRequis, niu: str) -> Entreprise:
     ces deux questions n'ont de réponse que dans les motifs des périodes.
     """
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    return _lire(niu)
+    return lire_le_dossier(niu)
 
 
 class StatutsResolus(BaseModel):
@@ -244,7 +252,7 @@ def lire_statuts(
     acces: AccesRequis, niu: str, a_la_date: date = Query(...)
 ) -> StatutsResolus:
     exiger_dossier(acces, Permission.LIRE_DOSSIER, niu)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         regime = entreprise.regime_au(a_la_date)
         centre = entreprise.rattachement_au(a_la_date)
@@ -318,6 +326,40 @@ class DemandeDeRegime(BaseModel):
     justification: str = Field(min_length=30, max_length=500)
 
 
+class DemandeDeNature(BaseModel):
+    nature: NatureActivite
+    #: Le secteur qui impose le réel quel que soit le chiffre (art. 93 quater (2) b).
+    reel_d_office: SecteurReelDOffice | None = None
+    #: La pièce qui fonde la nature retenue (statuts, RCCM, carte de contribuable) :
+    #: elle part au journal d'audit avec l'accès.
+    justification: str = Field(min_length=30, max_length=500)
+
+
+@routeur.post(
+    "/entreprises/{niu}/nature-activite",
+    summary="Fixer la nature d'activité du dossier (négoce, artisanat, services)",
+    responses={403: {"description": "Habilitation insuffisante, ou justification manquante"}},
+)
+def fixer_la_nature_d_activite(
+    acces: AccesRequis, niu: str, demande: DemandeDeNature
+) -> LigneDossier:
+    """⚠️ ELLE FIXE LE SEUIL DU RÉGIME DU RÉEL (15 octobre 2026).
+
+    CGI art. 93 quater : 50 M FCFA pour une activité commerciale, industrielle,
+    artisanale ou agropastorale, 30 M pour une profession libérale. Une nature qui
+    change peut faire basculer le dossier au réel, donc sa DSF au Système Normal :
+    elle se justifie, comme un changement de régime.
+    """
+    exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
+    entreprise = lire_le_dossier(niu)
+    depot().enregistrer(
+        entreprise.model_copy(
+            update={"nature_activite": demande.nature, "reel_d_office": demande.reel_d_office}
+        )
+    )
+    return _resoudre(lire_le_dossier(niu), aujourd_hui())
+
+
 @routeur.post(
     "/entreprises/{niu}/regimes",
     summary="Inscrire un changement de régime fiscal",
@@ -351,7 +393,7 @@ def inscrire_regime(
     ─────────────────────────────────────────────────────────────────────────────
     """
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     try:
         nouvelle = inscrire_un_regime(
             entreprise,
@@ -434,7 +476,7 @@ def admettre(acces: AccesRequis, niu: str, demande: DemandeDAdhesion) -> Statuts
     la règle d'antidate éprouvable.
     """
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
-    entreprise = _lire(niu)
+    entreprise = lire_le_dossier(niu)
     portefeuille = depot().lister()
     seuil = _seuil_d_adhesion(demande.a_compter_du)
     try:
@@ -442,7 +484,7 @@ def admettre(acces: AccesRequis, niu: str, demande: DemandeDAdhesion) -> Statuts
             entreprise,
             demande.a_compter_du,
             numero=prochain_numero_d_adhesion(portefeuille, demande.a_compter_du.year),
-            inscrite_le=maintenant().date(),
+            inscrite_le=aujourd_hui(),
             chiffre_affaires_declare=demande.chiffre_affaires_declare,
             source_du_chiffre=demande.source_du_chiffre,
             seuil_adhesion=seuil.valeur_decimale if seuil else None,
@@ -470,7 +512,7 @@ def resilier(acces: AccesRequis, niu: str, demande: DemandeDeResiliation) -> Sta
     """Ferme l'adhésion en cours ; le dossier n'est plus adhérent le jour `au`."""
     exiger_dossier(acces, Permission.INSCRIRE_STATUT, niu, motif=demande.justification)
     try:
-        resiliee = resilier_l_adhesion(_lire(niu), demande.au)
+        resiliee = resilier_l_adhesion(lire_le_dossier(niu), demande.au)
         depot().enregistrer(resiliee)
     except (AdhesionRefusee, HistoireAmputee) as refus:
         raise HTTPException(status_code=409, detail=str(refus)) from refus

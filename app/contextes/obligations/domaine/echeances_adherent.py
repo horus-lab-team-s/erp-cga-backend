@@ -22,6 +22,8 @@ QUATRE ÉTATS POUR L'ADHÉRENT
 
     EN_RETARD        l'échéance est passée, rien n'est déposé, aucune preuve envoyée
     PREUVE_ENVOYEE   l'adhérent a envoyé sa quittance : le cabinet la vérifie
+    PAYEE            le cabinet a vérifié la quittance (14 octobre 2026) : le paiement est acquis
+    FONDS_RECUS      sous mandat de paiement, le cabinet a reçu les fonds et règle l'administration
     A_VENIR          l'échéance n'est pas passée
     DEPOSEE          le cabinet a consigné le dépôt (l'accusé existe)
 
@@ -54,8 +56,11 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contextes.obligations.domaine.obligations import ObligationInstance
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
+    "FondsRecusParLeCabinet",
+    "VerdictDeLaPreuve",
     "EcheanceDeLAdherent",
     "EtatPourLAdherent",
     "ExplicationDObligation",
@@ -132,8 +137,19 @@ class ReglagesDesEcheancesDeLAdherent(BaseModel):
 class EtatPourLAdherent(StrEnum):
     EN_RETARD = "EN_RETARD"
     PREUVE_ENVOYEE = "PREUVE_ENVOYEE"
+    #: La quittance est vérifiée par le cabinet : le PAIEMENT est acquis. Le dépôt de la
+    #: déclaration, lui, reste l'acte du cabinet, et la carte passe à DEPOSEE quand il est consigné.
+    PAYEE = "PAYEE"
+    #: Sous mandat de paiement (14 octobre 2026) : les fonds de l'adhérent sont chez le cabinet,
+    #: l'administration n'est PAS encore payée. Passe à PAYEE quand le cabinet porte la quittance.
+    FONDS_RECUS = "FONDS_RECUS"
     A_VENIR = "A_VENIR"
     DEPOSEE = "DEPOSEE"
+
+
+class VerdictDeLaPreuve(StrEnum):
+    VALIDEE = "VALIDEE"
+    REFUSEE = "REFUSEE"
 
 
 class PreuveEnvoyee(BaseModel):
@@ -144,6 +160,30 @@ class PreuveEnvoyee(BaseModel):
     piece: str
     envoyee_le: datetime
     par: str
+    #: ⚠️ 14 octobre 2026 : le verdict du cabinet. `None` tant que personne ne l'a vérifiée.
+    #: Une quittance REFUSÉE ne règle rien : l'échéance redevient à régler, avec le motif.
+    verdict: VerdictDeLaPreuve | None = None
+    motif: str | None = None
+    verifiee_le: datetime | None = None
+    verifiee_par: str | None = None
+    #: 18 octobre 2026 (point 7) : le montant porté par la quittance, relevé au verdict.
+    montant_quittance: Decimal | None = None
+    #: 18 octobre 2026 : l'écriture de paiement déjà passée pour cette quittance
+    #: (« BQ n° 12 »), ou `None`. Une quittance validée reste offerte à son écriture
+    #: tant qu'elle n'en a pas ; ensuite, elle ne s'écrit pas deux fois.
+    ecriture_de_paiement: str | None = None
+
+
+class FondsRecusParLeCabinet(BaseModel):
+    """Les fonds remis au cabinet pour une échéance, sous mandat de paiement."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code_obligation: str
+    periode_debut: date
+    montant: Decimal
+    canal: str
+    recus_le: datetime
 
 
 class RappelDEcheance(BaseModel):
@@ -172,6 +212,8 @@ class EcheanceDeLAdherent(BaseModel):
     jours: int
     #: Estimé, jamais définitif ; `None` plutôt que zéro quand rien ne s'estime.
     montant_estime: Decimal | None
+    #: D'où vient l'estimation (l'IGS réduit par l'adhésion au centre…). Voir obligations.py.
+    explication_estimation: str | None = None
     #: Pour une obligation déposée : le montant porté à l'accusé.
     montant_constate: Decimal | None
     declaree_le: date | None
@@ -180,6 +222,8 @@ class EcheanceDeLAdherent(BaseModel):
     precedente: RappelDEcheance | None
     prochaine_echeance: date | None
     preuve: PreuveEnvoyee | None
+    #: Sous mandat de paiement : les fonds remis au cabinet pour cette échéance.
+    fonds: FondsRecusParLeCabinet | None = None
     #: Pour la carte « en retard » : les autres périodes de la même obligation en retard, sans
     #preuve.
     autres_periodes_en_retard: int = 0
@@ -193,6 +237,7 @@ def echeances_de_l_adherent(
     reglages: ReglagesDesEcheancesDeLAdherent,
     montants_constates: dict[str, Decimal | None],
     preuves: list[PreuveEnvoyee],
+    fonds_recus: list[FondsRecusParLeCabinet] | None = None,
 ) -> list[EcheanceDeLAdherent]:
     """Les échéances à montrer, dans l'ordre où elles demandent un geste.
 
@@ -207,6 +252,17 @@ def echeances_de_l_adherent(
     for p in sorted(preuves, key=lambda p: p.envoyee_le):
         derniere_preuve[(p.code_obligation, p.periode_debut)] = p
 
+    fonds = {(f.code_obligation, f.periode_debut): f for f in (fonds_recus or [])}
+
+    def prouvee(code: str, o: ObligationInstance) -> bool:
+        """⚠️ Une quittance REFUSÉE ne prouve rien : l'échéance redevient à régler."""
+        preuve = derniere_preuve.get((code, o.periode_debut))
+        return preuve is not None and preuve.verdict is not VerdictDeLaPreuve.REFUSEE
+
+    def payee(code: str, o: ObligationInstance) -> bool:
+        preuve = derniere_preuve.get((code, o.periode_debut))
+        return preuve is not None and preuve.verdict is VerdictDeLaPreuve.VALIDEE
+
     retenues: list[EcheanceDeLAdherent] = []
     for code, suite in par_code.items():
         choisies: list[tuple[int, EtatPourLAdherent, int]] = []
@@ -215,13 +271,62 @@ def echeances_de_l_adherent(
             for rang, o in enumerate(suite)
             if not o.deposee and o.echeance <= jour + timedelta(days=reglages.horizon_jours)
         ]
-        prouvees = [(r, o) for r, o in a_regler if (code, o.periode_debut) in derniere_preuve]
+        # ⚠️ Des fonds remis au cabinet sont « pris en charge » : l'échéance n'est plus à
+        # régler pour l'adhérent, sans être payée tant que la quittance n'est pas portée.
+        prouvees = [
+            (r, o) for r, o in a_regler if prouvee(code, o) or (code, o.periode_debut) in fonds
+        ]
+        # ⚠️ 20 octobre 2026, constaté au tournage : DÉPOSÉE, UNE QUITTANCE GARDE SA CARTE.
+        # Le dépôt consigné retirait l'échéance des cartes à régler, et sa quittance avec elle,
+        # au moment même où l'accusé permet de la comparer : le cabinet ne la voyait plus à
+        # juger, l'adhérent ne lisait jamais « Payée ». Elle reste tant qu'elle n'est pas
+        # jugée, puis une semaine une fois validée.
+        prouvees += [
+            (r, o)
+            for r, o in enumerate(suite)
+            if o.deposee
+            and prouvee(code, o)
+            and (
+                (preuve := derniere_preuve[(code, o.periode_debut)]).verdict is None
+                or preuve.verifiee_le is None
+                or jour_a_douala(preuve.verifiee_le) >= jour - timedelta(days=7)
+            )
+        ]
+        # ⚠️ UNE QUITTANCE REFUSÉE GARDE SA CARTE, comme une quittance envoyée. Remise dans le lot
+        # des retards, sa période disparaissait derrière la plus ancienne en retard, et le motif
+        # du refus avec elle : l'adhérent ne savait pas qu'on attendait une autre quittance, ni
+        # pourquoi. Constaté à l'écriture du cas, le 14 octobre 2026.
+        refusees = [
+            (r, o)
+            for r, o in a_regler
+            if not prouvee(code, o)
+            and (code, o.periode_debut) not in fonds
+            and (code, o.periode_debut) in derniere_preuve
+        ]
+        for rang, o in refusees:
+            choisies.append(
+                (
+                    rang,
+                    EtatPourLAdherent.EN_RETARD if o.echeance < jour else EtatPourLAdherent.A_VENIR,
+                    0,
+                )
+            )
         sans_preuve = [
-            (r, o) for r, o in a_regler if (code, o.periode_debut) not in derniere_preuve
+            (r, o)
+            for r, o in a_regler
+            if not prouvee(code, o)
+            and (code, o.periode_debut) not in fonds
+            and (code, o.periode_debut) not in derniere_preuve
         ]
         en_retard = [(r, o) for r, o in sans_preuve if o.echeance < jour]
-        for rang, _ in prouvees:
-            choisies.append((rang, EtatPourLAdherent.PREUVE_ENVOYEE, 0))
+        for rang, o in prouvees:
+            if payee(code, o):
+                etat = EtatPourLAdherent.PAYEE
+            elif (code, o.periode_debut) in fonds:
+                etat = EtatPourLAdherent.FONDS_RECUS
+            else:
+                etat = EtatPourLAdherent.PREUVE_ENVOYEE
+            choisies.append((rang, etat, 0))
         if en_retard:
             choisies.append((en_retard[0][0], EtatPourLAdherent.EN_RETARD, len(en_retard) - 1))
         elif sans_preuve:
@@ -235,7 +340,9 @@ def echeances_de_l_adherent(
         ]
         if deposees:
             dernier = max(deposees, key=lambda ro: (ro[1].declaree_le, ro[1].periode_debut))
-            choisies.append((dernier[0], EtatPourLAdherent.DEPOSEE, 0))
+            # Une échéance déjà montrée par sa quittance ne se montre pas deux fois.
+            if dernier[0] not in {r for r, _ in prouvees}:
+                choisies.append((dernier[0], EtatPourLAdherent.DEPOSEE, 0))
 
         for rang, etat, autres in choisies:
             o = suite[rang]
@@ -262,6 +369,7 @@ def echeances_de_l_adherent(
                     if etat in (EtatPourLAdherent.EN_RETARD, EtatPourLAdherent.A_VENIR)
                     else 0,
                     montant_estime=o.montant_estime,
+                    explication_estimation=o.explication_estimation,
                     montant_constate=montants_constates.get(o.reference_depot or ""),
                     declaree_le=o.declaree_le,
                     de_quoi_s_agit_il=explication.de_quoi_s_agit_il if explication else None,
@@ -276,11 +384,14 @@ def echeances_de_l_adherent(
                         else None
                     ),
                     prochaine_echeance=apres.echeance if apres is not None else None,
+                    # ⚠️ La preuve accompagne aussi une carte redevenue à régler : c'est elle
+                    # qui porte le motif du refus, que l'adhérent doit lire pour en renvoyer une.
                     preuve=(
                         derniere_preuve.get((code, o.periode_debut))
-                        if etat is EtatPourLAdherent.PREUVE_ENVOYEE
+                        if etat is not EtatPourLAdherent.DEPOSEE
                         else None
                     ),
+                    fonds=fonds.get((code, o.periode_debut)),
                     autres_periodes_en_retard=autres,
                     effectif_a_confirmer=o.effectif_a_confirmer,
                 )
@@ -288,15 +399,17 @@ def echeances_de_l_adherent(
     ordre = {
         EtatPourLAdherent.EN_RETARD: 0,
         EtatPourLAdherent.PREUVE_ENVOYEE: 1,
+        EtatPourLAdherent.FONDS_RECUS: 1,
         EtatPourLAdherent.A_VENIR: 2,
-        EtatPourLAdherent.DEPOSEE: 3,
+        EtatPourLAdherent.PAYEE: 3,
+        EtatPourLAdherent.DEPOSEE: 4,
     }
 
     def cle(e: EcheanceDeLAdherent):
         if e.etat is EtatPourLAdherent.EN_RETARD:
             return (0, -e.jours, e.code_obligation)
         if e.etat is EtatPourLAdherent.DEPOSEE:
-            return (3, -(e.declaree_le or date.min).toordinal(), e.code_obligation)
+            return (4, -(e.declaree_le or date.min).toordinal(), e.code_obligation)
         return (ordre[e.etat], e.echeance.toordinal(), e.code_obligation)
 
     return sorted(retenues, key=cle)

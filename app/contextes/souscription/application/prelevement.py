@@ -71,6 +71,7 @@ from app.contextes.souscription.domaine.ports import (
 )
 from app.contextes.souscription.domaine.souscriptions import Souscription
 from app.contextes.transverse.api import JournalAudit
+from app.partage.horloge import jour_a_douala
 
 __all__ = [
     "RESTE_A_FAIRE",
@@ -163,7 +164,7 @@ def appeler_les_echeances(
     dans la boucle rend le passage reproductible — rejouer la tâche avec les
     mêmes préfixes ne produit pas de nouvelles clés, et le prestataire déduplique.
     """
-    aujourd_hui = a_l_instant.date()
+    aujourd_hui = jour_a_douala(a_l_instant)
     examinees = appelees = deja = refusees = 0
     engages: list[str] = []
     total = Decimal(0)

@@ -1,0 +1,944 @@
+# Généré par outils/referentiel_geographie.py : ne pas modifier à la main.
+applicable_du: '2026-11-08'
+nature: LOI
+libelle: 'Découpage administratif du Cameroun : régions, départements, arrondissements'
+fondement:
+  texte: Le découpage officiel en 10 régions, 58 départements et 360 arrondissements.
+  source: 'Institut national de cartographie (INC), limites administratives publiées par OCHA sur HDX,
+    jeu « cod-ab-cmr », licence CC BY-IGO : https://data.humdata.org/dataset/cod-ab-cmr (version v01)'
+statut: A_VALIDER
+regions:
+- code: CM001
+  nom: Adamaoua
+  nom_en: Adamawa
+  departements:
+  - code: CM001001
+    nom: Djérem
+    arrondissements:
+    - code: CM001001001
+      nom: Ngaoundal
+    - code: CM001001002
+      nom: Tibati
+  - code: CM001002
+    nom: Faro-et-Déo
+    arrondissements:
+    - code: CM001002001
+      nom: Galim-Tignere
+    - code: CM001002002
+      nom: Kontcha
+    - code: CM001002003
+      nom: Mayo-Baleo
+    - code: CM001002004
+      nom: Tignere
+  - code: CM001003
+    nom: Mayo-Banyo
+    arrondissements:
+    - code: CM001003001
+      nom: Bankim
+    - code: CM001003002
+      nom: Banyo
+    - code: CM001003003
+      nom: Mayo-Darle
+  - code: CM001004
+    nom: Mbéré
+    arrondissements:
+    - code: CM001004001
+      nom: Dir
+    - code: CM001004002
+      nom: Djohong
+    - code: CM001004003
+      nom: Meiganga
+    - code: CM001004004
+      nom: Ngaoui
+  - code: CM001005
+    nom: Vina
+    arrondissements:
+    - code: CM001005001
+      nom: Belel
+    - code: CM001005002
+      nom: Martap
+    - code: CM001005003
+      nom: Mbe
+    - code: CM001005004
+      nom: Nganha
+    - code: CM001005005
+      nom: Ngaoundere 1er
+    - code: CM001005006
+      nom: Ngaoundere 2e
+    - code: CM001005007
+      nom: Ngaoundere 3e
+    - code: CM001005008
+      nom: Nyambaka
+- code: CM002
+  nom: Centre
+  nom_en: Centre
+  departements:
+  - code: CM002001
+    nom: Haute-Sanaga
+    arrondissements:
+    - code: CM002001001
+      nom: Bibey
+    - code: CM002001002
+      nom: Lembe Yezoum
+    - code: CM002001003
+      nom: Mbandjock
+    - code: CM002001004
+      nom: Minta
+    - code: CM002001005
+      nom: Nanga-Eboko
+    - code: CM002001006
+      nom: Nkoteng
+    - code: CM002001007
+      nom: Nsem
+  - code: CM002002
+    nom: Lekié
+    arrondissements:
+    - code: CM002002001
+      nom: Batchenga
+    - code: CM002002002
+      nom: Ebebda
+    - code: CM002002003
+      nom: Elig-Mfomo
+    - code: CM002002004
+      nom: Evodoula
+    - code: CM002002005
+      nom: Lobo
+    - code: CM002002006
+      nom: Monatele
+    - code: CM002002007
+      nom: Obala
+    - code: CM002002008
+      nom: Okola
+    - code: CM002002009
+      nom: Saa
+  - code: CM002003
+    nom: Mbam-et-Inoubou
+    arrondissements:
+    - code: CM002003001
+      nom: Bafia
+    - code: CM002003002
+      nom: Bokito
+    - code: CM002003003
+      nom: Deuk
+    - code: CM002003004
+      nom: Kiiki
+    - code: CM002003005
+      nom: Kon Yambetta
+    - code: CM002003006
+      nom: Makenene
+    - code: CM002003007
+      nom: Ndikinimeki
+    - code: CM002003008
+      nom: Nitoukou
+    - code: CM002003009
+      nom: Ombessa
+  - code: CM002004
+    nom: Mbam-et-Kim
+    arrondissements:
+    - code: CM002004001
+      nom: Mbangassina
+    - code: CM002004002
+      nom: Ngambe-Tikar
+    - code: CM002004003
+      nom: Ngoro
+    - code: CM002004004
+      nom: Ntui
+    - code: CM002004005
+      nom: Yoko
+  - code: CM002005
+    nom: Mefou-et-Afamba
+    arrondissements:
+    - code: CM002005001
+      nom: Afanloum
+    - code: CM002005002
+      nom: Assamba
+    - code: CM002005003
+      nom: Awae
+    - code: CM002005004
+      nom: Edzendouan
+    - code: CM002005005
+      nom: Esse
+    - code: CM002005006
+      nom: Mfou
+    - code: CM002005007
+      nom: Nkolafamba
+    - code: CM002005008
+      nom: Soa
+  - code: CM002006
+    nom: Mefou-et-Akono
+    arrondissements:
+    - code: CM002006001
+      nom: Akono
+    - code: CM002006002
+      nom: Bikok
+    - code: CM002006003
+      nom: Mbankomo
+    - code: CM002006004
+      nom: Ngoumou
+  - code: CM002007
+    nom: Mfoundi
+    arrondissements:
+    - code: CM002007001
+      nom: Yaounde 1er
+    - code: CM002007002
+      nom: Yaounde 2e
+    - code: CM002007003
+      nom: Yaounde 3e
+    - code: CM002007004
+      nom: Yaounde 4e
+    - code: CM002007005
+      nom: Yaounde 5e
+    - code: CM002007006
+      nom: Yaounde 6e
+    - code: CM002007007
+      nom: Yaounde 7e
+  - code: CM002008
+    nom: Nyong-et-Kellé
+    arrondissements:
+    - code: CM002008001
+      nom: Biyouha
+    - code: CM002008002
+      nom: Bondjock
+    - code: CM002008003
+      nom: Bot-Makak
+    - code: CM002008004
+      nom: Dibang
+    - code: CM002008005
+      nom: Eseka
+    - code: CM002008006
+      nom: Makak
+    - code: CM002008007
+      nom: Matomb
+    - code: CM002008008
+      nom: Messondo
+    - code: CM002008009
+      nom: Ngog-Mapubi
+    - code: CM002008010
+      nom: Nguibassal
+  - code: CM002009
+    nom: Nyong-et-Mfoumou
+    arrondissements:
+    - code: CM002009001
+      nom: Akonolinga
+    - code: CM002009002
+      nom: Ayos
+    - code: CM002009003
+      nom: Endom
+    - code: CM002009004
+      nom: Mengang
+    - code: CM002009005
+      nom: Nyakokombo
+  - code: CM002010
+    nom: Nyong-et-So'o
+    arrondissements:
+    - code: CM002010001
+      nom: Akoeman
+    - code: CM002010002
+      nom: Dzeng
+    - code: CM002010003
+      nom: Mbalmayo
+    - code: CM002010004
+      nom: Mengueme
+    - code: CM002010005
+      nom: Ngomedzap
+    - code: CM002010006
+      nom: Nkolmetet
+- code: CM003
+  nom: Est
+  nom_en: East
+  departements:
+  - code: CM003001
+    nom: Boumba-et-Ngoko
+    arrondissements:
+    - code: CM003001001
+      nom: Gari Gombo
+    - code: CM003001002
+      nom: Moloundou
+    - code: CM003001003
+      nom: Salapoumbe
+    - code: CM003001004
+      nom: Yokadouma
+  - code: CM003002
+    nom: Haut-Nyong
+    arrondissements:
+    - code: CM003002001
+      nom: Abong-Mbang
+    - code: CM003002002
+      nom: Bebend
+    - code: CM003002003
+      nom: Dimako
+    - code: CM003002004
+      nom: Dja
+    - code: CM003002005
+      nom: Doumaintang
+    - code: CM003002006
+      nom: Doume
+    - code: CM003002007
+      nom: Lomie
+    - code: CM003002008
+      nom: Mboanz
+    - code: CM003002009
+      nom: Mboma
+    - code: CM003002010
+      nom: Messamena
+    - code: CM003002011
+      nom: Messok
+    - code: CM003002012
+      nom: Ngoyla
+    - code: CM003002013
+      nom: Nguelemendouka
+    - code: CM003002014
+      nom: Somalomo
+  - code: CM003003
+    nom: Kadey
+    arrondissements:
+    - code: CM003003001
+      nom: Batouri
+    - code: CM003003002
+      nom: Bombe
+    - code: CM003003003
+      nom: Kette
+    - code: CM003003004
+      nom: Mbang
+    - code: CM003003005
+      nom: Mbotoro
+    - code: CM003003006
+      nom: Ndelele
+    - code: CM003003007
+      nom: Ndem Nam
+  - code: CM003004
+    nom: Lom-et-Djérem
+    arrondissements:
+    - code: CM003004001
+      nom: Belabo
+    - code: CM003004002
+      nom: Bertoua 1er
+    - code: CM003004003
+      nom: Bertoua 2e
+    - code: CM003004004
+      nom: Betare-Oya
+    - code: CM003004005
+      nom: Diang
+    - code: CM003004006
+      nom: Garoua-Boulai
+    - code: CM003004007
+      nom: Mandjou
+    - code: CM003004008
+      nom: Ngoura
+- code: CM004
+  nom: Extrême-Nord
+  nom_en: Far-North
+  departements:
+  - code: CM004001
+    nom: Diamaré
+    arrondissements:
+    - code: CM004001001
+      nom: Bogo
+    - code: CM004001002
+      nom: Dargala
+    - code: CM004001003
+      nom: Gazawa
+    - code: CM004001004
+      nom: Maroua 1er
+    - code: CM004001005
+      nom: Maroua 2e
+    - code: CM004001006
+      nom: Maroua 3e
+    - code: CM004001007
+      nom: Meri
+    - code: CM004001008
+      nom: Ndoukoula
+    - code: CM004001009
+      nom: Pette
+  - code: CM004002
+    nom: Logone-et-Chari
+    arrondissements:
+    - code: CM004002001
+      nom: Blangoua
+    - code: CM004002002
+      nom: Darak
+    - code: CM004002003
+      nom: Fotokol
+    - code: CM004002004
+      nom: Goulfey
+    - code: CM004002005
+      nom: Hile-Alifa
+    - code: CM004002006
+      nom: Kousseri
+    - code: CM004002007
+      nom: Logone-Birni
+    - code: CM004002008
+      nom: Makary
+    - code: CM004002009
+      nom: Waza
+    - code: CM004002010
+      nom: Zina
+  - code: CM004003
+    nom: Mayo-Danay
+    arrondissements:
+    - code: CM004003001
+      nom: Datcheka
+    - code: CM004003002
+      nom: Gobo
+    - code: CM004003003
+      nom: Guere
+    - code: CM004003004
+      nom: Kai-Kai
+    - code: CM004003005
+      nom: Kalfou
+    - code: CM004003006
+      nom: Kar-Hay
+    - code: CM004003007
+      nom: Maga
+    - code: CM004003008
+      nom: Tchatibali
+    - code: CM004003009
+      nom: Vele
+    - code: CM004003010
+      nom: Wina
+    - code: CM004003011
+      nom: Yagoua
+  - code: CM004004
+    nom: Mayo-Kani
+    arrondissements:
+    - code: CM004004001
+      nom: Guidiguis
+    - code: CM004004002
+      nom: Kaele
+    - code: CM004004003
+      nom: Mindif
+    - code: CM004004004
+      nom: Moulvoudaye
+    - code: CM004004005
+      nom: Moutourwa
+    - code: CM004004006
+      nom: Porhi
+    - code: CM004004007
+      nom: Taibong
+  - code: CM004005
+    nom: Mayo-Sava
+    arrondissements:
+    - code: CM004005001
+      nom: Kolofata
+    - code: CM004005002
+      nom: Mora
+    - code: CM004005003
+      nom: Tokombere
+  - code: CM004006
+    nom: Mayo-Tsanaga
+    arrondissements:
+    - code: CM004006001
+      nom: Bourrha
+    - code: CM004006002
+      nom: Hina
+    - code: CM004006003
+      nom: Koza
+    - code: CM004006004
+      nom: Mayo-Moskota
+    - code: CM004006005
+      nom: Mogode
+    - code: CM004006006
+      nom: Mokolo
+    - code: CM004006007
+      nom: Soulede-Roua
+- code: CM005
+  nom: Littoral
+  nom_en: Littoral
+  departements:
+  - code: CM005001
+    nom: Moungo
+    arrondissements:
+    - code: CM005001001
+      nom: Bare-Bakem
+    - code: CM005001002
+      nom: Dibombari
+    - code: CM005001003
+      nom: Fiko
+    - code: CM005001004
+      nom: Loum
+    - code: CM005001005
+      nom: Manjo
+    - code: CM005001006
+      nom: Mbanga
+    - code: CM005001007
+      nom: Melong
+    - code: CM005001008
+      nom: Mombo
+    - code: CM005001009
+      nom: Njombe-Penja
+    - code: CM005001010
+      nom: Nkongsamba 1er
+    - code: CM005001011
+      nom: Nkongsamba 2e
+    - code: CM005001012
+      nom: Nkongsamba 3e
+    - code: CM005001013
+      nom: Nlonako
+  - code: CM005002
+    nom: Nkam
+    arrondissements:
+    - code: CM005002001
+      nom: Nkondjock
+    - code: CM005002002
+      nom: Nord-Makombe
+    - code: CM005002003
+      nom: Yabassi
+    - code: CM005002004
+      nom: Yingui
+  - code: CM005003
+    nom: Sanaga-Maritime
+    arrondissements:
+    - code: CM005003001
+      nom: Dibamba
+    - code: CM005003002
+      nom: Dizangue
+    - code: CM005003003
+      nom: Edea 1er
+    - code: CM005003004
+      nom: Edea 2e
+    - code: CM005003005
+      nom: Massock-Songloulou
+    - code: CM005003006
+      nom: Mouanko
+    - code: CM005003007
+      nom: Ndom
+    - code: CM005003008
+      nom: Ngambe
+    - code: CM005003009
+      nom: Ngwei
+    - code: CM005003010
+      nom: Nyanon
+    - code: CM005003011
+      nom: Pouma
+  - code: CM005004
+    nom: Wouri
+    arrondissements:
+    - code: CM005004001
+      nom: Douala 1er
+    - code: CM005004002
+      nom: Douala 2e
+    - code: CM005004003
+      nom: Douala 3e
+    - code: CM005004004
+      nom: Douala 4e
+    - code: CM005004005
+      nom: Douala 5e
+    - code: CM005004006
+      nom: Douala 6e
+- code: CM006
+  nom: Nord
+  nom_en: North
+  departements:
+  - code: CM006001
+    nom: Bénoué
+    arrondissements:
+    - code: CM006001001
+      nom: Bascheo
+    - code: CM006001002
+      nom: Bibemi
+    - code: CM006001003
+      nom: Dembo
+    - code: CM006001004
+      nom: Demsa
+    - code: CM006001005
+      nom: Garoua 1er
+    - code: CM006001006
+      nom: Garoua 2e
+    - code: CM006001007
+      nom: Garoua 3e
+    - code: CM006001008
+      nom: Lagdo
+    - code: CM006001009
+      nom: Mayo-Hourna
+    - code: CM006001010
+      nom: Pitoa
+    - code: CM006001011
+      nom: Tcheboa
+    - code: CM006001012
+      nom: Touroua
+  - code: CM006002
+    nom: Faro
+    arrondissements:
+    - code: CM006002001
+      nom: Beka
+    - code: CM006002002
+      nom: Poli
+  - code: CM006003
+    nom: Mayo-Louti
+    arrondissements:
+    - code: CM006003001
+      nom: Figuil
+    - code: CM006003002
+      nom: Guider
+    - code: CM006003003
+      nom: Mayo-Oulo
+  - code: CM006004
+    nom: Mayo-Rey
+    arrondissements:
+    - code: CM006004001
+      nom: Madingring
+    - code: CM006004002
+      nom: Rey-Bouba
+    - code: CM006004003
+      nom: Tchollire
+    - code: CM006004004
+      nom: Touboro
+- code: CM007
+  nom: Nord-Ouest
+  nom_en: North-West
+  departements:
+  - code: CM007001
+    nom: Boyo
+    arrondissements:
+    - code: CM007001001
+      nom: Belo
+    - code: CM007001002
+      nom: Bum
+    - code: CM007001003
+      nom: Fundong
+    - code: CM007001004
+      nom: Njinikom
+  - code: CM007002
+    nom: Bui
+    arrondissements:
+    - code: CM007002001
+      nom: Jakiri
+    - code: CM007002002
+      nom: Kumbo
+    - code: CM007002003
+      nom: Mbven
+    - code: CM007002004
+      nom: Nkum
+    - code: CM007002005
+      nom: Noni
+    - code: CM007002006
+      nom: Oku
+  - code: CM007003
+    nom: Donga-Mantung
+    arrondissements:
+    - code: CM007003001
+      nom: Ako
+    - code: CM007003002
+      nom: Misaje
+    - code: CM007003003
+      nom: Ndu
+    - code: CM007003004
+      nom: Nkambe
+    - code: CM007003005
+      nom: Nwa
+  - code: CM007004
+    nom: Menchum
+    arrondissements:
+    - code: CM007004001
+      nom: Fungom
+    - code: CM007004002
+      nom: Furu-Awa
+    - code: CM007004003
+      nom: Menchum-Valley
+    - code: CM007004004
+      nom: Wum
+  - code: CM007005
+    nom: Mezam
+    arrondissements:
+    - code: CM007005001
+      nom: Bafut
+    - code: CM007005002
+      nom: Bali
+    - code: CM007005003
+      nom: Bamenda 1st
+    - code: CM007005004
+      nom: Bamenda 2nd
+    - code: CM007005005
+      nom: Bamenda 3rd
+    - code: CM007005006
+      nom: Santa
+    - code: CM007005007
+      nom: Tubah
+  - code: CM007006
+    nom: Momo
+    arrondissements:
+    - code: CM007006001
+      nom: Batibo
+    - code: CM007006002
+      nom: Mbengwi
+    - code: CM007006003
+      nom: Ngie
+    - code: CM007006004
+      nom: Njikwa
+    - code: CM007006005
+      nom: Widikum
+  - code: CM007007
+    nom: Ngo-Ketunjia
+    arrondissements:
+    - code: CM007007001
+      nom: Babessi
+    - code: CM007007002
+      nom: Balikumbat
+    - code: CM007007003
+      nom: Ndop
+- code: CM008
+  nom: Ouest
+  nom_en: West
+  departements:
+  - code: CM008001
+    nom: Bamboutos
+    arrondissements:
+    - code: CM008001001
+      nom: Babadjou
+    - code: CM008001002
+      nom: Batcham
+    - code: CM008001003
+      nom: Galim
+    - code: CM008001004
+      nom: Mbouda
+  - code: CM008002
+    nom: Haut-Nkam
+    arrondissements:
+    - code: CM008002001
+      nom: Bafang
+    - code: CM008002002
+      nom: Bakou
+    - code: CM008002003
+      nom: Bana
+    - code: CM008002004
+      nom: Bandja
+    - code: CM008002005
+      nom: Banka
+    - code: CM008002006
+      nom: Banwa
+    - code: CM008002007
+      nom: Kekem
+  - code: CM008003
+    nom: Hauts-Plateaux
+    arrondissements:
+    - code: CM008003001
+      nom: Baham
+    - code: CM008003002
+      nom: Bamendjou
+    - code: CM008003003
+      nom: Bangou
+    - code: CM008003004
+      nom: Batie
+  - code: CM008004
+    nom: Koung-Khi
+    arrondissements:
+    - code: CM008004001
+      nom: Bayangam
+    - code: CM008004002
+      nom: Djebem
+    - code: CM008004003
+      nom: Poumougne
+  - code: CM008005
+    nom: Menoua
+    arrondissements:
+    - code: CM008005001
+      nom: Dschang
+    - code: CM008005002
+      nom: Fokoue
+    - code: CM008005003
+      nom: Fongo-Tongo
+    - code: CM008005004
+      nom: Nkong-Ni
+    - code: CM008005005
+      nom: Penka-Michel
+    - code: CM008005006
+      nom: Santchou
+  - code: CM008006
+    nom: Mifi
+    arrondissements:
+    - code: CM008006001
+      nom: Bafoussam 1er
+    - code: CM008006002
+      nom: Bafoussam 2e
+    - code: CM008006003
+      nom: Bafoussam 3e
+  - code: CM008007
+    nom: Ndé
+    arrondissements:
+    - code: CM008007001
+      nom: Bangangte
+    - code: CM008007002
+      nom: Bassamba
+    - code: CM008007003
+      nom: Bazou
+    - code: CM008007004
+      nom: Tonga
+  - code: CM008008
+    nom: Noun
+    arrondissements:
+    - code: CM008008001
+      nom: Bangourain
+    - code: CM008008002
+      nom: Foumban
+    - code: CM008008003
+      nom: Foumbot
+    - code: CM008008004
+      nom: Kouoptamo
+    - code: CM008008005
+      nom: Koutaba
+    - code: CM008008006
+      nom: Magba
+    - code: CM008008007
+      nom: Malantouen
+    - code: CM008008008
+      nom: Massangam
+    - code: CM008008009
+      nom: Njimom
+- code: CM009
+  nom: Sud
+  nom_en: South
+  departements:
+  - code: CM009001
+    nom: Dja-et-Lobo
+    arrondissements:
+    - code: CM009001001
+      nom: Bengbis
+    - code: CM009001002
+      nom: Djoum
+    - code: CM009001003
+      nom: Meyomessala
+    - code: CM009001004
+      nom: Meyomessi
+    - code: CM009001005
+      nom: Mintom
+    - code: CM009001006
+      nom: Oveng
+    - code: CM009001007
+      nom: Sangmelima
+    - code: CM009001008
+      nom: Zoetele
+  - code: CM009002
+    nom: Mvila
+    arrondissements:
+    - code: CM009002001
+      nom: Biwong-Bane
+    - code: CM009002002
+      nom: Biwong-Bulu
+    - code: CM009002003
+      nom: Ebolowa 1er
+    - code: CM009002004
+      nom: Ebolowa 2e
+    - code: CM009002005
+      nom: Efoulan
+    - code: CM009002006
+      nom: Mengong
+    - code: CM009002007
+      nom: Mvangane
+    - code: CM009002008
+      nom: Ngoulemakong
+  - code: CM009003
+    nom: Océan
+    arrondissements:
+    - code: CM009003001
+      nom: Akom 2
+    - code: CM009003002
+      nom: Bipindi
+    - code: CM009003003
+      nom: Campo
+    - code: CM009003004
+      nom: Kribi 1er
+    - code: CM009003005
+      nom: Kribi 2e
+    - code: CM009003006
+      nom: Lokoundje
+    - code: CM009003007
+      nom: Lolodorf
+    - code: CM009003008
+      nom: Mvengue
+    - code: CM009003009
+      nom: Niete
+  - code: CM009004
+    nom: Vallée-du-Ntem
+    arrondissements:
+    - code: CM009004001
+      nom: Ambam
+    - code: CM009004002
+      nom: Kye-Ossi
+    - code: CM009004003
+      nom: Maan
+    - code: CM009004004
+      nom: Olamze
+- code: CM010
+  nom: Sud-Ouest
+  nom_en: South-West
+  departements:
+  - code: CM010001
+    nom: Fako
+    arrondissements:
+    - code: CM010001001
+      nom: Buea
+    - code: CM010001002
+      nom: Limbe 1st
+    - code: CM010001003
+      nom: Limbe 2nd
+    - code: CM010001004
+      nom: Limbe 3rd
+    - code: CM010001005
+      nom: Muyuka
+    - code: CM010001006
+      nom: Tiko
+    - code: CM010001007
+      nom: West-Coast
+  - code: CM010002
+    nom: Kupe-Manenguba
+    arrondissements:
+    - code: CM010002001
+      nom: Bangem
+    - code: CM010002002
+      nom: Nguti
+    - code: CM010002003
+      nom: Tombel
+  - code: CM010003
+    nom: Lebialem
+    arrondissements:
+    - code: CM010003001
+      nom: Alou
+    - code: CM010003002
+      nom: Fontem
+    - code: CM010003003
+      nom: Wabane
+  - code: CM010004
+    nom: Manyu
+    arrondissements:
+    - code: CM010004001
+      nom: Akwaya
+    - code: CM010004002
+      nom: Eyumodjock
+    - code: CM010004003
+      nom: Mamfe
+    - code: CM010004004
+      nom: Upper Bayang
+  - code: CM010005
+    nom: Meme
+    arrondissements:
+    - code: CM010005001
+      nom: Konye
+    - code: CM010005002
+      nom: Kumba 1st
+    - code: CM010005003
+      nom: Kumba 2nd
+    - code: CM010005004
+      nom: Kumba 3rd
+    - code: CM010005005
+      nom: Mbonge
+  - code: CM010006
+    nom: Ndian
+    arrondissements:
+    - code: CM010006001
+      nom: Bamusso
+    - code: CM010006002
+      nom: Dikome Balue
+    - code: CM010006003
+      nom: Ekondo Titi
+    - code: CM010006004
+      nom: Idabato
+    - code: CM010006005
+      nom: Isangele
+    - code: CM010006006
+      nom: Kombo Abedimo
+    - code: CM010006007
+      nom: Kombo Itindi
+    - code: CM010006008
+      nom: Mundemba
+    - code: CM010006009
+      nom: Toko

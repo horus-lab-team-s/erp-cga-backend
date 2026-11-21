@@ -204,7 +204,8 @@ class TestParLaRoute:
         ouvrir_une_session(client, self.REVISEUR)
         assert ADHERENT in [r["niu"] for r in self._revue(client, tout=True)]
 
-        resiliation = maintenant().date() - timedelta(days=1)
+        # Avant le jour de la revue (2 novembre) : « hier » ne l'était plus après le 3.
+        resiliation = min(maintenant().date() - timedelta(days=1), date(2026, 11, 1))
         assert resiliation.year == 2026, "le cas suppose une date d'observation en 2026"
         reponse = client.post(
             f"/portefeuille/entreprises/{ADHERENT}/adhesions/resiliation",

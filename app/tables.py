@@ -32,6 +32,7 @@ externe de connaître le métier. C'est de la composition, comme `app/main.py` e
 
 from __future__ import annotations
 
+from app.contextes.cloture.adaptateurs.sortant import tables as cloture
 from app.contextes.collecte.adaptateurs.sortant import tables as collecte
 from app.contextes.comptabilite.adaptateurs.sortant import tables as comptabilite
 from app.contextes.conformite.adaptateurs.sortant import tables as conformite
@@ -45,6 +46,7 @@ from app.contextes.social.adaptateurs.sortant import tables as social
 from app.contextes.souscription.adaptateurs.sortant import tables as souscription
 from app.contextes.tenants.adaptateurs.sortant import tables as tenants
 from app.contextes.transverse.adaptateurs.sortant import tables as transverse
+from app.contextes.vitrine.adaptateurs.sortant import tables as vitrine
 from app.infrastructure import tables_orchestration as orchestration
 from app.infrastructure.base_de_donnees import METADONNEES
 
@@ -55,6 +57,7 @@ __all__ = ["METADONNEES", "MODULES", "noms_des_tables"]
 #:
 #: ⚠️ Toute nouvelle table s'ajoute ici — et nulle part ailleurs.
 MODULES = (
+    cloture,
     collecte,
     comptabilite,
     conformite,
@@ -66,6 +69,7 @@ MODULES = (
     souscription,
     tenants,
     transverse,
+    vitrine,
     orchestration,
 )
 

@@ -13,7 +13,11 @@ from typing import Any
 
 from sqlalchemy import and_
 
-from app.contextes.creation_entreprise.adaptateurs.sortant.tables import TableDossierCreation
+from app.contextes.creation_entreprise.adaptateurs.sortant.tables import (
+    TableDossierCreation,
+    TableRegleDesDelaisDeCreation,
+)
+from app.contextes.creation_entreprise.domaine.delais import RegleDesDelaisDeCreation
 from app.contextes.creation_entreprise.domaine.entites import DossierCreation, EtapeCreation
 from app.contextes.creation_entreprise.domaine.ports import DossierCreationIntrouvable
 from app.infrastructure.depot_document import DepotDocument
@@ -130,3 +134,35 @@ class DepotDossiersCreationSql(DepotDocument[DossierCreation]):
                 f"{len(ancien.jalons) - len(dossier.jalons)} jalon(s) : un jalon "
                 "s'ajoute, il ne se réécrit pas."
             )
+
+
+class DepotRegleDesDelaisMemoire:
+    """La règle des délais, en mémoire (lot 4)."""
+
+    def __init__(self) -> None:
+        self._regle: RegleDesDelaisDeCreation | None = None
+
+    def lire(self) -> RegleDesDelaisDeCreation | None:
+        return self._regle
+
+    def enregistrer(self, regle: RegleDesDelaisDeCreation) -> None:
+        self._regle = regle
+
+
+class DepotRegleDesDelaisSql(DepotDocument[RegleDesDelaisDeCreation]):
+    """La règle des délais, en base. Voir `TableRegleDesDelaisDeCreation`."""
+
+    _table = TableRegleDesDelaisDeCreation
+    _entite = RegleDesDelaisDeCreation
+
+    def _cle(self, entite: RegleDesDelaisDeCreation) -> dict[str, Any]:
+        return {"locataire": self.locataire}
+
+    def _colonnes(self, entite: RegleDesDelaisDeCreation) -> dict[str, Any]:
+        return {}
+
+    def lire(self) -> RegleDesDelaisDeCreation | None:
+        return self._premier(self._requete())
+
+    def enregistrer(self, regle: RegleDesDelaisDeCreation) -> None:
+        self._poser(regle)

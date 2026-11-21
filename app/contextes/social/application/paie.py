@@ -55,6 +55,7 @@ from app.contextes.social.domaine.entites import (
     LigneRetenue,
     Periode,
 )
+from app.partage.formats import ESPACE_FINE, montant
 
 __all__ = ["ParametrePaieAbsent", "calculer_bulletin", "evaluer_les_avantages"]
 
@@ -177,39 +178,43 @@ def calculer_bulletin(
     # dépasse le plafond — c'est-à-dire jusqu'au jour où le cabinet gagne un
     # client qui paie ses cadres.
     assiette_plafonnee = min(brut_taxable, plafond)
+    # ⚠️ CFC et FNE : base ARRONDIE AU MILLIER INFÉRIEUR (loi n° 77/10, art. 4-5, reprise
+    # par la loi n° 90/050 ; annexe du CGI 2026). Ajouté le 15 octobre 2026.
+    assiette_cfc = (brut_taxable // Decimal(1000)) * Decimal(1000)
 
+    pension_salariale = _ligne(
+        code="CNPS_PVID_S",
+        libelle="CNPS, pension vieillesse, invalidité, décès",
+        assiette=assiette_plafonnee,
+        resolu=_lire(parametres, "CNPS_PVID_TAUX_SALARIE", periode),
+        a_charge_du_salarie=True,
+    )
     lignes: list[LigneRetenue] = [
-        _ligne(
-            code="CNPS_PVID_S",
-            libelle="CNPS — pension vieillesse, invalidité, décès",
-            assiette=assiette_plafonnee,
-            resolu=_lire(parametres, "CNPS_PVID_TAUX_SALARIE", periode),
-            a_charge_du_salarie=True,
-        ),
+        pension_salariale,
         _ligne(
             code="CFC_S",
             libelle="Crédit foncier du Cameroun",
-            assiette=brut_taxable,
+            assiette=assiette_cfc,
             resolu=_lire(parametres, "CFC_TAUX_SALARIE", periode),
             a_charge_du_salarie=True,
         ),
         _ligne(
             code="CNPS_PVID_P",
-            libelle="CNPS — pension vieillesse, invalidité, décès (patronale)",
+            libelle="CNPS, pension vieillesse, invalidité, décès (patronale)",
             assiette=assiette_plafonnee,
             resolu=_lire(parametres, "CNPS_PVID_TAUX_EMPLOYEUR", periode),
             a_charge_du_salarie=False,
         ),
         _ligne(
             code="CNPS_PF",
-            libelle="CNPS — prestations familiales",
+            libelle="CNPS, prestations familiales",
             assiette=assiette_plafonnee,
             resolu=_lire(parametres, "CNPS_PRESTATIONS_FAMILIALES_TAUX", periode),
             a_charge_du_salarie=False,
         ),
         _ligne(
             code="CNPS_AT",
-            libelle=f"CNPS — accidents du travail, groupe {groupe_risque}",
+            libelle=f"CNPS, accidents du travail, groupe {groupe_risque}",
             # Non plafonnée : voir le commentaire ci-dessus.
             assiette=brut_taxable,
             resolu=_lire(parametres, CODE_ACCIDENTS_TRAVAIL[groupe_risque], periode),
@@ -218,21 +223,26 @@ def calculer_bulletin(
         _ligne(
             code="CFC_P",
             libelle="Crédit foncier du Cameroun (patronale)",
-            assiette=brut_taxable,
+            assiette=assiette_cfc,
             resolu=_lire(parametres, "CFC_TAUX_EMPLOYEUR", periode),
             a_charge_du_salarie=False,
         ),
         _ligne(
             code="FNE",
             libelle="Fonds national de l'emploi",
-            assiette=brut_taxable,
+            assiette=assiette_cfc,
             resolu=_lire(parametres, "FNE_TAUX_EMPLOYEUR", periode),
             a_charge_du_salarie=False,
         ),
     ]
 
-    lignes.append(_calculer_irpp(brut_taxable, parametres, baremes, periode))
+    lignes.append(
+        _calculer_irpp(
+            brut_taxable, pension_salariale.montant, parametres, baremes, periode
+        )
+    )
     lignes.append(_calculer_tdl(contrat, baremes, periode))
+    lignes.append(_calculer_rav(contrat, baremes, periode))
 
     return Bulletin(
         salarie=contrat.salarie,
@@ -242,11 +252,41 @@ def calculer_bulletin(
         primes=contrat.primes,
         avantages_evalues=avantages,
         lignes=tuple(lignes),
+        alertes=_alertes_smig(contrat, parametres, periode),
+    )
+
+
+def _lisible(valeur: Decimal) -> str:
+    """« 55 000 » : le séparateur des milliers, en espace ordinaire (une alerte se lit)."""
+    return montant(valeur).replace(ESPACE_FINE, " ")
+
+
+def _alertes_smig(
+    contrat: Contrat, parametres: ServiceParametres, periode: Periode
+) -> tuple[str, ...]:
+    """Un salaire de base sous le SMIG : le bulletin le dit, sans refuser (15 oct. 2026).
+
+    Refuser empêcherait de payer un salarié à temps partiel, dont le salaire se
+    proratise ; se taire laisserait passer une infraction au Code du travail. Le
+    contrat ne porte pas encore le secteur : la comparaison se fait au SMIG non
+    agricole, le plus protecteur, et l'alerte le précise.
+    """
+    try:
+        smig = parametres.resoudre("SMIG_MENSUEL_NON_AGRICOLE", periode.dernier_jour)
+    except (ParametreInconnu, AucuneVersionApplicable):
+        return ()
+    if contrat.salaire_base >= smig.valeur_decimale:
+        return ()
+    return (
+        f"Salaire de base {_lisible(contrat.salaire_base)} FCFA inférieur au SMIG non agricole "
+        f"({_lisible(smig.valeur_decimale)} FCFA, décret n° 2023/00338/PM). À justifier : "
+        "temps partiel, secteur agricole (SMIG 45 000 FCFA), ou à corriger.",
     )
 
 
 def _calculer_irpp(
     brut_taxable: Decimal,
+    pension_salariale_mensuelle: Decimal,
     parametres: ServiceParametres,
     baremes: ServiceBaremes,
     periode: Periode,
@@ -272,22 +312,33 @@ def _calculer_irpp(
     """
     brut_annuel = brut_taxable * _MOIS_PAR_AN
     frais = _lire(parametres, "IRPP_ABATTEMENT_FRAIS_PROFESSIONNELS", periode)
+    plafond_frais = _lire(parametres, "IRPP_PLAFOND_FRAIS_PROFESSIONNELS_ANNUEL", periode)
     forfait = _lire(parametres, "IRPP_ABATTEMENT_FORFAITAIRE_ANNUEL", periode)
+    dispense = _lire(parametres, "IRPP_SEUIL_DISPENSE_MENSUEL", periode)
 
-    apres_frais = brut_annuel * (Decimal(100) - frais.valeur_decimale) / Decimal(100)
-    assiette_annuelle = max(Decimal(0), apres_frais - forfait.valeur_decimale)
+    # ⚠️ Trois règles du CGI 2026 ajoutées le 15 octobre 2026, lues dans l'édition
+    # officielle de la DGI :
+    # * art. 34 : les frais professionnels (30 %) sont PLAFONNÉS à 4 800 000 par an ;
+    # * art. 34 : la cotisation de retraite obligatoire (pension CNPS salariale) est
+    #   DÉDUCTIBLE du revenu imposable — un salaire de 400 000 voyait son assiette
+    #   majorée de 16 800 par mois ;
+    # * art. 81 : aucune retenue sous 62 000 FCFA de salaire brut mensuel.
+    frais_annuels = min(
+        brut_annuel * frais.valeur_decimale / Decimal(100), plafond_frais.valeur_decimale
+    )
+    revenu_net = brut_annuel - frais_annuels - pension_salariale_mensuelle * _MOIS_PAR_AN
+    assiette_annuelle = max(Decimal(0), revenu_net - forfait.valeur_decimale)
 
     bareme = baremes.resoudre("IRPP_SALAIRES", periode.dernier_jour)
-    impot_annuel = bareme.appliquer(assiette_annuelle)
+    dispense_de_retenue = brut_taxable < dispense.valeur_decimale
+    impot_annuel = Decimal(0) if dispense_de_retenue else bareme.appliquer(assiette_annuelle)
 
     cac = _lire(parametres, "CAC_TAUX", periode)
     avec_cac = impot_annuel * (Decimal(100) + cac.valeur_decimale) / Decimal(100)
 
-    non_valide = (
-        bareme.statut is not StatutValidation.VALIDE
-        or frais.statut is not StatutValidation.VALIDE
-        or forfait.statut is not StatutValidation.VALIDE
-        or cac.statut is not StatutValidation.VALIDE
+    non_valide = any(
+        r.statut is not StatutValidation.VALIDE
+        for r in (bareme, frais, plafond_frais, forfait, dispense, cac)
     )
     return LigneRetenue(
         code="IRPP",
@@ -302,29 +353,41 @@ def _calculer_irpp(
 
 
 def _calculer_tdl(contrat: Contrat, baremes: ServiceBaremes, periode: Periode) -> LigneRetenue:
-    """La taxe de développement local, sur le salaire de base mensuel.
+    """La taxe de développement local : le douzième du montant annuel de son palier.
 
-    ⚠️ **Montant indicatif.** La TDL est en réalité un barème à montant fixe par
-    palier, modélisé ici en taux faute de structure adéquate au référentiel — la
-    réserve est écrite dans `baremes.yaml` et cette ligne la propage en marquant
-    `non_valide`. Le fiscaliste doit trancher : soit les montants s'expriment
-    correctement en taux, soit il faut ajouter au référentiel un type de tranche à
-    montant fixe.
-
-    Elle est calculée quand même plutôt qu'omise : une ligne absente d'un bulletin
-    ne se remarque pas, une ligne marquée non validée se discute.
+    Le palier se lit sur le salaire de BASE mensuel (CGI art. C86-C87). Depuis le 15
+    octobre 2026, le barème est à montant fixe par palier, comme le texte : la ligne
+    n'est plus « indicative » par construction, elle suit le statut du barème.
     """
     bareme = baremes.resoudre("TDL_SALAIRES", periode.dernier_jour)
     return LigneRetenue(
         code="TDL",
-        libelle="Taxe de développement local (montant indicatif)",
+        libelle="Taxe de développement local",
         assiette=contrat.salaire_base,
         taux=None,
-        montant=_francs(bareme.appliquer(contrat.salaire_base)),
+        montant=_francs(bareme.appliquer(contrat.salaire_base) / _MOIS_PAR_AN),
         a_charge_du_salarie=True,
         fondement_code="TDL_SALAIRES",
-        # Toujours marquée : la réserve porte sur la forme du barème, pas
-        # seulement sur ses valeurs, et elle ne se lèvera pas par une simple
-        # validation des chiffres.
-        non_valide=True,
+        non_valide=bareme.statut is not StatutValidation.VALIDE,
+    )
+
+
+def _calculer_rav(contrat: Contrat, baremes: ServiceBaremes, periode: Periode) -> LigneRetenue:
+    """La redevance audiovisuelle : le montant mensuel du palier du salaire brut (15 octobre 2026).
+
+    Ordonnance n° 89/004, art. 3 et 6. L'assiette retenue est le brut EN ESPÈCES (base
+    et primes) : le texte ne dit pas si les avantages en nature y entrent, et la note
+    du barème le signale au fiscaliste.
+    """
+    bareme = baremes.resoudre("RAV_SALAIRES", periode.dernier_jour)
+    assiette = contrat.salaire_base + contrat.primes
+    return LigneRetenue(
+        code="RAV",
+        libelle="Redevance audiovisuelle",
+        assiette=assiette,
+        taux=None,
+        montant=_francs(bareme.appliquer(assiette)),
+        a_charge_du_salarie=True,
+        fondement_code="RAV_SALAIRES",
+        non_valide=bareme.statut is not StatutValidation.VALIDE,
     )

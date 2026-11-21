@@ -29,6 +29,7 @@ from app.contextes.transverse.api import (
     service_de_notification,
 )
 from app.main import creer_application
+from tests.conftest import renforcer_la_session
 
 PIECE_RECUE_DE_BATIMENT = "PJ-2026-0028"
 PIECE_RECUE_HORS_PORTEFEUILLE = "PJ-2026-0005"
@@ -48,12 +49,15 @@ def magasins_neufs():
     vider_les_magasins_de_la_collecte()
 
 
-def _client(courriel: str) -> TestClient:
+def _client(courriel: str, *, fort: bool = False) -> TestClient:
     client = TestClient(creer_application())
     reponse = client.post(
         "/transverse/session", json={"courriel": courriel, "mot_de_passe": MOT_DE_PASSE_DEMO}
     )
     assert reponse.status_code == 200, reponse.text
+    if fort:
+        # 19 octobre 2026 : rétablir un compte exige le second facteur.
+        renforcer_la_session(client)
     return client
 
 
@@ -61,7 +65,7 @@ class TestRetablirUnCompte:
     MOTIF = {"motif": "Suspension prononcée par erreur le 12/09."}
 
     def test_un_compte_suspendu_se_retablit_et_son_titulaire_est_prevenu(self):
-        administrateur = _client("s.onana@cga-brcg.cm")
+        administrateur = _client("s.onana@cga-brcg.cm", fort=True)
         reponse = administrateur.post("/transverse/comptes/C-008/retablissement", json=self.MOTIF)
         assert reponse.status_code == 200, reponse.text
         assert reponse.json()["etat"] == "ACTIF"
@@ -73,7 +77,7 @@ class TestRetablirUnCompte:
     def test_ses_habilitations_fermees_ne_se_rouvrent_pas(self):
         """Rétablir un compte ne rend aucun dossier : il faut réaccorder, daté."""
         avant = [(h.identifiant, h.fin) for h in atelier().habilitations.pour_compte("C-008")]
-        _client("s.onana@cga-brcg.cm").post(
+        _client("s.onana@cga-brcg.cm", fort=True).post(
             "/transverse/comptes/C-008/retablissement", json=self.MOTIF
         )
         assert [
@@ -81,7 +85,7 @@ class TestRetablirUnCompte:
         ] == avant
 
     def test_un_compte_actif_ne_se_retablit_pas_et_le_journal_reste_juste(self):
-        reponse = _client("s.onana@cga-brcg.cm").post(
+        reponse = _client("s.onana@cga-brcg.cm", fort=True).post(
             "/transverse/comptes/C-004/retablissement", json=self.MOTIF
         )
         assert reponse.status_code == 409

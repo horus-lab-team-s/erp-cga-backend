@@ -113,6 +113,41 @@ class TestElleVoitSonDossier:
         assert faux.json()["detail"] == inconnu.json()["detail"]
 
 
+class TestLeLienNeVitPasToujours:
+    """⚠️ 19 octobre 2026 (audit de sécurité) : le lien de suivi s'ouvrait pour toujours."""
+
+    def test_un_dossier_clos_garde_son_lien_quatre_vingt_dix_jours(self, plateforme):
+        from datetime import timedelta
+
+        from app.partage.horloge import horloge_figee, maintenant
+
+        client = plateforme
+        reference = _dossier(client)
+        abandon = client.post(f"/creations/{reference}/abandon", json={"motif": "Projet reporté."})
+        assert abandon.status_code == 200, abandon.text
+        client.cookies.clear()
+
+        ouvert = client.get(f"/creations/{reference}/suivi", params=_lien(reference))
+        assert ouvert.status_code == 200
+        with horloge_figee(maintenant() + timedelta(days=91)):
+            echu = client.get(f"/creations/{reference}/suivi", params=_lien(reference))
+        assert echu.status_code == 404, "trois mois après la clôture, le lien ne s'ouvre plus"
+        # ⚠️ Le même refus qu'un lien faux : rien ne dit que le dossier existe.
+        faux = client.get(f"/creations/{reference}/suivi", params={"s": "0" * 64})
+        assert echu.json() == faux.json()
+
+    def test_le_sceau_n_est_pas_signe_avec_la_cle_du_coffre(self):
+        """Une clé par usage : le sceau du suivi n'est pas un HMAC direct de la clé."""
+        import hashlib
+        import hmac
+
+        from app.partage.sceau import cle_d_usage
+
+        direct = hmac.new(b"cle", b"CRE-1", hashlib.sha256).hexdigest()
+        assert sceau_de_suivi("CRE-1", secret="cle") != direct
+        assert cle_d_usage("cle", "lien-de-suivi") != cle_d_usage("cle", "acceptation-proforma")
+
+
 class TestElleDeposeSesPieces:
     def _televerser(self, client, reference):
         envoi = client.post(
@@ -257,6 +292,21 @@ class TestElleDeposeSesPieces:
             files={"fichier": ("statuts.pdf", io.BytesIO(PDF), "application/pdf")},
         )
         assert refus.status_code in (401, 403), refus.text
+
+    def test_un_adherent_ne_lit_pas_un_fichier_par_son_empreinte(self, plateforme):
+        """19 octobre 2026 (audit de sécurité) : `LIRE_PIECE` suffisait, et l'empreinte
+        devenait un laissez-passer vers les fichiers des autres dossiers."""
+        client = plateforme
+        ouvrir_une_session(client, CHARGEE)
+        depot = client.post(
+            "/collecte/fichiers-de-formalite",
+            files={"fichier": ("statuts.pdf", io.BytesIO(PDF), "application/pdf")},
+        )
+        assert depot.status_code in (200, 201), depot.text
+        empreinte = depot.json()["empreinte"]
+        client.cookies.clear()
+        ouvrir_une_session(client, "jp.nkoa@batimentplus.cm")
+        assert client.get(f"/collecte/fichiers/{empreinte}").status_code == 403
 
     def test_une_piece_hors_checklist_est_refusee(self, plateforme):
         client = plateforme

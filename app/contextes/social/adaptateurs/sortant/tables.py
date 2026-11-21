@@ -25,7 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.base_de_donnees import Base, Cloisonne, Document
 
-__all__ = ["TableContrat", "TableSalarie"]
+__all__ = ["TableArreteDesCharges", "TableContrat", "TableSalarie"]
 
 
 class TableSalarie(Cloisonne, Document, Base):
@@ -64,3 +64,14 @@ class TableContrat(Cloisonne, Document, Base):
     #: Nul = toujours en cours. Promue pour filtrer les contrats en vigueur à une
     #: date sans charger tout le fichier du personnel.
     fin: Mapped[date | None] = mapped_column(Date)
+
+
+class TableArreteDesCharges(Cloisonne, Document, Base):
+    """L'arrêté des charges sociales d'un mois (18 octobre 2026). Un par dossier et par mois ;
+    le dernier arrêté fait foi, et le journal d'audit garde les précédents."""
+
+    __tablename__ = "arrete_des_charges"
+
+    locataire: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entreprise: Mapped[str] = mapped_column(String(20), primary_key=True)
+    periode: Mapped[str] = mapped_column(String(7), primary_key=True)

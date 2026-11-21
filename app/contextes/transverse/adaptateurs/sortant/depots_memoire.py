@@ -39,6 +39,7 @@ from app.contextes.transverse.domaine.habilitations import Habilitation
 from app.contextes.transverse.domaine.identites import Compte
 from app.contextes.transverse.domaine.jetons import Jeton
 from app.contextes.transverse.domaine.mandats import Mandat
+from app.contextes.transverse.domaine.roles import FicheDeRole
 from app.contextes.transverse.domaine.sessions import Session
 from app.partage.depot_memoire import EntrepotMemoire
 from app.partage.locataire import sous_mandat
@@ -47,6 +48,7 @@ __all__ = [
     "CompteIntrouvable",
     "CourrielEnDouble",
     "DepotComptesMemoire",
+    "DepotRolesDuCabinetMemoire",
     "DepotHabilitationsMemoire",
     "DepotJetonsMemoire",
     "DepotSessionsMemoire",
@@ -137,7 +139,7 @@ class DepotHabilitationsMemoire:
     def pour_compte(self, compte: str) -> list[Habilitation]:
         return sorted(
             self._entrepot.filtrer(lambda h: h.compte == compte),
-            key=lambda h: (h.debut, h.role.value),
+            key=lambda h: (h.debut, str(h.role)),
         )
 
     def pour_dossier(self, niu: str) -> list[Habilitation]:
@@ -235,6 +237,23 @@ class DepotMandatsMemoire:
                 "ses propres données."
             )
         self._entrepot.poser(mandat)
+
+
+class DepotRolesDuCabinetMemoire:
+    """Les rôles réglés par le cabinet (18 octobre 2026). Voir `TableRoleDuCabinet`."""
+
+    def __init__(self, locataire: str = LOCATAIRE_PAR_DEFAUT) -> None:
+        self.locataire = locataire
+        self._fiches: dict[str, FicheDeRole] = {}
+
+    def tous(self) -> list[FicheDeRole]:
+        return [self._fiches[code] for code in sorted(self._fiches)]
+
+    def enregistrer(self, fiche: FicheDeRole) -> None:
+        self._fiches[fiche.code] = fiche
+
+    def retirer(self, code: str) -> None:
+        self._fiches.pop(code, None)
 
 
 class JournalAuditMemoire:

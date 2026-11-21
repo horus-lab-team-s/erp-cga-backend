@@ -105,6 +105,8 @@ class TestVerrous:
             "adresse_publique_site": "https://www.cga-brcg.cm",
             "adresse_publique_vitrine": "https://www.cga-brcgroup.com",
             "origines_cors": ["https://www.cga-brcg.cm"],
+            # 20 octobre 2026 : la base de développement locale est refusée.
+            "url_base_de_donnees": "postgresql+psycopg://cga_app@db.interne:5432/cga",
             "cle_chiffrement": base64.b64encode(bytes(32)).decode("ascii"),
         } | surcharges
 
@@ -126,6 +128,18 @@ class TestVerrous:
 
     def test_la_production_demarre_sans_ce_mode(self):
         assert Configuration(**self._production()).mode_demonstration is False
+
+    def test_un_environnement_inconnu_est_refuse(self):
+        """19 octobre 2026 (audit) : une faute de frappe ouvrait la simulation de paiement."""
+        with pytest.raises(ValueError, match="CGA_ENVIRONNEMENT"):
+            Configuration(environnement="prodution")
+
+    def test_la_recette_exposee_se_defend_comme_la_production(self):
+        """Une recette joignable de l'extérieur n'est pas un poste de travail."""
+        with pytest.raises(ValueError, match="Configuration de production refusée"):
+            Configuration(**self._production(environnement="recette", mode_demonstration=True))
+        assert Configuration(**self._production(environnement="preprod")).en_production
+        assert not Configuration(environnement="local").en_production
 
     def test_le_mode_est_faux_par_defaut(self):
         """Il se déclare. Il ne se déduit d'aucune autre absence de réglage."""
@@ -327,3 +341,23 @@ class TestParcoursComplet:
 
         assert client.get("/transverse/courriels", params={"code": "compte.activation"}).json()
         assert client.get("/transverse/courriels", params={"code": "compte.suspendu"}).json() == []
+
+    def test_une_piece_jointe_ne_fait_pas_tomber_la_boite(self, client: TestClient):
+        """⚠️ 19 octobre 2026 : la proposition détaillée joint son PDF au contexte, et
+        la boîte entière rendait 500 dès qu'un tel courriel était retenu."""
+        from app.contextes.transverse.adaptateurs.entrant.dependances import atelier
+
+        atelier().notifications.envoyer(
+            "proforma.envoi.detaillee",
+            destinataire="awa@exemple.cm",
+            contexte={
+                "lien": "http://x/proforma/P?s=1",
+                "pieces_jointes": [{"pdf": b"%PDF-\xff\xfe"}],
+            },
+        )
+
+        reponse = client.get("/transverse/courriels")
+        assert reponse.status_code == 200
+        contexte = reponse.json()[0]["contexte"]
+        assert contexte["lien"] == "http://x/proforma/P?s=1"
+        assert contexte["pieces_jointes"][0]["pdf"] == "<pièce jointe, 7 octets>"

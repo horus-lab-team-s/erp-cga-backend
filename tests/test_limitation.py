@@ -132,6 +132,8 @@ class TestReglesParDefaut:
         assert "/transverse/session/renforcement" in chemins
         assert "/transverse/mot-de-passe/oubli" in chemins
         assert "/transverse/mot-de-passe/definition" in chemins
+        # 16 octobre 2026 (revue de sécurité) : postuler dépose un PDF, sans compte.
+        assert "/vitrine/offres/*" in chemins
 
     def test_aucune_regle_n_est_assez_serree_pour_gener_une_agence(self):
         """Un cabinet entier peut sortir par une seule adresse publique.

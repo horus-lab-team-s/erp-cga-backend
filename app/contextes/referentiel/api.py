@@ -29,12 +29,21 @@ from app.contextes.referentiel.adaptateurs.sortant.depots_decisions import (
     depot_des_decisions,
     vider_les_decisions,
 )
+from app.contextes.referentiel.adaptateurs.sortant.geographie import (
+    Geographie,
+    cle_de_region,
+    geographie,
+)
 from app.contextes.referentiel.application.decisions import (
     HorsDuCircuit,
     proposer_une_version,
     retirer_une_decision,
     trancher_une_proposition,
     valider_une_version,
+)
+from app.contextes.referentiel.application.format_des_identifiants import (
+    IdentifiantHorsFormat,
+    identifiant_au_format,
 )
 from app.contextes.referentiel.application.service_parametres import (
     AucuneVersionApplicable,
@@ -68,6 +77,11 @@ from app.contextes.referentiel.domaine.surcouche import (
 )
 
 __all__ = [
+    "IdentifiantHorsFormat",
+    "identifiant_au_format",
+    "Geographie",
+    "cle_de_region",
+    "geographie",
     # Lecture
     "ServiceBaremes",
     "ServiceParametres",

@@ -1,0 +1,20 @@
+# Les alertes d'expiration (lot 4, 9 novembre 2026) : QUAND prévenir.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Réunion du 4 novembre 2026, demande 15 : « signaler automatiquement au gestionnaire et au
+# client les documents ou abonnements expirés ou sur le point de l'être ».
+#
+# Ce sont des POLITIQUES DU CABINET, pas des règles : valeurs de départ, à arrêter par la
+# direction. Les DURÉES de validité des documents sont ailleurs, sourcées :
+# Docs/referentiel/portefeuille/documents_a_echeance.yaml.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Jours avant l'expiration où l'on prévient ; 0 : le jour même (et une fois expiré). Chaque
+# palier n'est signalé qu'une fois ; un document enregistré tard ne reçoit que le plus proche.
+paliers_jours: [30, 7, 0]
+
+# Jusqu'où le panneau « Expirations à venir » regarde devant lui.
+horizon_jours: 60
+
+# Combien de jours un document expiré reste affiché au panneau.
+expires_affiches_jours: 30

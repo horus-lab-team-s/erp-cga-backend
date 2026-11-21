@@ -48,6 +48,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 
 from app.contextes.transverse.domaine.roles import (
     ROLES_A_PORTEE_OBLIGATOIRE,
+    CodeRole,
     Permission,
     Role,
     permissions_de,
@@ -99,7 +100,8 @@ class Habilitation(BaseModel):
 
     identifiant: str = Field(min_length=1)
     compte: str = Field(min_length=1)
-    role: Role
+    #: 18 octobre 2026 : un rôle livré, ou un rôle créé par le cabinet (son code).
+    role: CodeRole
 
     #: `None` = tous les dossiers du cabinet. Voir l'en-tête.
     portee: frozenset[str] | None = None
@@ -339,11 +341,11 @@ def habilitations_actives(
     """Celles qui couvrent cette date. Triées par rôle, pour un affichage stable."""
     return sorted(
         (h for h in habilitations if h.couvre(a_la_date)),
-        key=lambda h: (h.role.value, h.debut),
+        key=lambda h: (str(h.role), h.debut),
     )
 
 
-def roles_au(habilitations: Sequence[Habilitation], a_la_date: date) -> frozenset[Role]:
+def roles_au(habilitations: Sequence[Habilitation], a_la_date: date) -> frozenset[Role | str]:
     return frozenset(h.role for h in habilitations_actives(habilitations, a_la_date))
 
 

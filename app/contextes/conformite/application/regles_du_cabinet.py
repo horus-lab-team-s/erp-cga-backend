@@ -41,6 +41,7 @@ from app.contextes.conformite.domaine.regles_du_cabinet import (
 )
 from app.contextes.conformite.domaine.schema_faits import SCHEMA_FACTURE
 from app.contextes.referentiel.contrats import Fondement
+from app.partage.horloge import jour_a_douala
 
 #: La date d'effet de la règle pendant l'essai : avant toute facture connue.
 _DEPUIS_TOUJOURS = date(2000, 1, 1)
@@ -183,7 +184,7 @@ def proposer_une_regle(
             f"le motif doit compter au moins {motif_minimum} caractères : il dit quel texte "
             "la règle traduit."
         )
-    if construction.applicable_du < le.date():
+    if construction.applicable_du < jour_a_douala(le):
         raise PropositionRefusee(
             "une règle du cabinet ne prend pas effet dans le passé : les contrôles déjà rendus "
             "changeraient sans que personne ne les relise."
