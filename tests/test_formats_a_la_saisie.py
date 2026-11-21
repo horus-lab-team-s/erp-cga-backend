@@ -107,3 +107,18 @@ def test_le_prospect_veut_une_vraie_adresse():
 def test_un_capital_negatif_n_est_pas_lu():
     assert _capital("-5000") is None
     assert _capital("1000000") == 1000000
+
+
+def test_un_appel_de_fonds_dont_la_periode_finit_avant_de_commencer_est_refuse():
+    from app.contextes.souscription.adaptateurs.entrant.routes_fonds_de_tiers import (
+        AppelAArreter,
+    )
+
+    with pytest.raises(ValidationError, match="avant de commencer"):
+        AppelAArreter(
+            code_obligation="TVA",
+            libelle="TVA d'octobre",
+            periode_debut=date(2026, 10, 31),
+            periode_fin=date(2026, 10, 1),
+            montant=100,
+        )

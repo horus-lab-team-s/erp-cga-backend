@@ -26,7 +26,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contextes.portefeuille.api import (
     EntrepriseIntrouvable,
@@ -152,6 +152,17 @@ class AppelAArreter(BaseModel):
     periode_debut: date
     periode_fin: date
     montant: Decimal = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _periode_dans_l_ordre(self) -> AppelAArreter:
+        """21 novembre 2026 : une période finissant avant de commencer passait, et l'appel
+        se lisait ensuite « du 31/10 au 01/10 » chez l'adhérent."""
+        if self.periode_fin < self.periode_debut:
+            raise ValueError(
+                f"la période finit le {self.periode_fin:%d/%m/%Y}, avant de commencer le "
+                f"{self.periode_debut:%d/%m/%Y}."
+            )
+        return self
 
 
 @routeur.post(
