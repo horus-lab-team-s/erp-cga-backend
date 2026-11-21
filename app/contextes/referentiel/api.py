@@ -41,6 +41,10 @@ from app.contextes.referentiel.application.decisions import (
     trancher_une_proposition,
     valider_une_version,
 )
+from app.contextes.referentiel.application.format_des_identifiants import (
+    IdentifiantHorsFormat,
+    identifiant_au_format,
+)
 from app.contextes.referentiel.application.service_parametres import (
     AucuneVersionApplicable,
     BaremeInconnu,
@@ -73,6 +77,8 @@ from app.contextes.referentiel.domaine.surcouche import (
 )
 
 __all__ = [
+    "IdentifiantHorsFormat",
+    "identifiant_au_format",
     "Geographie",
     "cle_de_region",
     "geographie",

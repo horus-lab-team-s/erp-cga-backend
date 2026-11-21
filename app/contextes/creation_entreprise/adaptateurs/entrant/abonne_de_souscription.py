@@ -257,9 +257,12 @@ def _capital(brut: str | None) -> Decimal | None:
     if not brut:
         return None
     try:
-        return Decimal(str(brut))
+        capital = Decimal(str(brut))
     except (InvalidOperation, ValueError):
         return None
+    # 21 novembre 2026 : un capital négatif faisait échouer la conversion, des semaines
+    # plus tard, en erreur 500. Il est illisible au même titre qu'un texte.
+    return capital if capital >= 0 else None
 
 
 def abonne_de_souscription():

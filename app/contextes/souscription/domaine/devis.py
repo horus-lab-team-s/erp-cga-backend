@@ -34,6 +34,7 @@ qu'il contrôle chez ses adhérents.
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -62,6 +63,10 @@ class EtatDevis(StrEnum):
     #: Passé sa date de validité sans avoir été engagé.
     CADUC = "CADUC"
     ABANDONNE = "ABANDONNE"
+
+
+#: La forme d'une adresse, la même que celle du compte (`transverse/domaine/identites.py`).
+_ADRESSE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class Prospect(BaseModel):
@@ -97,6 +102,22 @@ class Prospect(BaseModel):
     @classmethod
     def _normaliser(cls, valeur: object) -> object:
         return normaliser_telephone(valeur) if isinstance(valeur, str) else valeur
+
+    @field_validator("courriel", mode="before")
+    @classmethod
+    def _adresse(cls, valeur: object) -> object:
+        """⚠️ 21 novembre 2026 : seule une longueur de trois était exigée. « a@b » passait
+        le devis et le paiement, puis le compte (qui veut une arobase et un point dans le
+        domaine) ne s'ouvrait pas : payé, sans accès. Même règle que le compte."""
+        if not isinstance(valeur, str):
+            return valeur
+        adresse = valeur.strip().lower()
+        if not _ADRESSE.match(adresse):
+            raise ValueError(
+                f"« {valeur} » n'a pas la forme d'une adresse électronique. "
+                "Une arobase et un point dans le domaine sont attendus."
+            )
+        return adresse
 
     @field_validator("courriel", mode="before")
     @classmethod

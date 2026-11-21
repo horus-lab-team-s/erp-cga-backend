@@ -56,9 +56,9 @@ from app.contextes.portefeuille.api import (
     prochain_numero_d_adhesion,
 )
 from app.contextes.referentiel.api import (
-    AucuneVersionApplicable,
-    ParametreInconnu,
+    IdentifiantHorsFormat,
     ServiceParametres,
+    identifiant_au_format,
     service_parametres,
 )
 from app.contextes.transverse.api import (
@@ -202,7 +202,9 @@ class DemandeOuverture(BaseModel):
     forme_juridique: FormeJuridique
     activite: str = Field(min_length=1)
     siege: str = Field(min_length=1)
-    capital: Decimal | None = None
+    #: ⚠️ 21 novembre 2026 : sans `ge=0`, un capital négatif passait l'ouverture et faisait
+    #: échouer la conversion (l'entreprise du portefeuille l'exige positif), en erreur 500.
+    capital: Decimal | None = Field(default=None, ge=0)
 
 
 class DemandeAvancement(BaseModel):
@@ -1002,39 +1004,14 @@ def porter_identifiant(
     return dossier
 
 
-#: Le code du format au référentiel, et un exemple lisible pour le message de refus.
-_FORMATS = {
-    "niu": ("FORMAT_NIU", "NIU", "une lettre, douze chiffres, une lettre : M112600090017R"),
-    "rccm": ("FORMAT_RCCM", "RCCM", "RC/DLA/2026/B/9001"),
-}
-
-
 def _au_format(nom: str, valeur: str, obtenu_le: date) -> str:
-    """Le NIU ou le RCCM, refusé s'il ne suit pas le format du référentiel (21 novembre 2026).
-
-    ⚠️ POURQUOI ICI : constaté en recette en ligne le 20 novembre 2026, un NIU
-    « P1234567890123 » (treize chiffres) et un RCCM « RC/DLA/2026/2/2026 » ont été
-    acceptés à la saisie ; l'entreprise est entrée au portefeuille avec une anomalie
-    bloquante (« ne respecte pas le format en vigueur »). Le NIU devient la clé du
-    dossier à la conversion et ne se corrige plus ensuite : le refus doit tomber à la
-    saisie, avec le même format que celui que le portefeuille vérifie
-    (`validation_identifiants.py`), lu à la date d'obtention.
-
-    Un format absent du référentiel ne bloque pas la saisie : on ne devine pas.
-    """
-    propre = re.sub(r"\s+", "", valeur).upper()
-    code, libelle, exemple = _FORMATS[nom]
+    """Le NIU ou le RCCM au format du référentiel, lu à la date d'obtention (21 novembre
+    2026 : un NIU à treize chiffres passait ici, puis le portefeuille le marquait bloquant).
+    La règle est commune : `referentiel/application/format_des_identifiants.py`."""
     try:
-        motif = parametres().valeur_texte(code, obtenu_le)
-    except (ParametreInconnu, AucuneVersionApplicable):
-        return propre
-    if not re.match(motif, propre):
-        raise HTTPException(
-            status_code=422,
-            detail=f"{libelle} « {valeur.strip()} » : il ne suit pas le format attendu "
-            f"({exemple}). Recopiez-le tel qu'il figure sur le document délivré.",
-        )
-    return propre
+        return identifiant_au_format(nom.upper(), valeur, obtenu_le, parametres())
+    except IdentifiantHorsFormat as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
 
 
 def _couple(valeur: str | None, obtenu_le: date | None, nom: str) -> tuple[str, date] | None:

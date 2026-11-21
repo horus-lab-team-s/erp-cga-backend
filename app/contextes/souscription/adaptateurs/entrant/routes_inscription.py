@@ -31,6 +31,11 @@ from app.contextes.portefeuille.api import (
     depot_entreprises,
     inscrire_une_entreprise_existante,
 )
+from app.contextes.referentiel.api import (
+    IdentifiantHorsFormat,
+    identifiant_au_format,
+    service_parametres,
+)
 from app.contextes.souscription.adaptateurs.entrant.sources import (
     depot_dossiers,
     depot_qualifications,
@@ -309,7 +314,7 @@ def inscrire(
     if not etat.inscriptible:
         raise HTTPException(status_code=409, detail=etat.motif)
     portefeuille = depot_entreprises()
-    niu = demande.niu.strip().upper()
+    niu, demande = _identifiants_au_format(demande)
     try:
         existant = portefeuille.lire(niu)
     except EntrepriseIntrouvable:
@@ -342,6 +347,24 @@ def inscrire(
     return _etat(_dossier(reference))
 
 
+def _identifiants_au_format(demande: InscriptionDemandee) -> tuple[str, InscriptionDemandee]:
+    """Le NIU et le RCCM au format du référentiel, ou un refus avec le modèle à suivre.
+
+    ⚠️ 21 novembre 2026 : l'inscription acceptait tout NIU de 10 à 20 caractères ; le
+    portefeuille le marquait ensuite bloquant, et le NIU, clé du dossier, ne se corrige
+    plus. Voir `referentiel/application/format_des_identifiants.py`.
+    """
+    jour = aujourd_hui()
+    try:
+        niu = identifiant_au_format("NIU", demande.niu, jour, service_parametres())
+        rccm = (demande.rccm or "").strip()
+        if rccm:
+            rccm = identifiant_au_format("RCCM", rccm, jour, service_parametres())
+    except IdentifiantHorsFormat as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
+    return niu, demande.model_copy(update={"niu": niu, "rccm": rccm or None})
+
+
 def _inscrire_la_souscription(
     acces, reference: str, demande: InscriptionDemandee
 ) -> EtatDeLInscription:
@@ -349,7 +372,7 @@ def _inscrire_la_souscription(
     etat = _etat_de_la_souscription(so)
     if not etat.inscriptible:
         raise HTTPException(status_code=409, detail=etat.motif)
-    niu = demande.niu.strip().upper()
+    niu, demande = _identifiants_au_format(demande)
     if niu != (so.niu or "").strip().upper():
         raise HTTPException(
             status_code=422,

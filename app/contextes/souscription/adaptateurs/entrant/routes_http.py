@@ -39,6 +39,11 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from app.contextes.referentiel.api import (
+    IdentifiantHorsFormat,
+    identifiant_au_format,
+    service_parametres,
+)
 from app.contextes.souscription.adaptateurs.sortant.depots_memoire import (
     DepotAgendaDeCreationMemoire,
     DepotAppelsDeFondsMemoire,
@@ -519,10 +524,15 @@ class DemandeDevis(BaseModel):
 def creer_devis(demande: DemandeDevis) -> Devis:
     boutique = comptoir()
     instant = maintenant()
+    prospect = demande.prospect
+    if prospect.niu:
+        prospect = prospect.model_copy(
+            update={"niu": _niu_au_format(prospect.niu, jour_a_douala(instant))}
+        )
     try:
         devis = etablir_devis(
             reference=_reference("DV"),
-            prospect=demande.prospect,
+            prospect=prospect,
             demandes=demande.lignes,
             services=boutique.services.charger(jour_a_douala(instant)),
             a_la_date=jour_a_douala(instant),
@@ -550,6 +560,19 @@ def lire_devis(reference: str) -> Devis:
 
 
 # ── L'engagement ─────────────────────────────────────────────────────────────
+
+
+def _niu_au_format(niu: str, jour: date) -> str:
+    """Le NIU du prospect au format du référentiel, ou un refus avant le paiement.
+
+    ⚠️ 21 novembre 2026 : le devis et l'engagement acceptaient tout texte. L'accès de
+    l'adhérent s'ouvrait sur ce NIU, puis l'inscription au portefeuille exigeait le même :
+    un NIU faux bloquait le dossier **après** que le client avait payé.
+    """
+    try:
+        return identifiant_au_format("NIU", niu, jour, service_parametres())
+    except IdentifiantHorsFormat as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
 
 
 class DemandeEngagement(BaseModel):
@@ -583,6 +606,10 @@ class Engagement(BaseModel):
 )
 def engager_devis(reference: str, demande: DemandeEngagement) -> Engagement:
     boutique = comptoir()
+    if demande.niu:
+        demande = demande.model_copy(
+            update={"niu": _niu_au_format(demande.niu, jour_a_douala(maintenant()))}
+        )
     try:
         souscription, paiement = engager(
             reference,

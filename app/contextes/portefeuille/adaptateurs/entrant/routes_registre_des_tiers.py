@@ -20,13 +20,18 @@ connu la remplace en entier, comme le formulaire l'affiche.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contextes.portefeuille.adaptateurs.entrant.routes_http import depot, lire_le_dossier
 from app.contextes.portefeuille.domaine.entites import Tiers, TypeTiers
+from app.contextes.referentiel.api import (
+    IdentifiantHorsFormat,
+    identifiant_au_format,
+    service_parametres,
+)
 from app.contextes.transverse.api import AccesRequis, Permission, atelier, exiger_dossier
-from app.partage.horloge import maintenant
+from app.partage.horloge import aujourd_hui, maintenant
 
 __all__ = ["OBJET_TIERS", "routeur"]
 
@@ -48,6 +53,22 @@ class SaisieDuTiers(BaseModel):
     etranger: bool = False
     #: Lu seulement pour un tiers étranger.
     pays: str | None = Field(default=None, max_length=80)
+
+
+def _niu_du_tiers(saisie: SaisieDuTiers) -> str | None:
+    """Le NIU d'un tiers camerounais au format du référentiel (21 novembre 2026).
+
+    ⚠️ Les annexes de la DSF rapprochent les tiers par leur NIU exact : un « m1126… » en
+    minuscules, ou à un chiffre près, laissait une ligne sans nom. Un tiers étranger n'a
+    pas de NIU camerounais : le sien se garde tel quel.
+    """
+    niu = _net(saisie.niu)
+    if niu is None or saisie.etranger:
+        return niu
+    try:
+        return identifiant_au_format("NIU", niu, aujourd_hui(), service_parametres())
+    except IdentifiantHorsFormat as refus:
+        raise HTTPException(status_code=422, detail=str(refus)) from refus
 
 
 def _net(valeur: str | None) -> str | None:
@@ -75,7 +96,7 @@ def renseigner_un_tiers(acces: AccesRequis, niu: str, code: str, saisie: SaisieD
         code=code,
         denomination=saisie.denomination.strip(),
         type=saisie.type,
-        niu=_net(saisie.niu),
+        niu=_niu_du_tiers(saisie),
         sigle=_net(saisie.sigle),
         telephone=_net(saisie.telephone),
         ville=_net(saisie.ville),
